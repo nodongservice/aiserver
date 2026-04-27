@@ -55,6 +55,12 @@ uv run ruff format .
 uv run pre-commit install
 uv run pre-commit run --all-files
 ```
+### 8. pytest
+
+```bash
+uv run pytest -v
+```
+
 
 ### 폴더구조
 | **영역** | **역할** |
