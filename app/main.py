@@ -10,6 +10,8 @@ from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy import text
 from sqlalchemy.orm import Session
 
+from app.api.v1.routes_analysis import router as analysis_router
+from app.api.v1.routes_tags import router as tags_router
 from app.core.logging import setup_logging
 from app.db import models  # noqa: F401
 from app.db.session import Base, engine, get_db
@@ -19,7 +21,11 @@ setup_logging()
 
 logger = logging.getLogger(__name__)
 
-app = FastAPI(title="aiserver")
+
+app = FastAPI(
+    title="BridgeWork AI Server",
+    version="0.1.0",
+)
 Base.metadata.create_all(bind=engine)
 
 cors_origins = os.getenv("CORS_ALLOW_ORIGINS", "")
@@ -50,3 +56,7 @@ def db_health(db: Session = Depends(get_db)) -> dict[str, str]:
     logger.info("DB Health check requested")
     db.execute(text("SELECT 1"))
     return {"status": "ok", "database": "connected"}
+
+
+app.include_router(analysis_router)
+app.include_router(tags_router)
