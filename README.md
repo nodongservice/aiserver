@@ -44,7 +44,8 @@ uv add --dev pytest
 ### 6. 포매터 / 린트 실행
 
 ```bash
-uv run ruff check . --fix
+uv run ruff check . --fix --unsafe-fixes
+
 uv run ruff format .
 ```
 
