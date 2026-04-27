@@ -1,6 +1,7 @@
+# app/main.py
 from fastapi import FastAPI
 
-app = FastAPI(title="nodong-aiserver")
+app = FastAPI(title="aiserver")
 
 
 @app.get("/")
