@@ -1,4 +1,7 @@
 # app/main.py
+# app/main.py
+
+import logging
 import os
 
 from dotenv import load_dotenv
@@ -7,9 +10,14 @@ from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy import text
 from sqlalchemy.orm import Session
 
+from app.core.logging import setup_logging
+from app.db import models  # noqa: F401
 from app.db.session import Base, engine, get_db
 
 load_dotenv(".env.local")
+setup_logging()
+
+logger = logging.getLogger(__name__)
 
 app = FastAPI(title="aiserver")
 Base.metadata.create_all(bind=engine)
@@ -33,10 +41,12 @@ async def read_root() -> dict[str, str]:
 
 @app.get("/health")
 async def health_check() -> dict[str, str]:
+    logger.info("Health check requested")
     return {"status": "ok"}
 
 
 @app.get("/db-health")
 def db_health(db: Session = Depends(get_db)) -> dict[str, str]:
+    logger.info("DB Health check requested")
     db.execute(text("SELECT 1"))
     return {"status": "ok", "database": "connected"}
