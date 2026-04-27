@@ -1,3 +1,11 @@
+from app.core.public_data_sources import (
+    NATIONWIDE_BUS_STOP,
+    NATIONWIDE_CROSSWALK,
+    NATIONWIDE_TRAFFIC_LIGHT,
+    SEOUL_SUBWAY_ENTRANCE_LIFT,
+    SEOUL_WHEELCHAIR_LIFT,
+    get_source_name,
+)
 from app.schemas.analysis import EvidenceItem, JobCandidate
 from app.schemas.gis import GisFeature
 
@@ -56,6 +64,13 @@ def build_gis_evidence_items(gis_feature: GisFeature) -> list[EvidenceItem]:
     evidence_items는 '왜 이 점수가 나왔는지'를 설명하는 근거 목록입니다.
     현재는 더미 근거이지만, 나중에는 public_data_record.id 또는
     PostGIS 테이블의 record_id를 연결하면 됩니다.
+
+    주의:
+    - 여기서는 source_type 문자열을 직접 하드코딩하지 않습니다.
+    - app/core/public_data_sources.py의
+    SourceType 상수와 get_source_name()을 사용합니다.
+    - 그래야 Spring의 SourceType, FastAPI evidence_items,
+    문서가 같은 기준을 공유할 수 있습니다.
     """
 
     evidence_items: list[EvidenceItem] = []
@@ -64,8 +79,8 @@ def build_gis_evidence_items(gis_feature: GisFeature) -> list[EvidenceItem]:
     if gis_feature.nearby_bus_stop_count > 0:
         evidence_items.append(
             EvidenceItem(
-                source_type="NATIONWIDE_BUS_STOP",
-                source_name="전국 버스정류장 위치정보",
+                source_type=NATIONWIDE_BUS_STOP,
+                source_name=get_source_name(NATIONWIDE_BUS_STOP),
                 description=(
                     f"근무지 주변 버스정류장 {gis_feature.nearby_bus_stop_count}개 확인"
                 ),
@@ -74,12 +89,12 @@ def build_gis_evidence_items(gis_feature: GisFeature) -> list[EvidenceItem]:
             )
         )
 
-    # 지하철역 근거
+    # 지하철역/출입구 엘리베이터 근거
     if gis_feature.nearby_subway_station_count > 0:
         evidence_items.append(
             EvidenceItem(
-                source_type="SEOUL_SUBWAY_ENTRANCE_LIFT",
-                source_name="서울교통약자 지하철 출입구 엘리베이터 정보",
+                source_type=SEOUL_SUBWAY_ENTRANCE_LIFT,
+                source_name=get_source_name(SEOUL_SUBWAY_ENTRANCE_LIFT),
                 description=(
                     f"근무지 주변 지하철역 "
                     f"{gis_feature.nearby_subway_station_count}개 확인"
@@ -93,8 +108,8 @@ def build_gis_evidence_items(gis_feature: GisFeature) -> list[EvidenceItem]:
     if gis_feature.has_wheelchair_lift:
         evidence_items.append(
             EvidenceItem(
-                source_type="SEOUL_WHEELCHAIR_LIFT",
-                source_name="서울시 휠체어 리프트 정보",
+                source_type=SEOUL_WHEELCHAIR_LIFT,
+                source_name=get_source_name(SEOUL_WHEELCHAIR_LIFT),
                 description="근처 역사 또는 이동 구간에서 휠체어 리프트 정보 확인",
                 distance_meters=None,
                 record_id=None,
@@ -105,8 +120,8 @@ def build_gis_evidence_items(gis_feature: GisFeature) -> list[EvidenceItem]:
     if gis_feature.nearby_crosswalk_count > 0:
         evidence_items.append(
             EvidenceItem(
-                source_type="NATIONWIDE_CROSSWALK",
-                source_name="전국횡단보도표준데이터",
+                source_type=NATIONWIDE_CROSSWALK,
+                source_name=get_source_name(NATIONWIDE_CROSSWALK),
                 description=(
                     f"근무지 주변 횡단보도 {gis_feature.nearby_crosswalk_count}개 확인"
                 ),
@@ -115,12 +130,12 @@ def build_gis_evidence_items(gis_feature: GisFeature) -> list[EvidenceItem]:
             )
         )
 
-    # 음향신호기/보행 안전시설 근거
+    # 신호등/음향신호기/보행 안전시설 근거
     if gis_feature.nearby_accessible_signal_count > 0:
         evidence_items.append(
             EvidenceItem(
-                source_type="NATIONWIDE_TRAFFIC_LIGHT",
-                source_name="전국신호등표준데이터",
+                source_type=NATIONWIDE_TRAFFIC_LIGHT,
+                source_name=get_source_name(NATIONWIDE_TRAFFIC_LIGHT),
                 description=(
                     f"근무지 주변 교통약자 보행 안전시설 "
                     f"{gis_feature.nearby_accessible_signal_count}개 확인"

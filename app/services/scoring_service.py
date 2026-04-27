@@ -1,7 +1,9 @@
+from app.core.public_data_sources import KEPAD_STANDARD_WORKPLACE, get_source_name
 from app.schemas.analysis import (
     AccessibilityAnalyzeRequest,
     AccessibilityAnalyzeResponse,
     AccessibilityAnalyzeResult,
+    EvidenceItem,
     JobCandidate,
     ScoreDetail,
     UserAccessibilityCondition,
@@ -104,13 +106,13 @@ def analyze_single_job(
     # 표준사업장 여부도 evidence_items에 포함
     if job.is_standard_workplace is True:
         evidence_items.append(
-            {
-                "source_type": "KEPAD_STANDARD_WORKPLACE",
-                "source_name": "한국장애인고용공단 장애인 표준사업장 정보",
-                "description": "장애인 표준사업장으로 확인된 사업장입니다.",
-                "distance_meters": None,
-                "record_id": None,
-            }
+            EvidenceItem(
+                source_type=KEPAD_STANDARD_WORKPLACE,
+                source_name=get_source_name(KEPAD_STANDARD_WORKPLACE),
+                description="장애인 표준사업장으로 확인된 사업장입니다.",
+                distance_meters=None,
+                record_id=None,
+            )
         )
 
     # 9. 한 줄 요약 생성
