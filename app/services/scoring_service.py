@@ -1,4 +1,5 @@
 from app.core.public_data_sources import KEPAD_STANDARD_WORKPLACE, get_source_name
+from app.repositories.gis_repository import get_accessibility_gis_feature
 from app.schemas.analysis import (
     AccessibilityAnalyzeRequest,
     AccessibilityAnalyzeResponse,
@@ -14,7 +15,7 @@ from app.services.explanation_service import (
     build_risk_factors,
     build_summary,
 )
-from app.services.gis_service import build_gis_evidence_items, get_dummy_gis_feature
+from app.services.gis_service import build_gis_evidence_items
 
 
 def analyze_accessibility_batch(
@@ -50,8 +51,11 @@ def analyze_single_job(
     get_dummy_gis_feature()로 만든 더미 GIS 피처를 사용합니다.
     """
 
-    # 1. 더미 GIS 피처 생성
-    gis_feature = get_dummy_gis_feature(job)
+    # 1. 공고 근무지 기준 접근성 GIS 피처 조회
+    # 현재는 repository 내부에서 더미 GIS 피처를 반환합니다.
+    # 이후 PostGIS 연결 시 scoring_service.py는 그대로 두고,
+    # gis_repository.py 내부 구현만 교체하면 됩니다.
+    gis_feature = get_accessibility_gis_feature(job)
 
     # 2. 항목별 점수 계산
     transport_score = calculate_transport_score(user, gis_feature)
