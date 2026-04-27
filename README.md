@@ -8,6 +8,7 @@ FastAPI + `uv` 기반 서버 프로젝트입니다.
 
 ```bash
 uv sync
+uv sync --dev
 ```
 
 `pyproject.toml` / `uv.lock` 기준으로 가상환경과 패키지를 맞춥니다.
@@ -15,7 +16,7 @@ uv sync
 ### 2. 개발 서버 실행
 
 ```bash
-uv run uvicorn main:app --reload
+uv run python -m uvicorn main:app --reload
 ```
 
 - 기본 주소: `http://127.0.0.1:8000`
@@ -28,22 +29,10 @@ uv run uvicorn main:app --reload
 curl http://127.0.0.1:8000/health
 ```
 
-예상 응답:
-
-```json
-{"status":"ok"}
-```
-
 ### 4. 패키지 추가
 
 ```bash
 uv add 패키지명
-```
-
-예시:
-
-```bash
-uv add sqlalchemy
 ```
 
 ### 5. 개발용 패키지 추가
@@ -66,10 +55,12 @@ uv run pre-commit install
 uv run pre-commit run --all-files
 ```
 
-### 8. 파이썬 코드 한 번 실행
-
-```bash
-uv run python main.py
-```
-
-현재 `main.py`는 FastAPI 앱 엔트리포인트라서, 실제 서버 실행은 `uvicorn` 명령을 사용하는 것이 기준입니다.
+### 폴더구조
+| **영역** | **역할** |
+| --- | --- |
+| `api` | Spring이 호출하는 API 엔드포인트 |
+| `schemas` | 요청/응답 DTO, Pydantic 모델 |
+| `services` | 점수 계산, 태그 변환, 설명 생성 로직 |
+| `repositories` | PostGIS 조회 |
+| `db` | DB 연결 |
+| `core` | 환경변수, 로깅 |
