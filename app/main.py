@@ -11,6 +11,7 @@ from sqlalchemy import text
 from sqlalchemy.orm import Session
 
 from app.api.v1.routes_analysis import router as analysis_router
+from app.api.v1.routes_explanation import router as explanation_router
 from app.api.v1.routes_tags import router as tags_router
 from app.core.logging import setup_logging
 from app.db import models  # noqa: F401
@@ -60,3 +61,4 @@ def db_health(db: Session = Depends(get_db)) -> dict[str, str]:
 
 app.include_router(analysis_router)
 app.include_router(tags_router)
+app.include_router(explanation_router)
