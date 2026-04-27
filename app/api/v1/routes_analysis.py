@@ -4,7 +4,7 @@ from app.schemas.analysis import (
     AccessibilityAnalyzeRequest,
     AccessibilityAnalyzeResponse,
 )
-from app.services.scoring_service import calculate_accessibility_score
+from app.services.scoring_service import analyze_accessibility_batch
 
 router = APIRouter(
     prefix="/api/v1/accessibility",
@@ -22,12 +22,10 @@ def analyze_batch(
     사용 흐름:
     1. Spring이 사용자 조건과 공고 후보 목록을 FastAPI로 전달합니다.
     2. FastAPI는 공고별 접근성 점수를 계산합니다.
-    3. 공고별 점수, 등급, 긍정 요인, 위험 요인을 Spring에 반환합니다.
+    3. 공고별 점수, 등급, 긍정 요인, 위험 요인, 근거 데이터를 Spring에 반환합니다.
     4. Spring은 결과를 저장/캐싱한 뒤 Next.js에 전달합니다.
 
-    현재 단계에서는 DB/PostGIS 없이 룰 기반 계산만 수행합니다.
+    현재 단계에서는 DB/PostGIS 없이 더미 GIS feature와 룰 기반 계산만 수행합니다.
     """
 
-    results = [calculate_accessibility_score(request.user, job) for job in request.jobs]
-
-    return AccessibilityAnalyzeResponse(results=results)
+    return analyze_accessibility_batch(request)
