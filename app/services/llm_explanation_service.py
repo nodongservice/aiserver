@@ -12,13 +12,14 @@ def generate_accessibility_explanation(
     """
     접근성 분석 결과를 바탕으로 설명 문구를 생성합니다.
 
-    현재 Phase 9에서는 실제 LLM을 호출하지 않습니다.
+    현재 Phase 10에서는 실제 LLM을 호출하지 않습니다.
     대신 룰 기반 fallback 설명을 반환합니다.
 
     향후 확장:
     - OpenAI, Gemini, Claude 등 LLM API 연결
     - prompt template 분리
     - LLM 응답 검증
+    - explanation_version 변경
     - 민감정보 로그 마스킹
     """
 
@@ -27,6 +28,7 @@ def generate_accessibility_explanation(
     check_points = build_check_points(request)
 
     return ExplanationGenerateResponse(
+        explanation_version="v1-rule-fallback",
         short_summary=short_summary,
         detail_explanation=detail_explanation,
         check_points=check_points,

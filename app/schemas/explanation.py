@@ -55,6 +55,14 @@ class ExplanationGenerateResponse(BaseModel):
     사용자에게 보여줄 접근성 설명 생성 결과입니다.
     """
 
+    # 설명 생성 로직 버전
+    # Spring에서 설명 결과를 캐싱하거나 재생성할 때 기준으로 사용할 수 있습니다.
+    # 예:
+    # - v1-rule-fallback
+    # - v2-llm-prompt-basic
+    # - v3-llm-prompt-accessibility-focused
+    explanation_version: str = "v1-rule-fallback"
+
     # 공고 카드 또는 상세 화면에 보여줄 짧은 한 줄 설명
     short_summary: str
 
@@ -65,5 +73,5 @@ class ExplanationGenerateResponse(BaseModel):
     check_points: List[str] = Field(default_factory=list)
 
     # LLM 사용 여부
-    # 현재 Phase 9에서는 False입니다.
+    # 현재 Phase 10에서는 False입니다.
     used_llm: bool = False
