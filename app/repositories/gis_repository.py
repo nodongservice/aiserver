@@ -13,6 +13,7 @@ from app.repositories.nearby_public_data_repository import (
 )
 from app.schemas.analysis import JobCandidate
 from app.schemas.gis import GisFeature, NearbyPublicDataRecord
+from app.schemas.nearby import NearbyRecordSearchResult
 from app.services.gis_service import get_dummy_gis_feature
 
 DEFAULT_SEARCH_RADIUS_METERS = 500
@@ -96,44 +97,20 @@ def build_gis_feature_from_public_data_records(
 
     nearest_bus_stop_distance = None
     if nearby_bus_stops:
-        nearest_bus_stop_distance = nearby_bus_stops[0]["distance_meters"]
+        nearest_bus_stop_distance = nearby_bus_stops[0].distance_meters
 
     station_access_candidates = nearby_station_elevators + nearby_wheelchair_lifts
-    station_access_candidates.sort(key=lambda item: item["distance_meters"])
+    station_access_candidates.sort(
+        key=lambda item: item.distance_meters if item.distance_meters is not None else float("inf")
+    )
 
     nearest_station_access_distance = None
     if station_access_candidates:
-        nearest_station_access_distance = station_access_candidates[0]["distance_meters"]
+        nearest_station_access_distance = station_access_candidates[0].distance_meters
 
-    bus_stop_evidence_records = [
-        NearbyPublicDataRecord(
-            record_id=item["record_id"],
-            source_type=item["source_type"],
-            external_id=item.get("external_id"),
-            distance_meters=item.get("distance_meters"),
-        )
-        for item in nearby_bus_stops[:3]
-    ]
-
-    crosswalk_evidence_records = [
-        NearbyPublicDataRecord(
-            record_id=item["record_id"],
-            source_type=item["source_type"],
-            external_id=item.get("external_id"),
-            distance_meters=item.get("distance_meters"),
-        )
-        for item in nearby_crosswalks[:3]
-    ]
-
-    station_access_evidence_records = [
-        NearbyPublicDataRecord(
-            record_id=item["record_id"],
-            source_type=item["source_type"],
-            external_id=item.get("external_id"),
-            distance_meters=item.get("distance_meters"),
-        )
-        for item in station_access_candidates[:3]
-    ]
+    bus_stop_evidence_records = to_nearby_public_data_records(nearby_bus_stops)
+    crosswalk_evidence_records = to_nearby_public_data_records(nearby_crosswalks)
+    station_access_evidence_records = to_nearby_public_data_records(station_access_candidates)
 
     return GisFeature(
         nearby_bus_stop_count=len(nearby_bus_stops),
@@ -150,3 +127,26 @@ def build_gis_feature_from_public_data_records(
         nearby_crosswalk_records=crosswalk_evidence_records,
         nearby_station_access_records=station_access_evidence_records,
     )
+
+
+def to_nearby_public_data_records(
+    search_results: list[NearbyRecordSearchResult],
+    limit: int = 3,
+) -> list[NearbyPublicDataRecord]:
+    """
+    근접 검색 결과를 GisFeature 내부 근거 레코드 형식으로 변환합니다.
+
+    이 변환 함수를 분리해두면,
+    나중에 근접 검색 구현이 Python Haversine에서 PostGIS로 바뀌어도
+    GisFeature 생성 로직은 거의 유지할 수 있습니다.
+    """
+
+    return [
+        NearbyPublicDataRecord(
+            record_id=item.record_id,
+            source_type=item.source_type,
+            external_id=item.external_id,
+            distance_meters=item.distance_meters,
+        )
+        for item in search_results[:limit]
+    ]
