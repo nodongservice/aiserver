@@ -51,6 +51,10 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+app.include_router(analysis_router)
+app.include_router(tags_router)
+app.include_router(explanation_router)
+
 
 @app.get("/")
 async def read_root() -> dict[str, str]:
@@ -70,6 +74,28 @@ def db_health(db: Session = Depends(get_db)) -> dict[str, str]:
     return {"status": "ok", "database": "connected"}
 
 
-app.include_router(analysis_router)
-app.include_router(tags_router)
-app.include_router(explanation_router)
+@app.get("/postgis-health")
+def postgis_health(db: Session = Depends(get_db)) -> dict[str, str]:
+    """
+    PostgreSQL에 PostGIS extension이 설치되어 있는지 확인합니다.
+
+    이 API는 실제 GIS 거리 계산을 수행하지 않습니다.
+    Phase 15에서는 FastAPI가 PostGIS 기능을 사용할 준비가 되었는지만 확인합니다.
+
+    정상 응답 예:
+    {
+        "status": "ok",
+        "postgis": "enabled",
+        "version": "3.4 USE_GEOS=..."
+    }
+    """
+
+    logger.info("PostGIS Health check requested")
+
+    result = db.execute(text("SELECT PostGIS_Version()")).scalar()
+
+    return {
+        "status": "ok",
+        "postgis": "enabled",
+        "version": str(result),
+    }
