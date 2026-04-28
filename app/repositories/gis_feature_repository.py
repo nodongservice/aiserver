@@ -38,6 +38,7 @@ def find_nearby_gis_features(
             source_type,
             feature_type,
             name,
+            properties,
             ST_Distance(
                 geog,
                 ST_SetSRID(ST_MakePoint(:base_lng, :base_lat), 4326)::geography
@@ -80,6 +81,7 @@ def find_nearby_gis_features(
             field_map={
                 "feature_type": row["feature_type"],
                 "name": row["name"] or "",
+                **(row["properties"] or {}),
             },
         )
         for row in rows

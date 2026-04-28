@@ -95,11 +95,25 @@ def build_gis_evidence_items(gis_feature: GisFeature) -> list[EvidenceItem]:
     if gis_feature.nearby_crosswalk_count > 0:
         if gis_feature.nearby_crosswalk_records:
             for record in gis_feature.nearby_crosswalk_records:
+                description = "근무지 반경 내 횡단보도 정보가 확인됩니다."
+
+                if record.field_map.get("tfclghtYn"):
+                    description += f" 보행자신호등 여부: {record.field_map.get('tfclghtYn')}."
+
+                if record.field_map.get("sondSgngnrYn"):
+                    description += f" 음향신호기 여부: {record.field_map.get('sondSgngnrYn')}."
+
+                if record.field_map.get("ftpthLowerYn"):
+                    description += f" 보도턱낮춤 여부: {record.field_map.get('ftpthLowerYn')}."
+
+                if record.field_map.get("brllBlckYn"):
+                    description += f" 점자블록 여부: {record.field_map.get('brllBlckYn')}."
+
                 evidence_items.append(
                     EvidenceItem(
                         source_type=NATIONWIDE_CROSSWALK,
                         source_name=get_source_name(NATIONWIDE_CROSSWALK),
-                        description="근무지 반경 내 횡단보도 정보가 확인됩니다.",
+                        description=description,
                         distance_meters=record.distance_meters,
                         record_id=record.record_id,
                     )

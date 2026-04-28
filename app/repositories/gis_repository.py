@@ -26,6 +26,28 @@ from app.services.gis_service import get_dummy_gis_feature
 DEFAULT_SEARCH_RADIUS_METERS = 500
 
 
+def is_yes_value(value: object) -> bool:
+    """
+    공공데이터의 Y/N, 예/아니오, 유/무 값을 bool로 해석합니다.
+    """
+    if value is None:
+        return False
+
+    normalized = str(value).strip().upper()
+
+    return normalized in {
+        "Y",
+        "YES",
+        "TRUE",
+        "1",
+        "유",
+        "있음",
+        "설치",
+        "설치됨",
+        "예",
+    }
+
+
 def get_accessibility_gis_feature(
     job: JobCandidate,
     db: Optional[Session] = None,
@@ -123,6 +145,19 @@ def build_gis_feature_from_public_data_records(
     crosswalk_evidence_records = to_nearby_public_data_records(nearby_crosswalks)
     station_access_evidence_records = to_nearby_public_data_records(station_access_candidates)
 
+    crosswalk_accessibility = summarize_crosswalk_accessibility(nearby_crosswalks)
+
+    accessible_signal_count = 0
+
+    if crosswalk_accessibility["has_accessible_pedestrian_signal"]:
+        accessible_signal_count += 1
+
+    if crosswalk_accessibility["has_braille_block"]:
+        accessible_signal_count += 1
+
+    if crosswalk_accessibility["has_curb_cut"]:
+        accessible_signal_count += 1
+
     return GisFeature(
         nearby_bus_stop_count=len(nearby_bus_stops),
         nearest_bus_stop_distance_meters=nearest_bus_stop_distance,
@@ -131,12 +166,16 @@ def build_gis_feature_from_public_data_records(
         has_station_elevator=True if nearby_station_elevators else None,
         has_wheelchair_lift=True if nearby_wheelchair_lifts else None,
         nearby_crosswalk_count=len(nearby_crosswalks),
-        nearby_accessible_signal_count=0,
         has_accessible_restroom_nearby=None,
         has_step_free_access_nearby=None,
         nearby_bus_stop_records=bus_stop_evidence_records,
         nearby_crosswalk_records=crosswalk_evidence_records,
         nearby_station_access_records=station_access_evidence_records,
+        nearby_accessible_signal_count=accessible_signal_count,
+        has_pedestrian_traffic_light=crosswalk_accessibility["has_pedestrian_traffic_light"],
+        has_accessible_pedestrian_signal=crosswalk_accessibility["has_accessible_pedestrian_signal"],
+        has_curb_cut=crosswalk_accessibility["has_curb_cut"],
+        has_braille_block=crosswalk_accessibility["has_braille_block"],
     )
 
 
@@ -146,10 +185,6 @@ def to_nearby_public_data_records(
 ) -> list[NearbyPublicDataRecord]:
     """
     근접 검색 결과를 GisFeature 내부 근거 레코드 형식으로 변환합니다.
-
-    이 변환 함수를 분리해두면,
-    나중에 근접 검색 구현이 Python Haversine에서 PostGIS로 바뀌어도
-    GisFeature 생성 로직은 거의 유지할 수 있습니다.
     """
 
     return [
@@ -158,6 +193,7 @@ def to_nearby_public_data_records(
             source_type=item.source_type,
             external_id=item.external_id,
             distance_meters=item.distance_meters,
+            field_map=item.field_map,
         )
         for item in search_results[:limit]
     ]
@@ -206,3 +242,45 @@ def find_nearby_records_with_fallback(
         base_lng=base_lng,
         radius_meters=radius_meters,
     )
+
+
+def summarize_crosswalk_accessibility(
+    nearby_crosswalks: list[NearbyRecordSearchResult],
+) -> dict[str, Optional[bool]]:
+    """
+    근처 횡단보도들의 접근성 속성을 요약합니다.
+
+    하나라도 Y/유/있음이면 True로 봅니다.
+    데이터가 없으면 None을 반환합니다.
+    """
+
+    if not nearby_crosswalks:
+        return {
+            "has_pedestrian_traffic_light": None,
+            "has_accessible_pedestrian_signal": None,
+            "has_curb_cut": None,
+            "has_braille_block": None,
+        }
+
+    has_pedestrian_traffic_light = any(
+        is_yes_value(item.field_map.get("tfclghtYn")) for item in nearby_crosswalks
+    )
+
+    has_accessible_pedestrian_signal = any(
+        is_yes_value(item.field_map.get("fnctngSgngnrYn"))
+        or is_yes_value(item.field_map.get("sondSgngnrYn"))
+        for item in nearby_crosswalks
+    )
+
+    has_curb_cut = any(is_yes_value(item.field_map.get("ftpthLowerYn")) for item in nearby_crosswalks)
+
+    has_braille_block = any(
+        is_yes_value(item.field_map.get("brllBlckYn")) for item in nearby_crosswalks
+    )
+
+    return {
+        "has_pedestrian_traffic_light": has_pedestrian_traffic_light,
+        "has_accessible_pedestrian_signal": has_accessible_pedestrian_signal,
+        "has_curb_cut": has_curb_cut,
+        "has_braille_block": has_braille_block,
+    }

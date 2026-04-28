@@ -93,6 +93,19 @@ def build_risk_factors(
         if gis_feature.has_step_free_access_nearby is None:
             factors.append("근무지 출입구의 계단 없는 접근 가능 여부는 확인이 필요합니다.")
 
+    if "wheelchair" in user.disability_types and gis_feature.nearby_crosswalk_count > 0:
+        if gis_feature.has_curb_cut is False:
+            factors.append("근무지 주변 횡단보도의 보도턱낮춤 여부 확인이 필요합니다.")
+
+    has_visual_disability = bool({"blind", "low_vision"} & set(user.disability_types))
+
+    if has_visual_disability and gis_feature.nearby_crosswalk_count > 0:
+        if gis_feature.has_accessible_pedestrian_signal is False:
+            factors.append("근무지 주변 음향신호기 또는 보행자작동신호기 여부 확인이 필요합니다.")
+
+        if gis_feature.has_braille_block is False:
+            factors.append("근무지 주변 점자블록 여부 확인이 필요합니다.")
+
     # 필수 지원 정보 확인
     if (
         "accessible_restroom" in user.required_supports
@@ -105,6 +118,18 @@ def build_risk_factors(
 
     if "low_floor_bus" in user.required_supports and gis_feature.nearby_bus_stop_count == 0:
         factors.append("저상버스 이용 가능 정류장 정보 확인이 필요합니다.")
+
+    if gis_feature.has_pedestrian_traffic_light:
+        factors.append("근무지 주변 횡단보도에 보행자신호등 정보가 확인됩니다.")
+
+    if gis_feature.has_accessible_pedestrian_signal:
+        factors.append("근무지 주변에 음향신호기 또는 보행자작동신호기 정보가 확인됩니다.")
+
+    if "wheelchair" in user.disability_types and gis_feature.has_curb_cut:
+        factors.append("근무지 주변 횡단보도에 보도턱낮춤 정보가 확인됩니다.")
+
+    if {"blind", "low_vision"} & set(user.disability_types) and gis_feature.has_braille_block:
+        factors.append("근무지 주변 보행 구간에 점자블록 정보가 확인됩니다.")
 
     # 업무환경 충돌 확인
     if "avoid_phone_work" in user_preferences and "phone_work" in job_tags:

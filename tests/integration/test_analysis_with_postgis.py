@@ -78,6 +78,7 @@ def insert_test_gis_feature(
     name: str,
     latitude: float,
     longitude: float,
+    properties_json: str = "{}",
 ):
     """
     public_accessibility_gis_feature 테스트 데이터를 넣는다.
@@ -88,30 +89,26 @@ def insert_test_gis_feature(
     db.execute(
         text(
             """
-            INSERT INTO public_accessibility_gis_feature (
-                public_data_record_id,
-                source_type,
-                feature_type,
-                name,
-                latitude,
-                longitude,
-                geom,
-                geog,
-                properties,
-                is_active
-            )
-            VALUES (
-                :public_data_record_id,
-                :source_type,
-                :feature_type,
-                :name,
-                :latitude,
-                :longitude,
-                ST_SetSRID(ST_MakePoint(:longitude, :latitude), 4326),
-                ST_SetSRID(ST_MakePoint(:longitude, :latitude), 4326)::geography,
-                '{}'::jsonb,
-                TRUE
-            )
+            INSERT INTO public_accessibility_gis_feature (public_data_record_id,
+                                                          source_type,
+                                                          feature_type,
+                                                          name,
+                                                          latitude,
+                                                          longitude,
+                                                          geom,
+                                                          geog,
+                                                          properties,
+                                                          is_active)
+            VALUES (:public_data_record_id,
+                    :source_type,
+                    :feature_type,
+                    :name,
+                    :latitude,
+                    :longitude,
+                    ST_SetSRID(ST_MakePoint(:longitude, :latitude), 4326),
+                    ST_SetSRID(ST_MakePoint(:longitude, :latitude), 4326)::geography,
+                    CAST(:properties_json AS jsonb),
+                    TRUE)
             """
         ),
         {
@@ -121,6 +118,7 @@ def insert_test_gis_feature(
             "name": name,
             "latitude": latitude,
             "longitude": longitude,
+            "properties_json": properties_json,
         },
     )
 
@@ -164,6 +162,13 @@ def test_analyze_batch_includes_postgis_evidence_record_ids():
             name="TEST_ANALYSIS_CROSSWALK",
             latitude=37.5667,
             longitude=126.9782,
+            properties_json=(
+                '{"tfclghtYn": "Y", '
+                '"fnctngSgngnrYn": "Y", '
+                '"sondSgngnrYn": "Y", '
+                '"ftpthLowerYn": "Y", '
+                '"brllBlckYn": "Y"}'
+            ),
         )
 
         db.commit()
@@ -242,6 +247,18 @@ def test_analyze_batch_includes_postgis_evidence_record_ids():
 
         assert NATIONWIDE_BUS_STOP in source_types
         assert NATIONWIDE_CROSSWALK in source_types
+
+        assert result["score_detail"]["crosswalk_score"] >= 10
+
+        crosswalk_evidence = [
+            item for item in evidence_items if item["source_type"] == NATIONWIDE_CROSSWALK
+        ]
+
+        assert crosswalk_evidence
+        assert "보행자신호등" in crosswalk_evidence[0]["description"]
+        assert "음향신호기" in crosswalk_evidence[0]["description"]
+        assert "보도턱낮춤" in crosswalk_evidence[0]["description"]
+        assert "점자블록" in crosswalk_evidence[0]["description"]
 
     finally:
         cleanup_test_data(db)

@@ -73,7 +73,7 @@ def analyze_single_job(
     # 2. 항목별 점수 계산
     transport_score = calculate_transport_score(user, gis_feature)
     station_access_score = calculate_station_access_score(user, gis_feature)
-    crosswalk_score = calculate_crosswalk_score(gis_feature)
+    crosswalk_score = calculate_crosswalk_score(user, gis_feature)
     facility_score = calculate_facility_score(user, job, gis_feature)
     work_environment_score = calculate_work_environment_score(user, job)
     risk_penalty = calculate_risk_penalty(user, job, gis_feature)
@@ -228,24 +228,49 @@ def calculate_station_access_score(
     return min(score, 20)
 
 
-def calculate_crosswalk_score(gis_feature: GisFeature) -> int:
+def calculate_crosswalk_score(
+    user: UserAccessibilityCondition,
+    gis_feature: GisFeature,
+) -> int:
     """
     횡단보도/보행 안전 점수를 계산합니다.
 
-    현재는 더미 GIS 피처만 사용합니다.
+    횡단보도 개수뿐 아니라 보행자신호등, 음향신호기,
+    보도턱낮춤, 점자블록 여부를 함께 반영합니다.
     """
 
     score = 0
 
     if gis_feature.nearby_crosswalk_count >= 2:
-        score += 8
+        score += 6
     elif gis_feature.nearby_crosswalk_count == 1:
-        score += 4
+        score += 3
 
-    if gis_feature.nearby_accessible_signal_count >= 1:
-        score += 7
+    if gis_feature.has_pedestrian_traffic_light:
+        score += 3
 
-    # crosswalk_score는 최대 15점으로 제한합니다.
+    if gis_feature.has_accessible_pedestrian_signal:
+        score += 3
+
+    if gis_feature.has_curb_cut:
+        score += 3
+
+    if gis_feature.has_braille_block:
+        score += 2
+
+    # 휠체어 사용자에게는 보도턱낮춤이 특히 중요합니다.
+    if "wheelchair" in user.disability_types and gis_feature.has_curb_cut:
+        score += 2
+
+    # 시각장애 사용자에게는 음향신호기/점자블록이 특히 중요합니다.
+    has_visual_disability = bool({"blind", "low_vision"} & set(user.disability_types))
+
+    if has_visual_disability and gis_feature.has_accessible_pedestrian_signal:
+        score += 2
+
+    if has_visual_disability and gis_feature.has_braille_block:
+        score += 2
+
     return min(score, 15)
 
 
