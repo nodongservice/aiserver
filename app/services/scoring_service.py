@@ -31,6 +31,9 @@ def analyze_accessibility_batch(
 
     Spring이 사용자 조건과 공고 후보 목록을 넘기면,
     FastAPI는 공고별 접근성 점수와 설명 근거를 반환합니다.
+
+    db가 전달되면 PostGIS 기반 GIS feature를 우선 조회하고,
+    db가 없으면 기존 더미/fallback 구조를 사용합니다.
     """
 
     results: list[AccessibilityAnalyzeResult] = []
@@ -39,6 +42,7 @@ def analyze_accessibility_batch(
         result = analyze_single_job(
             user=request.user,
             job=job,
+            db=db,
         )
         results.append(result)
 
