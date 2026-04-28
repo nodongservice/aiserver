@@ -140,9 +140,7 @@ def normalize_tags(request: TagNormalizeRequest) -> TagNormalizeResponse:
     if not disability_types:
         disability_types = ["unknown"]
 
-    transport_preferences = normalize_transport_preferences(
-        request.transport_preferences
-    )
+    transport_preferences = normalize_transport_preferences(request.transport_preferences)
 
     return TagNormalizeResponse(
         disability_types=disability_types,

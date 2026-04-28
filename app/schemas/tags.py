@@ -48,9 +48,7 @@ class TagNormalizeRequest(BaseModel):
     work_environment_labels: List[str] = Field(default_factory=list)
 
     # 이동 선호 원본값
-    transport_preferences: RawTransportPreferences = Field(
-        default_factory=RawTransportPreferences
-    )
+    transport_preferences: RawTransportPreferences = Field(default_factory=RawTransportPreferences)
 
 
 class NormalizedTransportPreferences(BaseModel):

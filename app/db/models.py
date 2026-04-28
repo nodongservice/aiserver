@@ -35,9 +35,7 @@ class PublicDataRecord(Base):
 
     # 원본 공공데이터의 외부 ID
     # API마다 고유 ID가 없을 수 있으므로 nullable 허용
-    external_id: Mapped[Optional[str]] = mapped_column(
-        String(255), nullable=True, index=True
-    )
+    external_id: Mapped[Optional[str]] = mapped_column(String(255), nullable=True, index=True)
 
     # 원본 payload 해시
     # 변경 감지용으로 Spring이 계산해서 저장

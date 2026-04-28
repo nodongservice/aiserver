@@ -291,10 +291,7 @@ def calculate_work_environment_score(
     support_tags = set(job.support_tags)
 
     # 선호 업무환경과 공고 태그가 일치하면 가점
-    if (
-        "prefer_computer_based_work" in user_preferences
-        and "computer_based" in job_tags
-    ):
+    if "prefer_computer_based_work" in user_preferences and "computer_based" in job_tags:
         score += 4
 
     if "computer_based" in user_preferences and "computer_based" in job_tags:
@@ -306,20 +303,14 @@ def calculate_work_environment_score(
     if "document_work" in user_preferences and "document_work" in job_tags:
         score += 3
 
-    if (
-        "prefer_quiet_environment" in user_preferences
-        and "quiet_environment" in job_tags
-    ):
+    if "prefer_quiet_environment" in user_preferences and "quiet_environment" in job_tags:
         score += 3
 
     # 기피 업무환경과 공고 태그가 충돌하면 감점
     if "avoid_phone_work" in user_preferences and "phone_work" in job_tags:
         score -= 5
 
-    if (
-        "avoid_long_standing" in user_preferences
-        and "long_standing_or_walking" in job_tags
-    ):
+    if "avoid_long_standing" in user_preferences and "long_standing_or_walking" in job_tags:
         score -= 5
 
     if "avoid_heavy_lifting" in user_preferences and "heavy_lifting" in job_tags:

@@ -110,16 +110,10 @@ def get_record_field_value_map(
     """
 
     fields = (
-        db.query(PublicDataRecordField)
-        .filter(PublicDataRecordField.record_id == record_id)
-        .all()
+        db.query(PublicDataRecordField).filter(PublicDataRecordField.record_id == record_id).all()
     )
 
-    return {
-        field.field_path: field.field_value
-        for field in fields
-        if field.field_value is not None
-    }
+    return {field.field_path: field.field_value for field in fields if field.field_value is not None}
 
 
 def get_records_with_fields_by_source_type(

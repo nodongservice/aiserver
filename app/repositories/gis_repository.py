@@ -5,6 +5,8 @@ from sqlalchemy.orm import Session
 from app.core.public_data_sources import (
     NATIONWIDE_BUS_STOP,
     NATIONWIDE_CROSSWALK,
+    SEOUL_SUBWAY_ENTRANCE_LIFT,
+    SEOUL_WHEELCHAIR_LIFT,
 )
 from app.repositories.nearby_public_data_repository import (
     find_nearby_records_by_source_type,
@@ -52,8 +54,12 @@ def build_gis_feature_from_public_data_records(
     """
     public_data_record_field 좌표를 기반으로 근접 접근성 피처를 생성합니다.
 
-    Phase 20에서는 근접 검색 결과의 public_data_record.id를
-    GisFeature 내부 evidence record 목록으로 함께 보관합니다.
+    Phase 21에서는 다음 항목을 실제 근접 검색으로 계산합니다.
+
+    - 버스정류장
+    - 횡단보도
+    - 지하철 출입구 엘리베이터
+    - 휠체어 리프트
     """
 
     nearby_bus_stops = find_nearby_records_by_source_type(
@@ -72,9 +78,32 @@ def build_gis_feature_from_public_data_records(
         radius_meters=DEFAULT_SEARCH_RADIUS_METERS,
     )
 
+    nearby_station_elevators = find_nearby_records_by_source_type(
+        db=db,
+        source_type=SEOUL_SUBWAY_ENTRANCE_LIFT,
+        base_lat=job.work_lat,
+        base_lng=job.work_lng,
+        radius_meters=DEFAULT_SEARCH_RADIUS_METERS,
+    )
+
+    nearby_wheelchair_lifts = find_nearby_records_by_source_type(
+        db=db,
+        source_type=SEOUL_WHEELCHAIR_LIFT,
+        base_lat=job.work_lat,
+        base_lng=job.work_lng,
+        radius_meters=DEFAULT_SEARCH_RADIUS_METERS,
+    )
+
     nearest_bus_stop_distance = None
     if nearby_bus_stops:
         nearest_bus_stop_distance = nearby_bus_stops[0]["distance_meters"]
+
+    station_access_candidates = nearby_station_elevators + nearby_wheelchair_lifts
+    station_access_candidates.sort(key=lambda item: item["distance_meters"])
+
+    nearest_station_access_distance = None
+    if station_access_candidates:
+        nearest_station_access_distance = station_access_candidates[0]["distance_meters"]
 
     bus_stop_evidence_records = [
         NearbyPublicDataRecord(
@@ -96,18 +125,28 @@ def build_gis_feature_from_public_data_records(
         for item in nearby_crosswalks[:3]
     ]
 
+    station_access_evidence_records = [
+        NearbyPublicDataRecord(
+            record_id=item["record_id"],
+            source_type=item["source_type"],
+            external_id=item.get("external_id"),
+            distance_meters=item.get("distance_meters"),
+        )
+        for item in station_access_candidates[:3]
+    ]
+
     return GisFeature(
         nearby_bus_stop_count=len(nearby_bus_stops),
         nearest_bus_stop_distance_meters=nearest_bus_stop_distance,
-        nearby_subway_station_count=0,
-        nearest_subway_station_distance_meters=None,
-        has_station_elevator=None,
-        has_wheelchair_lift=None,
+        nearby_subway_station_count=len(nearby_station_elevators),
+        nearest_subway_station_distance_meters=nearest_station_access_distance,
+        has_station_elevator=True if nearby_station_elevators else None,
+        has_wheelchair_lift=True if nearby_wheelchair_lifts else None,
         nearby_crosswalk_count=len(nearby_crosswalks),
         nearby_accessible_signal_count=0,
         has_accessible_restroom_nearby=None,
         has_step_free_access_nearby=None,
         nearby_bus_stop_records=bus_stop_evidence_records,
         nearby_crosswalk_records=crosswalk_evidence_records,
-        nearby_station_access_records=[],
+        nearby_station_access_records=station_access_evidence_records,
     )

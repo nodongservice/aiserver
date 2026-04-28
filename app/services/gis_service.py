@@ -118,26 +118,38 @@ def build_gis_evidence_items(gis_feature: GisFeature) -> list[EvidenceItem]:
                 )
             )
 
-    if gis_feature.has_station_elevator:
-        evidence_items.append(
-            EvidenceItem(
-                source_type=SEOUL_SUBWAY_ENTRANCE_LIFT,
-                source_name=get_source_name(SEOUL_SUBWAY_ENTRANCE_LIFT),
-                description="근처 지하철역 또는 출입구에 엘리베이터 정보가 있습니다.",
-                distance_meters=gis_feature.nearest_subway_station_distance_meters,
-                record_id=None,
+    if gis_feature.nearby_station_access_records:
+        for record in gis_feature.nearby_station_access_records:
+            evidence_items.append(
+                EvidenceItem(
+                    source_type=record.source_type,
+                    source_name=get_source_name(record.source_type),
+                    description="근무지 주변 지하철 엘리베이터/휠체어 리프트 정보가 확인됩니다.",
+                    distance_meters=record.distance_meters,
+                    record_id=record.record_id,
+                )
             )
-        )
+    else:
+        if gis_feature.has_station_elevator:
+            evidence_items.append(
+                EvidenceItem(
+                    source_type=SEOUL_SUBWAY_ENTRANCE_LIFT,
+                    source_name=get_source_name(SEOUL_SUBWAY_ENTRANCE_LIFT),
+                    description="근처 지하철역또는 출입구에 엘리베이터 정보가 있습니다.",
+                    distance_meters=gis_feature.nearest_subway_station_distance_meters,
+                    record_id=None,
+                )
+            )
 
-    if gis_feature.has_wheelchair_lift:
-        evidence_items.append(
-            EvidenceItem(
-                source_type=SEOUL_WHEELCHAIR_LIFT,
-                source_name=get_source_name(SEOUL_WHEELCHAIR_LIFT),
-                description="근처 이동 구간에 휠체어 리프트 정보가 있습니다.",
-                distance_meters=gis_feature.nearest_subway_station_distance_meters,
-                record_id=None,
+        if gis_feature.has_wheelchair_lift:
+            evidence_items.append(
+                EvidenceItem(
+                    source_type=SEOUL_WHEELCHAIR_LIFT,
+                    source_name=get_source_name(SEOUL_WHEELCHAIR_LIFT),
+                    description="근처 이동 구간에 휠체어 리프트 정보가 있습니다.",
+                    distance_meters=gis_feature.nearest_subway_station_distance_meters,
+                    record_id=None,
+                )
             )
-        )
 
     return evidence_items

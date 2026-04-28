@@ -19,7 +19,7 @@ dev = [
 ]
 
 [tool.ruff]
-line-length = 88
+line-length = 102
 target-version = "py39"
 
 [tool.ruff.lint]

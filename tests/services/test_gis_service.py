@@ -1,4 +1,9 @@
-from app.core.public_data_sources import NATIONWIDE_BUS_STOP, NATIONWIDE_CROSSWALK
+from app.core.public_data_sources import (
+    NATIONWIDE_BUS_STOP,
+    NATIONWIDE_CROSSWALK,
+    SEOUL_SUBWAY_ENTRANCE_LIFT,
+    SEOUL_WHEELCHAIR_LIFT,
+)
 from app.schemas.gis import GisFeature, NearbyPublicDataRecord
 from app.services.gis_service import build_gis_evidence_items
 
@@ -83,3 +88,84 @@ def test_build_gis_evidence_items_fallback_without_record_id():
 
     assert crosswalk_evidence.source_type == NATIONWIDE_CROSSWALK
     assert crosswalk_evidence.record_id is None
+
+
+def test_build_gis_evidence_items_includes_station_elevator_record_id():
+    """
+    근처 지하철 엘리베이터 record_id가 evidence_items.record_id에 연결되는지 확인한다.
+    """
+    gis_feature = GisFeature(
+        nearby_subway_station_count=1,
+        nearest_subway_station_distance_meters=200.0,
+        has_station_elevator=True,
+        nearby_station_access_records=[
+            NearbyPublicDataRecord(
+                record_id=30,
+                source_type=SEOUL_SUBWAY_ENTRANCE_LIFT,
+                external_id="ELEVATOR-001",
+                distance_meters=200.0,
+            )
+        ],
+    )
+
+    evidence_items = build_gis_evidence_items(gis_feature)
+
+    assert len(evidence_items) == 1
+
+    evidence = evidence_items[0]
+
+    assert evidence.source_type == SEOUL_SUBWAY_ENTRANCE_LIFT
+    assert evidence.record_id == 30
+    assert evidence.distance_meters == 200.0
+
+
+def test_build_gis_evidence_items_includes_wheelchair_lift_record_id():
+    """
+    근처 휠체어 리프트 record_id가 evidence_items.record_id에 연결되는지 확인한다.
+    """
+    gis_feature = GisFeature(
+        has_wheelchair_lift=True,
+        nearest_subway_station_distance_meters=250.0,
+        nearby_station_access_records=[
+            NearbyPublicDataRecord(
+                record_id=40,
+                source_type=SEOUL_WHEELCHAIR_LIFT,
+                external_id="LIFT-001",
+                distance_meters=250.0,
+            )
+        ],
+    )
+
+    evidence_items = build_gis_evidence_items(gis_feature)
+
+    assert len(evidence_items) == 1
+
+    evidence = evidence_items[0]
+
+    assert evidence.source_type == SEOUL_WHEELCHAIR_LIFT
+    assert evidence.record_id == 40
+    assert evidence.distance_meters == 250.0
+
+
+def test_build_gis_evidence_items_station_access_fallback_without_record_id():
+    """
+    nearby_station_access_records가 없어도
+    기존 has_station_elevator/has_wheelchair_lift 값으로 fallback evidence를 생성
+    """
+    gis_feature = GisFeature(
+        nearby_subway_station_count=1,
+        nearest_subway_station_distance_meters=180.0,
+        has_station_elevator=True,
+        has_wheelchair_lift=True,
+    )
+
+    evidence_items = build_gis_evidence_items(gis_feature)
+
+    source_types = [item.source_type for item in evidence_items]
+
+    assert SEOUL_SUBWAY_ENTRANCE_LIFT in source_types
+    assert SEOUL_WHEELCHAIR_LIFT in source_types
+
+    for item in evidence_items:
+        assert item.record_id is None
+        assert item.distance_meters == 180.0
