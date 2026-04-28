@@ -2,12 +2,19 @@ from typing import Optional
 
 from sqlalchemy.orm import Session
 
+from app.core.gis_feature_types import (
+    BUS_STOP,
+    CROSSWALK,
+    SUBWAY_ENTRANCE_LIFT,
+    WHEELCHAIR_LIFT,
+)
 from app.core.public_data_sources import (
     NATIONWIDE_BUS_STOP,
     NATIONWIDE_CROSSWALK,
     SEOUL_SUBWAY_ENTRANCE_LIFT,
     SEOUL_WHEELCHAIR_LIFT,
 )
+from app.repositories.gis_feature_repository import find_nearby_gis_features
 from app.repositories.nearby_public_data_repository import (
     find_nearby_records_by_source_type,
 )
@@ -63,33 +70,37 @@ def build_gis_feature_from_public_data_records(
     - 휠체어 리프트
     """
 
-    nearby_bus_stops = find_nearby_records_by_source_type(
+    nearby_bus_stops = find_nearby_records_with_fallback(
         db=db,
         source_type=NATIONWIDE_BUS_STOP,
+        feature_type=BUS_STOP,
         base_lat=job.work_lat,
         base_lng=job.work_lng,
         radius_meters=DEFAULT_SEARCH_RADIUS_METERS,
     )
 
-    nearby_crosswalks = find_nearby_records_by_source_type(
+    nearby_crosswalks = find_nearby_records_with_fallback(
         db=db,
         source_type=NATIONWIDE_CROSSWALK,
+        feature_type=CROSSWALK,
         base_lat=job.work_lat,
         base_lng=job.work_lng,
         radius_meters=DEFAULT_SEARCH_RADIUS_METERS,
     )
 
-    nearby_station_elevators = find_nearby_records_by_source_type(
+    nearby_station_elevators = find_nearby_records_with_fallback(
         db=db,
         source_type=SEOUL_SUBWAY_ENTRANCE_LIFT,
+        feature_type=SUBWAY_ENTRANCE_LIFT,
         base_lat=job.work_lat,
         base_lng=job.work_lng,
         radius_meters=DEFAULT_SEARCH_RADIUS_METERS,
     )
 
-    nearby_wheelchair_lifts = find_nearby_records_by_source_type(
+    nearby_wheelchair_lifts = find_nearby_records_with_fallback(
         db=db,
         source_type=SEOUL_WHEELCHAIR_LIFT,
+        feature_type=WHEELCHAIR_LIFT,
         base_lat=job.work_lat,
         base_lng=job.work_lng,
         radius_meters=DEFAULT_SEARCH_RADIUS_METERS,
@@ -150,3 +161,48 @@ def to_nearby_public_data_records(
         )
         for item in search_results[:limit]
     ]
+
+
+def find_nearby_records_with_fallback(
+    db: Session,
+    source_type: str,
+    feature_type: str,
+    base_lat: float,
+    base_lng: float,
+    radius_meters: float,
+) -> list[NearbyRecordSearchResult]:
+    """
+    근처 접근성 데이터를 조회합니다.
+
+    1순위:
+    - public_accessibility_gis_feature 기반 PostGIS 검색
+
+    2순위:
+    - public_data_record_field 기반 Python Haversine 검색
+
+    이 구조를 두는 이유:
+    - PostGIS 가공 테이블이 아직 비어 있어도 기존 기능이 동작합니다.
+    - Spring이 GIS feature 생성 로직을 붙이기 전까지 fallback이 가능합니다.
+    - 이후 PostGIS 데이터가 안정화되면 fallback을 제거할 수 있습니다.
+    """
+
+    postgis_results = find_nearby_gis_features(
+        db=db,
+        source_type=source_type,
+        feature_type=feature_type,
+        base_lat=base_lat,
+        base_lng=base_lng,
+        radius_meters=radius_meters,
+        limit=20,
+    )
+
+    if postgis_results:
+        return postgis_results
+
+    return find_nearby_records_by_source_type(
+        db=db,
+        source_type=source_type,
+        base_lat=base_lat,
+        base_lng=base_lng,
+        radius_meters=radius_meters,
+    )

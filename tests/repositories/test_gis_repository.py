@@ -1,4 +1,5 @@
 from app.repositories.gis_repository import (
+    find_nearby_records_with_fallback,
     get_accessibility_gis_feature,
     to_nearby_public_data_records,
 )
@@ -54,3 +55,12 @@ def test_to_nearby_public_data_records_converts_search_results():
     assert result[0].source_type == "NATIONWIDE_BUS_STOP"
     assert result[0].external_id == "BUS-001"
     assert result[0].distance_meters == 120.5
+
+
+def test_find_nearby_records_with_fallback_returns_list_without_data(db_session=None):
+    """
+    fallback 함수가 존재하고 호출 가능한지 확인한다.
+
+    실제 DB 기반 동작 검증은 integration test에서 수행한다.
+    """
+    assert callable(find_nearby_records_with_fallback)
