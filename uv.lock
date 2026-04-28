@@ -214,6 +214,38 @@ wheels = [
 ]
 
 [[package]]
+name = "geoalchemy2"
+version = "0.17.1"
+source = { registry = "https://pypi.org/simple" }
+resolution-markers = [
+    "python_full_version < '3.10'",
+]
+dependencies = [
+    { name = "packaging", marker = "python_full_version < '3.10'" },
+    { name = "sqlalchemy", marker = "python_full_version < '3.10'" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/46/52/60214c086a57a7e3ea82241bab94e09827f2b7f7c2084fe6fc280c099b23/geoalchemy2-0.17.1.tar.gz", hash = "sha256:ff5bbe0db5a4ff979f321c8aa1a7556f444ea30cda5146189b1a177ae5bec69d", size = 231566, upload-time = "2025-02-17T09:41:04.72Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/f5/82/e83e0f74cba8bbff9c12b2dea4693adb0cf89204012da48433ebd8e8c4d8/GeoAlchemy2-0.17.1-py3-none-any.whl", hash = "sha256:29f41b67d3a52df47821b695d31dec8600747c6ef4de62ee69811bde481dd2ae", size = 77791, upload-time = "2025-02-17T09:41:02.7Z" },
+]
+
+[[package]]
+name = "geoalchemy2"
+version = "0.19.0"
+source = { registry = "https://pypi.org/simple" }
+resolution-markers = [
+    "python_full_version >= '3.10'",
+]
+dependencies = [
+    { name = "packaging", marker = "python_full_version >= '3.10'" },
+    { name = "sqlalchemy", marker = "python_full_version >= '3.10'" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/f1/3e/8b6b15cd6a68bb4472ad865e8ecc83b010f1673a22834a52fa479cabf639/geoalchemy2-0.19.0.tar.gz", hash = "sha256:c88be59cdb90af9d74278bdd33a5f58acb23859f0f1380726593eed0f343f4a8", size = 240220, upload-time = "2026-04-12T21:02:16.544Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/35/78/0d5918bea58179dc7a6b724c097b3d972f875328460503f74521c46283bc/geoalchemy2-0.19.0-py3-none-any.whl", hash = "sha256:878a5859e23ae632fe20ea35412cda40f50c94fa69c9242587574941e4d4ec32", size = 81145, upload-time = "2026-04-12T21:02:15.337Z" },
+]
+
+[[package]]
 name = "greenlet"
 version = "3.2.5"
 source = { registry = "https://pypi.org/simple" }
@@ -482,6 +514,8 @@ source = { virtual = "." }
 dependencies = [
     { name = "fastapi", version = "0.128.8", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.10'" },
     { name = "fastapi", version = "0.136.1", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.10'" },
+    { name = "geoalchemy2", version = "0.17.1", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.10'" },
+    { name = "geoalchemy2", version = "0.19.0", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.10'" },
     { name = "psycopg2-binary" },
     { name = "python-dotenv", version = "1.2.1", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.10'" },
     { name = "python-dotenv", version = "1.2.2", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.10'" },
@@ -503,6 +537,7 @@ dev = [
 [package.metadata]
 requires-dist = [
     { name = "fastapi", specifier = ">=0.128.8" },
+    { name = "geoalchemy2", specifier = ">=0.17.1" },
     { name = "psycopg2-binary", specifier = ">=2.9.12" },
     { name = "python-dotenv", specifier = ">=1.2.1" },
     { name = "sqlalchemy", specifier = ">=2.0.49" },
