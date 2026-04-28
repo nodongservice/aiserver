@@ -10,7 +10,7 @@ from app.repositories.nearby_public_data_repository import (
     find_nearby_records_by_source_type,
 )
 from app.schemas.analysis import JobCandidate
-from app.schemas.gis import GisFeature
+from app.schemas.gis import GisFeature, NearbyPublicDataRecord
 from app.services.gis_service import get_dummy_gis_feature
 
 DEFAULT_SEARCH_RADIUS_METERS = 500
@@ -52,13 +52,8 @@ def build_gis_feature_from_public_data_records(
     """
     public_data_record_field 좌표를 기반으로 근접 접근성 피처를 생성합니다.
 
-    현재 Phase 19에서는 다음 항목만 실제 계산합니다.
-
-    - nearby_bus_stop_count
-    - nearest_bus_stop_distance_meters
-    - nearby_crosswalk_count
-
-    지하철 엘리베이터/휠체어 리프트는 다음 Phase에서 확장합니다.
+    Phase 20에서는 근접 검색 결과의 public_data_record.id를
+    GisFeature 내부 evidence record 목록으로 함께 보관합니다.
     """
 
     nearby_bus_stops = find_nearby_records_by_source_type(
@@ -81,6 +76,26 @@ def build_gis_feature_from_public_data_records(
     if nearby_bus_stops:
         nearest_bus_stop_distance = nearby_bus_stops[0]["distance_meters"]
 
+    bus_stop_evidence_records = [
+        NearbyPublicDataRecord(
+            record_id=item["record_id"],
+            source_type=item["source_type"],
+            external_id=item.get("external_id"),
+            distance_meters=item.get("distance_meters"),
+        )
+        for item in nearby_bus_stops[:3]
+    ]
+
+    crosswalk_evidence_records = [
+        NearbyPublicDataRecord(
+            record_id=item["record_id"],
+            source_type=item["source_type"],
+            external_id=item.get("external_id"),
+            distance_meters=item.get("distance_meters"),
+        )
+        for item in nearby_crosswalks[:3]
+    ]
+
     return GisFeature(
         nearby_bus_stop_count=len(nearby_bus_stops),
         nearest_bus_stop_distance_meters=nearest_bus_stop_distance,
@@ -92,4 +107,7 @@ def build_gis_feature_from_public_data_records(
         nearby_accessible_signal_count=0,
         has_accessible_restroom_nearby=None,
         has_step_free_access_nearby=None,
+        nearby_bus_stop_records=bus_stop_evidence_records,
+        nearby_crosswalk_records=crosswalk_evidence_records,
+        nearby_station_access_records=[],
     )

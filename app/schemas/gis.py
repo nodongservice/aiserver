@@ -1,6 +1,32 @@
-from typing import Optional
+from typing import List, Optional
 
 from pydantic import BaseModel
+
+
+class NearbyPublicDataRecord(BaseModel):
+    """
+
+    근무지 주변에서 발견된 공공데이터 레코드 요약입니다.
+
+    public_data_record.id를 evidence_items.record_id에 연결하기 위해 사용합니다.
+
+    """
+
+    # Spring이 동기화한 public_data_record.id
+
+    record_id: int
+
+    # 공공데이터 출처 타입
+
+    source_type: str
+
+    # 원본 데이터의 외부 ID
+
+    external_id: Optional[str] = None
+
+    # 근무지로부터의 직선 거리
+
+    distance_meters: Optional[float] = None
 
 
 class GisFeature(BaseModel):
@@ -46,3 +72,15 @@ class GisFeature(BaseModel):
 
     # 근무지 또는 주변 시설에 계단 없는 접근 가능 정보가 있는지 여부
     has_step_free_access_nearby: Optional[bool] = None
+
+    # 근처에서 발견된 버스정류장 근거 레코드
+
+    nearby_bus_stop_records: List[NearbyPublicDataRecord] = []
+
+    # 근처에서 발견된 횡단보도 근거 레코드
+
+    nearby_crosswalk_records: List[NearbyPublicDataRecord] = []
+
+    # 근처에서 발견된 지하철/엘리베이터 관련 근거 레코드
+
+    nearby_station_access_records: List[NearbyPublicDataRecord] = []

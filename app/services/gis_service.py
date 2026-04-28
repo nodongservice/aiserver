@@ -1,7 +1,6 @@
 from app.core.public_data_sources import (
     NATIONWIDE_BUS_STOP,
     NATIONWIDE_CROSSWALK,
-    NATIONWIDE_TRAFFIC_LIGHT,
     SEOUL_SUBWAY_ENTRANCE_LIFT,
     SEOUL_WHEELCHAIR_LIFT,
     get_source_name,
@@ -61,86 +60,82 @@ def build_gis_evidence_items(gis_feature: GisFeature) -> list[EvidenceItem]:
     """
     GIS 피처를 evidence_items로 변환합니다.
 
-    evidence_items는 '왜 이 점수가 나왔는지'를 설명하는 근거 목록입니다.
-    현재는 더미 근거이지만, 나중에는 public_data_record.id 또는
-    PostGIS 테이블의 record_id를 연결하면 됩니다.
-
-    주의:
-    - 여기서는 source_type 문자열을 직접 하드코딩하지 않습니다.
-    - app/core/public_data_sources.py의
-    SourceType 상수와 get_source_name()을 사용합니다.
-    - 그래야 Spring의 SourceType, FastAPI evidence_items,
-    문서가 같은 기준을 공유할 수 있습니다.
+    Phase 20에서는 nearby_*_records에 들어 있는 public_data_record.id를
+    EvidenceItem.record_id에 연결합니다.
     """
 
     evidence_items: list[EvidenceItem] = []
 
-    # 버스정류장 근거
     if gis_feature.nearby_bus_stop_count > 0:
-        evidence_items.append(
-            EvidenceItem(
-                source_type=NATIONWIDE_BUS_STOP,
-                source_name=get_source_name(NATIONWIDE_BUS_STOP),
-                description=(
-                    f"근무지 주변 버스정류장 {gis_feature.nearby_bus_stop_count}개 확인"
-                ),
-                distance_meters=gis_feature.nearest_bus_stop_distance_meters,
-                record_id=None,
+        if gis_feature.nearby_bus_stop_records:
+            for record in gis_feature.nearby_bus_stop_records:
+                evidence_items.append(
+                    EvidenceItem(
+                        source_type=NATIONWIDE_BUS_STOP,
+                        source_name=get_source_name(NATIONWIDE_BUS_STOP),
+                        description="근무지 반경 내 버스정류장 정보가 확인됩니다.",
+                        distance_meters=record.distance_meters,
+                        record_id=record.record_id,
+                    )
+                )
+        else:
+            evidence_items.append(
+                EvidenceItem(
+                    source_type=NATIONWIDE_BUS_STOP,
+                    source_name=get_source_name(NATIONWIDE_BUS_STOP),
+                    description=(
+                        f"근무지 반경 내 버스정류장 "
+                        f"{gis_feature.nearby_bus_stop_count}개가 확인됩니다."
+                    ),
+                    distance_meters=gis_feature.nearest_bus_stop_distance_meters,
+                    record_id=None,
+                )
             )
-        )
 
-    # 지하철역/출입구 엘리베이터 근거
-    if gis_feature.nearby_subway_station_count > 0:
+    if gis_feature.nearby_crosswalk_count > 0:
+        if gis_feature.nearby_crosswalk_records:
+            for record in gis_feature.nearby_crosswalk_records:
+                evidence_items.append(
+                    EvidenceItem(
+                        source_type=NATIONWIDE_CROSSWALK,
+                        source_name=get_source_name(NATIONWIDE_CROSSWALK),
+                        description="근무지 반경 내 횡단보도 정보가 확인됩니다.",
+                        distance_meters=record.distance_meters,
+                        record_id=record.record_id,
+                    )
+                )
+        else:
+            evidence_items.append(
+                EvidenceItem(
+                    source_type=NATIONWIDE_CROSSWALK,
+                    source_name=get_source_name(NATIONWIDE_CROSSWALK),
+                    description=(
+                        f"근무지 반경 내 횡단보도 "
+                        f"{gis_feature.nearby_crosswalk_count}개가 확인됩니다."
+                    ),
+                    distance_meters=None,
+                    record_id=None,
+                )
+            )
+
+    if gis_feature.has_station_elevator:
         evidence_items.append(
             EvidenceItem(
                 source_type=SEOUL_SUBWAY_ENTRANCE_LIFT,
                 source_name=get_source_name(SEOUL_SUBWAY_ENTRANCE_LIFT),
-                description=(
-                    f"근무지 주변 지하철역 "
-                    f"{gis_feature.nearby_subway_station_count}개 확인"
-                ),
+                description="근처 지하철역 또는 출입구에 엘리베이터 정보가 있습니다.",
                 distance_meters=gis_feature.nearest_subway_station_distance_meters,
                 record_id=None,
             )
         )
 
-    # 휠체어 리프트 근거
     if gis_feature.has_wheelchair_lift:
         evidence_items.append(
             EvidenceItem(
                 source_type=SEOUL_WHEELCHAIR_LIFT,
                 source_name=get_source_name(SEOUL_WHEELCHAIR_LIFT),
-                description="근처 역사 또는 이동 구간에서 휠체어 리프트 정보 확인",
-                distance_meters=None,
-                record_id=None,
-            )
-        )
-
-    # 횡단보도 근거
-    if gis_feature.nearby_crosswalk_count > 0:
-        evidence_items.append(
-            EvidenceItem(
-                source_type=NATIONWIDE_CROSSWALK,
-                source_name=get_source_name(NATIONWIDE_CROSSWALK),
-                description=(
-                    f"근무지 주변 횡단보도 {gis_feature.nearby_crosswalk_count}개 확인"
-                ),
-                distance_meters=None,
-                record_id=None,
-            )
-        )
-
-    # 신호등/음향신호기/보행 안전시설 근거
-    if gis_feature.nearby_accessible_signal_count > 0:
-        evidence_items.append(
-            EvidenceItem(
-                source_type=NATIONWIDE_TRAFFIC_LIGHT,
-                source_name=get_source_name(NATIONWIDE_TRAFFIC_LIGHT),
-                description=(
-                    f"근무지 주변 교통약자 보행 안전시설 "
-                    f"{gis_feature.nearby_accessible_signal_count}개 확인"
-                ),
-                distance_meters=None,
+                description="근처 이동 구간에 휠체어 리프트 정보가 있습니다.",
+                distance_meters=gis_feature.nearest_subway_station_distance_meters,
                 record_id=None,
             )
         )
