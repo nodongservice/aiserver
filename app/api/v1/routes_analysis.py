@@ -1,5 +1,7 @@
-from fastapi import APIRouter
+from fastapi import APIRouter, Depends
+from sqlalchemy.orm import Session
 
+from app.db.session import get_db
 from app.schemas.analysis import (
     AccessibilityAnalyzeRequest,
     AccessibilityAnalyzeResponse,
@@ -15,17 +17,21 @@ router = APIRouter(
 @router.post("/analyze-batch", response_model=AccessibilityAnalyzeResponse)
 def analyze_batch(
     request: AccessibilityAnalyzeRequest,
+    db: Session = Depends(get_db),
 ) -> AccessibilityAnalyzeResponse:
     """
     여러 공고에 대한 접근성 분석을 수행합니다.
 
-    사용 흐름:
-    1. Spring이 사용자 조건과 공고 후보 목록을 FastAPI로 전달합니다.
-    2. FastAPI는 공고별 접근성 점수를 계산합니다.
-    3. 공고별 점수, 등급, 긍정 요인, 위험 요인, 근거 데이터를 Spring에 반환합니다.
-    4. Spring은 결과를 저장/캐싱한 뒤 Next.js에 전달합니다.
+    Spring이 사용자 조건과 공고 후보 목록을 FastAPI로 전달하면,
+    FastAPI는 DB/PostGIS 기반 접근성 근거를 조회하고 공고별 점수를 계산합니다.
 
-    현재 단계에서는 DB/PostGIS 없이 더미 GIS feature와 룰 기반 계산만 수행합니다.
+    현재 구조:
+    - PostGIS GIS feature 우선 조회
+    - 데이터가 없으면 public_data_record_field 기반 Python 거리 계산 fallback
+    - DB 조회 실패 시 dummy GIS fallback
     """
 
-    return analyze_accessibility_batch(request)
+    return analyze_accessibility_batch(
+        request=request,
+        db=db,
+    )

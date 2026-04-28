@@ -1,3 +1,7 @@
+from typing import Optional
+
+from sqlalchemy.orm import Session
+
 from app.core.public_data_sources import KEPAD_STANDARD_WORKPLACE, get_source_name
 from app.repositories.gis_repository import get_accessibility_gis_feature
 from app.schemas.analysis import (
@@ -20,6 +24,7 @@ from app.services.gis_service import build_gis_evidence_items
 
 def analyze_accessibility_batch(
     request: AccessibilityAnalyzeRequest,
+    db: Optional[Session] = None,
 ) -> AccessibilityAnalyzeResponse:
     """
     여러 공고 후보에 대해 접근성 분석을 수행합니다.
@@ -43,6 +48,7 @@ def analyze_accessibility_batch(
 def analyze_single_job(
     user: UserAccessibilityCondition,
     job: JobCandidate,
+    db: Optional[Session] = None,
 ) -> AccessibilityAnalyzeResult:
     """
     공고 1개에 대한 접근성 점수를 계산합니다.
@@ -55,7 +61,10 @@ def analyze_single_job(
     # 현재는 repository 내부에서 더미 GIS 피처를 반환합니다.
     # 이후 PostGIS 연결 시 scoring_service.py는 그대로 두고,
     # gis_repository.py 내부 구현만 교체하면 됩니다.
-    gis_feature = get_accessibility_gis_feature(job)
+    gis_feature = get_accessibility_gis_feature(
+        job=job,
+        db=db,
+    )
 
     # 2. 항목별 점수 계산
     transport_score = calculate_transport_score(user, gis_feature)
