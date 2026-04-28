@@ -62,9 +62,7 @@ class UserAccessibilityCondition(BaseModel):
     work_environment_preferences: List[str] = Field(default_factory=list)
 
     # 이동수단 선호 정보
-    transport_preferences: TransportPreferences = Field(
-        default_factory=TransportPreferences
-    )
+    transport_preferences: TransportPreferences = Field(default_factory=TransportPreferences)
 
 
 class JobCandidate(BaseModel):

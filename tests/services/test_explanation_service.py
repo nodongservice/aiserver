@@ -192,9 +192,7 @@ def test_build_risk_factors_returns_check_needed_when_data_is_missing():
     )
 
     assert isinstance(factors, list)
-    assert (
-        "휠체어 이용에 필요한 역 엘리베이터/리프트 정보 확인이 필요합니다." in factors
-    )
+    assert "휠체어 이용에 필요한 역 엘리베이터/리프트 정보 확인이 필요합니다." in factors
     assert "근무지 출입구의 계단 없는 접근 가능 여부는 확인이 필요합니다." in factors
     assert "장애인 화장실 정보는 아직 확인되지 않았습니다." in factors
     assert "주변 역 또는 출입구의 엘리베이터 정보 확인이 필요합니다." in factors

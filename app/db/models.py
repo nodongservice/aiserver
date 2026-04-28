@@ -1,7 +1,8 @@
 from datetime import datetime
 from typing import Optional
 
-from sqlalchemy import Boolean, DateTime, ForeignKey, Integer, String, Text
+from geoalchemy2 import Geography, Geometry
+from sqlalchemy import JSON, Boolean, DateTime, Float, ForeignKey, Integer, String, Text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db.session import Base
@@ -35,9 +36,7 @@ class PublicDataRecord(Base):
 
     # 원본 공공데이터의 외부 ID
     # API마다 고유 ID가 없을 수 있으므로 nullable 허용
-    external_id: Mapped[Optional[str]] = mapped_column(
-        String(255), nullable=True, index=True
-    )
+    external_id: Mapped[Optional[str]] = mapped_column(String(255), nullable=True, index=True)
 
     # 원본 payload 해시
     # 변경 감지용으로 Spring이 계산해서 저장
@@ -108,3 +107,53 @@ class PublicDataRecordField(Base):
     record: Mapped["PublicDataRecord"] = relationship(
         back_populates="fields",
     )
+
+
+class AccessibilityGisFeature(Base):
+    """
+    접근성 분석용 PostGIS 가공 테이블입니다.
+
+    public_data_record는 원본 보존용이고,
+    이 테이블은 공간 검색 최적화를 위한 읽기/분석용 테이블입니다.
+    """
+
+    __tablename__ = "public_accessibility_gis_feature"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
+
+    public_data_record_id: Mapped[int] = mapped_column(
+        Integer,
+        ForeignKey("public_data_record.id"),
+        nullable=False,
+        index=True,
+    )
+
+    source_type: Mapped[str] = mapped_column(String(100), nullable=False, index=True)
+
+    feature_type: Mapped[str] = mapped_column(String(100), nullable=False, index=True)
+
+    name: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
+
+    address: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+
+    latitude: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
+
+    longitude: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
+
+    geom: Mapped[Optional[object]] = mapped_column(
+        Geometry(geometry_type="GEOMETRY", srid=4326),
+        nullable=True,
+    )
+
+    geog: Mapped[Optional[object]] = mapped_column(
+        Geography(geometry_type="GEOMETRY", srid=4326),
+        nullable=True,
+    )
+
+    properties: Mapped[Optional[dict]] = mapped_column(JSON, nullable=True)
+
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
+
+    created_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
+
+    updated_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)

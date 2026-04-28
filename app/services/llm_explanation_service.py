@@ -85,15 +85,11 @@ def build_check_points(request: ExplanationGenerateRequest) -> list[str]:
 
     # 근거 데이터가 없는 경우, 공공데이터 기반 검증이 아직 부족하다는 점을 알려줍니다.
     if not request.evidence_items:
-        check_points.append(
-            "공공데이터 기반 근거가 부족하므로 사업장 접근성 확인이 필요합니다."
-        )
+        check_points.append("공공데이터 기반 근거가 부족하므로 사업장 접근성 확인이 필요합니다.")
 
     # 기본 체크포인트
     if not check_points:
-        check_points.append(
-            "면접 또는 지원 전 실제 근무지 접근성을 한 번 더 확인하는 것이 좋습니다."
-        )
+        check_points.append("면접 또는 지원 전 실제 근무지 접근성을 한 번 더 확인하는 것이 좋습니다.")
 
     return unique(check_points)
 

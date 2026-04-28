@@ -12,10 +12,7 @@ from sqlalchemy import text
 from sqlalchemy.orm import Session
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
-from app.api.v1.routes_analysis import router as analysis_router
-from app.api.v1.routes_explanation import router as explanation_router
-from app.api.v1.routes_public_data import router as public_data_router
-from app.api.v1.routes_tags import router as tags_router
+from app.api.v1.routers import api_router
 from app.core.exceptions import (
     http_exception_handler,
     unhandled_exception_handler,
@@ -39,7 +36,6 @@ Base.metadata.create_all(bind=engine)
 app.add_exception_handler(RequestValidationError, validation_exception_handler)
 app.add_exception_handler(StarletteHTTPException, http_exception_handler)
 app.add_exception_handler(Exception, unhandled_exception_handler)
-app.include_router(public_data_router)
 
 cors_origins = os.getenv("CORS_ALLOW_ORIGINS", "")
 origins = [origin.strip() for origin in cors_origins.split(",") if origin.strip()]
@@ -51,10 +47,6 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
-
-app.include_router(analysis_router)
-app.include_router(tags_router)
-app.include_router(explanation_router)
 
 
 @app.get("/")
@@ -100,3 +92,6 @@ def postgis_health(db: Session = Depends(get_db)) -> dict[str, str]:
         "postgis": "enabled",
         "version": str(result),
     }
+
+
+app.include_router(api_router)

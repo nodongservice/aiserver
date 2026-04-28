@@ -88,14 +88,10 @@ def build_risk_factors(
     # 휠체어 사용자에게 중요한 이동 접근성 확인
     if "wheelchair" in user.disability_types:
         if not gis_feature.has_station_elevator and not gis_feature.has_wheelchair_lift:
-            factors.append(
-                "휠체어 이용에 필요한 역 엘리베이터/리프트 정보 확인이 필요합니다."
-            )
+            factors.append("휠체어 이용에 필요한 역 엘리베이터/리프트 정보 확인이 필요합니다.")
 
         if gis_feature.has_step_free_access_nearby is None:
-            factors.append(
-                "근무지 출입구의 계단 없는 접근 가능 여부는 확인이 필요합니다."
-            )
+            factors.append("근무지 출입구의 계단 없는 접근 가능 여부는 확인이 필요합니다.")
 
     # 필수 지원 정보 확인
     if (
@@ -107,20 +103,14 @@ def build_risk_factors(
     if "elevator" in user.required_supports and not gis_feature.has_station_elevator:
         factors.append("주변 역 또는 출입구의 엘리베이터 정보 확인이 필요합니다.")
 
-    if (
-        "low_floor_bus" in user.required_supports
-        and gis_feature.nearby_bus_stop_count == 0
-    ):
+    if "low_floor_bus" in user.required_supports and gis_feature.nearby_bus_stop_count == 0:
         factors.append("저상버스 이용 가능 정류장 정보 확인이 필요합니다.")
 
     # 업무환경 충돌 확인
     if "avoid_phone_work" in user_preferences and "phone_work" in job_tags:
         factors.append("전화 응대 업무가 포함되어 사용자 선호와 충돌할 수 있습니다.")
 
-    if (
-        "avoid_long_standing" in user_preferences
-        and "long_standing_or_walking" in job_tags
-    ):
+    if "avoid_long_standing" in user_preferences and "long_standing_or_walking" in job_tags:
         factors.append("장시간 서거나 이동하는 업무가 포함될 수 있습니다.")
 
     if "avoid_heavy_lifting" in user_preferences and "heavy_lifting" in job_tags:
@@ -161,9 +151,7 @@ def build_summary(
     # 위험 요인이 실제로 존재하는지 확인합니다.
     # 기본 문구인 '현재 확인된 주요 위험 요인은 없습니다.'만 있는 경우에는
     # 위험 요인이 없다고 간주합니다.
-    has_real_risk = any(
-        factor != "현재 확인된 주요 위험 요인은 없습니다." for factor in risk_factors
-    )
+    has_real_risk = any(factor != "현재 확인된 주요 위험 요인은 없습니다." for factor in risk_factors)
 
     if accessibility_grade == "GOOD":
         if has_real_risk:
