@@ -21,6 +21,7 @@ from app.core.exceptions import (
     unhandled_exception_handler,
     validation_exception_handler,
 )
+from app.api.v1.routers import api_router
 from app.core.logging import setup_logging
 from app.db import models  # noqa: F401
 from app.db.session import Base, engine, get_db
@@ -51,10 +52,6 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
-
-app.include_router(analysis_router)
-app.include_router(tags_router)
-app.include_router(explanation_router)
 
 
 @app.get("/")
@@ -100,3 +97,6 @@ def postgis_health(db: Session = Depends(get_db)) -> dict[str, str]:
         "postgis": "enabled",
         "version": str(result),
     }
+
+
+app.include_router(api_router)
