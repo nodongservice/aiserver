@@ -35,6 +35,19 @@ def build_positive_factors(
     if gis_feature.has_wheelchair_lift:
         factors.append("근처 이동 구간에 휠체어 리프트 정보가 있습니다.")
 
+    # 신호등 긍정요인
+    if gis_feature.nearby_traffic_light_count >= 1:
+        factors.append("근무지 주변에 신호등 정보가 확인됩니다.")
+
+    if gis_feature.has_functioning_pedestrian_signal:
+        factors.append("근무지 주변에 보행자작동신호기 정보가 확인됩니다.")
+
+    if gis_feature.has_audible_signal:
+        factors.append("근무지 주변에 시각장애인용 음향신호기 정보가 확인됩니다.")
+
+    if gis_feature.has_remaining_time_indicator:
+        factors.append("근무지 주변에 잔여시간표시기 정보가 확인됩니다.")
+
     # 사업장/공고 성격 관련 긍정 요인
     if job.is_standard_workplace is True:
         factors.append("장애인 표준사업장으로 확인됩니다.")
@@ -130,6 +143,14 @@ def build_risk_factors(
 
     if {"blind", "low_vision"} & set(user.disability_types) and gis_feature.has_braille_block:
         factors.append("근무지 주변 보행 구간에 점자블록 정보가 확인됩니다.")
+
+    # 시각장애 - 신호등, 음향
+    if has_visual_disability and gis_feature.nearby_traffic_light_count > 0:
+        if gis_feature.has_audible_signal is False:
+            factors.append("근무지 주변 시각장애인용 음향신호기 여부 확인이 필요합니다.")
+
+        if gis_feature.has_functioning_pedestrian_signal is False:
+            factors.append("근무지 주변 보행자작동신호기 여부 확인이 필요합니다.")
 
     # 업무환경 충돌 확인
     if "avoid_phone_work" in user_preferences and "phone_work" in job_tags:

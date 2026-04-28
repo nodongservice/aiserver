@@ -51,3 +51,21 @@ class GisFeature(BaseModel):
     nearby_bus_stop_records: List[NearbyPublicDataRecord] = Field(default_factory=list)
     nearby_crosswalk_records: List[NearbyPublicDataRecord] = Field(default_factory=list)
     nearby_station_access_records: List[NearbyPublicDataRecord] = Field(default_factory=list)
+
+    # 근무지 반경 내 신호등 개수
+    nearby_traffic_light_count: int = 0
+
+    # 근무지 반경 내 음향신호기 개수
+    nearby_audible_signal_count: int = 0
+
+    # 근처에 보행자작동신호기 정보가 있는지 여부
+    has_functioning_pedestrian_signal: Optional[bool] = None
+
+    # 근처에 시각장애인용 음향신호기 정보가 있는지 여부
+    has_audible_signal: Optional[bool] = None
+
+    # 근처에 잔여시간표시기 정보가 있는지 여부
+    has_remaining_time_indicator: Optional[bool] = None
+
+    # 근처에서 발견된 신호등/음향신호기 근거 레코드
+    nearby_traffic_light_records: List[NearbyPublicDataRecord] = Field(default_factory=list)

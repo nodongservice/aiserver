@@ -3,14 +3,17 @@ from typing import Optional
 from sqlalchemy.orm import Session
 
 from app.core.gis_feature_types import (
+    AUDIBLE_SIGNAL,
     BUS_STOP,
     CROSSWALK,
     SUBWAY_ENTRANCE_LIFT,
+    TRAFFIC_LIGHT,
     WHEELCHAIR_LIFT,
 )
 from app.core.public_data_sources import (
     NATIONWIDE_BUS_STOP,
     NATIONWIDE_CROSSWALK,
+    NATIONWIDE_TRAFFIC_LIGHT,
     SEOUL_SUBWAY_ENTRANCE_LIFT,
     SEOUL_WHEELCHAIR_LIFT,
 )
@@ -110,6 +113,30 @@ def build_gis_feature_from_public_data_records(
         radius_meters=DEFAULT_SEARCH_RADIUS_METERS,
     )
 
+    nearby_traffic_lights = find_nearby_records_with_fallback(
+        db=db,
+        source_type=NATIONWIDE_TRAFFIC_LIGHT,
+        feature_type=TRAFFIC_LIGHT,
+        base_lat=job.work_lat,
+        base_lng=job.work_lng,
+        radius_meters=DEFAULT_SEARCH_RADIUS_METERS,
+    )
+
+    nearby_audible_signals = find_nearby_records_with_fallback(
+        db=db,
+        source_type=NATIONWIDE_TRAFFIC_LIGHT,
+        feature_type=AUDIBLE_SIGNAL,
+        base_lat=job.work_lat,
+        base_lng=job.work_lng,
+        radius_meters=DEFAULT_SEARCH_RADIUS_METERS,
+    )
+
+    traffic_light_candidates = nearby_traffic_lights + nearby_audible_signals
+
+    traffic_light_accessibility = summarize_traffic_light_accessibility(traffic_light_candidates)
+
+    traffic_light_evidence_records = to_nearby_public_data_records(traffic_light_candidates)
+
     nearby_station_elevators = find_nearby_records_with_fallback(
         db=db,
         source_type=SEOUL_SUBWAY_ENTRANCE_LIFT,
@@ -151,11 +178,15 @@ def build_gis_feature_from_public_data_records(
 
     if crosswalk_accessibility["has_accessible_pedestrian_signal"]:
         accessible_signal_count += 1
-
     if crosswalk_accessibility["has_braille_block"]:
         accessible_signal_count += 1
-
     if crosswalk_accessibility["has_curb_cut"]:
+        accessible_signal_count += 1
+    if traffic_light_accessibility["has_functioning_pedestrian_signal"]:
+        accessible_signal_count += 1
+    if traffic_light_accessibility["has_audible_signal"]:
+        accessible_signal_count += 1
+    if traffic_light_accessibility["has_remaining_time_indicator"]:
         accessible_signal_count += 1
 
     return GisFeature(
@@ -168,6 +199,14 @@ def build_gis_feature_from_public_data_records(
         nearby_crosswalk_count=len(nearby_crosswalks),
         has_accessible_restroom_nearby=None,
         has_step_free_access_nearby=None,
+        nearby_traffic_light_count=len(nearby_traffic_lights),
+        nearby_audible_signal_count=len(nearby_audible_signals),
+        has_functioning_pedestrian_signal=traffic_light_accessibility[
+            "has_functioning_pedestrian_signal"
+        ],
+        has_audible_signal=traffic_light_accessibility["has_audible_signal"],
+        has_remaining_time_indicator=traffic_light_accessibility["has_remaining_time_indicator"],
+        nearby_traffic_light_records=traffic_light_evidence_records,
         nearby_bus_stop_records=bus_stop_evidence_records,
         nearby_crosswalk_records=crosswalk_evidence_records,
         nearby_station_access_records=station_access_evidence_records,
@@ -283,4 +322,40 @@ def summarize_crosswalk_accessibility(
         "has_accessible_pedestrian_signal": has_accessible_pedestrian_signal,
         "has_curb_cut": has_curb_cut,
         "has_braille_block": has_braille_block,
+    }
+
+
+def summarize_traffic_light_accessibility(
+    nearby_traffic_lights: list[NearbyRecordSearchResult],
+) -> dict[str, Optional[bool]]:
+    """
+    근처 신호등 데이터의 접근성 속성을 요약합니다.
+
+    하나라도 Y/유/있음이면 True로 봅니다.
+    데이터가 없으면 None을 반환합니다.
+    """
+
+    if not nearby_traffic_lights:
+        return {
+            "has_functioning_pedestrian_signal": None,
+            "has_audible_signal": None,
+            "has_remaining_time_indicator": None,
+        }
+
+    has_functioning_pedestrian_signal = any(
+        is_yes_value(item.field_map.get("fnctngSgngnrYn")) for item in nearby_traffic_lights
+    )
+
+    has_audible_signal = any(
+        is_yes_value(item.field_map.get("sondSgngnrYn")) for item in nearby_traffic_lights
+    )
+
+    has_remaining_time_indicator = any(
+        is_yes_value(item.field_map.get("remndrIdctYn")) for item in nearby_traffic_lights
+    )
+
+    return {
+        "has_functioning_pedestrian_signal": has_functioning_pedestrian_signal,
+        "has_audible_signal": has_audible_signal,
+        "has_remaining_time_indicator": has_remaining_time_indicator,
     }

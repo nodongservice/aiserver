@@ -1,6 +1,7 @@
 from app.core.public_data_sources import (
     NATIONWIDE_BUS_STOP,
     NATIONWIDE_CROSSWALK,
+    NATIONWIDE_TRAFFIC_LIGHT,
     SEOUL_SUBWAY_ENTRANCE_LIFT,
     SEOUL_WHEELCHAIR_LIFT,
     get_source_name,
@@ -129,6 +130,32 @@ def build_gis_evidence_items(gis_feature: GisFeature) -> list[EvidenceItem]:
                     ),
                     distance_meters=None,
                     record_id=None,
+                )
+            )
+
+    if gis_feature.nearby_traffic_light_records:
+        for record in gis_feature.nearby_traffic_light_records:
+            description = "근무지 반경 내 신호등 정보가 확인됩니다."
+
+            if record.field_map.get("tfclghtSe"):
+                description += f" 신호등구분: {record.field_map.get('tfclghtSe')}."
+
+            if record.field_map.get("fnctngSgngnrYn"):
+                description += f" 보행자작동신호기 여부: {record.field_map.get('fnctngSgngnrYn')}."
+
+            if record.field_map.get("sondSgngnrYn"):
+                description += f" 음향신호기 여부: {record.field_map.get('sondSgngnrYn')}."
+
+            if record.field_map.get("remndrIdctYn"):
+                description += f" 잔여시간표시기 여부: {record.field_map.get('remndrIdctYn')}."
+
+            evidence_items.append(
+                EvidenceItem(
+                    source_type=NATIONWIDE_TRAFFIC_LIGHT,
+                    source_name=get_source_name(NATIONWIDE_TRAFFIC_LIGHT),
+                    description=description,
+                    distance_meters=record.distance_meters,
+                    record_id=record.record_id,
                 )
             )
 

@@ -1,8 +1,12 @@
 from fastapi.testclient import TestClient
 from sqlalchemy import text
 
-from app.core.gis_feature_types import BUS_STOP, CROSSWALK
-from app.core.public_data_sources import NATIONWIDE_BUS_STOP, NATIONWIDE_CROSSWALK
+from app.core.gis_feature_types import BUS_STOP, CROSSWALK, TRAFFIC_LIGHT
+from app.core.public_data_sources import (
+    NATIONWIDE_BUS_STOP,
+    NATIONWIDE_CROSSWALK,
+    NATIONWIDE_TRAFFIC_LIGHT,
+)
 from app.db.session import SessionLocal
 from app.main import app
 
@@ -143,6 +147,11 @@ def test_analyze_batch_includes_postgis_evidence_record_ids():
             source_type=NATIONWIDE_CROSSWALK,
             external_id="TEST_ANALYSIS_CROSSWALK",
         )
+        traffic_light_record_id = insert_test_public_data_record(
+            db=db,
+            source_type=NATIONWIDE_TRAFFIC_LIGHT,
+            external_id="TEST_ANALYSIS_TRAFFIC_LIGHT",
+        )
 
         insert_test_gis_feature(
             db=db,
@@ -168,6 +177,21 @@ def test_analyze_batch_includes_postgis_evidence_record_ids():
                 '"sondSgngnrYn": "Y", '
                 '"ftpthLowerYn": "Y", '
                 '"brllBlckYn": "Y"}'
+            ),
+        )
+        insert_test_gis_feature(
+            db=db,
+            public_data_record_id=traffic_light_record_id,
+            source_type=NATIONWIDE_TRAFFIC_LIGHT,
+            feature_type=TRAFFIC_LIGHT,
+            name="TEST_ANALYSIS_TRAFFIC_LIGHT",
+            latitude=37.5668,
+            longitude=126.9783,
+            properties_json=(
+                '{"tfclghtSe": "보행신호등", '
+                '"fnctngSgngnrYn": "Y", '
+                '"sondSgngnrYn": "Y", '
+                '"remndrIdctYn": "Y"}'
             ),
         )
 
@@ -259,6 +283,18 @@ def test_analyze_batch_includes_postgis_evidence_record_ids():
         assert "음향신호기" in crosswalk_evidence[0]["description"]
         assert "보도턱낮춤" in crosswalk_evidence[0]["description"]
         assert "점자블록" in crosswalk_evidence[0]["description"]
+
+        assert NATIONWIDE_TRAFFIC_LIGHT in source_types
+        assert traffic_light_record_id in evidence_record_ids
+        traffic_light_evidence = [
+            item for item in evidence_items if item["source_type"] == NATIONWIDE_TRAFFIC_LIGHT
+        ]
+
+        assert traffic_light_evidence
+        assert "신호등" in traffic_light_evidence[0]["description"]
+        assert "보행자작동신호기" in traffic_light_evidence[0]["description"]
+        assert "음향신호기" in traffic_light_evidence[0]["description"]
+        assert "잔여시간표시기" in traffic_light_evidence[0]["description"]
 
     finally:
         cleanup_test_data(db)

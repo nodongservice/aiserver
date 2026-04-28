@@ -258,6 +258,18 @@ def calculate_crosswalk_score(
     if gis_feature.has_braille_block:
         score += 2
 
+    if gis_feature.nearby_traffic_light_count >= 1:
+        score += 2
+
+    if gis_feature.has_functioning_pedestrian_signal:
+        score += 2
+
+    if gis_feature.has_audible_signal:
+        score += 3
+
+    if gis_feature.has_remaining_time_indicator:
+        score += 2
+
     # 휠체어 사용자에게는 보도턱낮춤이 특히 중요합니다.
     if "wheelchair" in user.disability_types and gis_feature.has_curb_cut:
         score += 2
@@ -271,7 +283,13 @@ def calculate_crosswalk_score(
     if has_visual_disability and gis_feature.has_braille_block:
         score += 2
 
-    return min(score, 15)
+    if has_visual_disability and gis_feature.has_audible_signal:
+        score += 3
+
+    if has_visual_disability and gis_feature.has_functioning_pedestrian_signal:
+        score += 2
+
+    return min(score, 20)
 
 
 def calculate_facility_score(
