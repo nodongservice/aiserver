@@ -1,14 +1,22 @@
-from app.core.gis_feature_types import BUS_STOP, CROSSWALK, TRAFFIC_LIGHT
+from app.core.gis_feature_types import (
+    BUS_STOP,
+    CROSSWALK,
+    SUBWAY_ENTRANCE_LIFT,
+    TRAFFIC_LIGHT,
+)
 from app.core.public_data_sources import (
     NATIONWIDE_BUS_STOP,
     NATIONWIDE_CROSSWALK,
     NATIONWIDE_TRAFFIC_LIGHT,
+    SEOUL_SUBWAY_ENTRANCE_LIFT,
 )
 from app.db.models import PublicDataRecord
 from app.services.gis_feature_builder_service import (
     build_bus_stop_feature_values,
     build_crosswalk_feature_values,
+    build_subway_entrance_lift_feature_values,
     build_traffic_light_feature_values,
+    is_valid_wkt,
 )
 
 
@@ -112,5 +120,72 @@ def test_build_feature_values_returns_none_for_invalid_coordinate():
     }
 
     result = build_bus_stop_feature_values(record, field_map)
+
+    assert result is None
+
+
+def test_is_valid_wkt():
+    """
+    WKT 문자열의 기본 유효성을 확인한다.
+    """
+    assert is_valid_wkt("POINT(126.9780 37.5665)") is True
+    assert is_valid_wkt("LINESTRING(126.9780 37.5665, 126.9790 37.5670)") is True
+
+    assert is_valid_wkt(None) is False
+    assert is_valid_wkt("") is False
+    assert is_valid_wkt("INVALID") is False
+
+
+def test_build_subway_entrance_lift_feature_values():
+    """
+    서울시 지하철 출입구 리프트 WKT 데이터를 GIS feature 값으로 변환하는지 확인한다.
+    """
+    record = PublicDataRecord(
+        id=5,
+        source_type=SEOUL_SUBWAY_ENTRANCE_LIFT,
+        external_id="LIFT-001",
+        is_active=True,
+    )
+
+    field_map = {
+        "NODE_WKT": "POINT(126.9780 37.5665)",
+        "NODE_ID": "NODE-001",
+        "NODE_TYPE": "지하철출입구",
+        "NODE_TYPE_CD": "SUBWAY_EXIT",
+        "SGG_CD": "11140",
+        "SGG_NM": "중구",
+        "EMD_CD": "11140550",
+        "EMD_NM": "명동",
+        "SBWY_STN_CD": "0201",
+        "SBWY_STN_NM": "시청역",
+    }
+
+    result = build_subway_entrance_lift_feature_values(record, field_map)
+
+    assert result is not None
+    assert result["source_type"] == SEOUL_SUBWAY_ENTRANCE_LIFT
+    assert result["feature_type"] == SUBWAY_ENTRANCE_LIFT
+    assert result["name"] == "시청역"
+    assert result["wkt"] == "POINT(126.9780 37.5665)"
+    assert result["properties"]["SBWY_STN_NM"] == "시청역"
+
+
+def test_build_subway_entrance_lift_feature_values_returns_none_for_invalid_wkt():
+    """
+    NODE_WKT가 없거나 잘못되면 GIS feature로 변환하지 않는다.
+    """
+    record = PublicDataRecord(
+        id=6,
+        source_type=SEOUL_SUBWAY_ENTRANCE_LIFT,
+        external_id="LIFT-INVALID",
+        is_active=True,
+    )
+
+    field_map = {
+        "NODE_WKT": "INVALID",
+        "SBWY_STN_NM": "시청역",
+    }
+
+    result = build_subway_entrance_lift_feature_values(record, field_map)
 
     assert result is None
