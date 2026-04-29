@@ -152,6 +152,45 @@ def analyze_single_job(
     )
 
 
+def has_wheelchair_access_need(user: UserAccessibilityCondition) -> bool:
+    """
+    휠체어 접근성 가중치가 필요한 사용자인지 확인합니다.
+    """
+    return "wheelchair" in user.disability_types
+
+
+def has_mobility_access_need(user: UserAccessibilityCondition) -> bool:
+    """
+    이동약자/지체장애 접근성 가중치가 필요한 사용자인지 확인합니다.
+    """
+    return bool({"wheelchair", "mobility"} & set(user.disability_types))
+
+
+def has_visual_disability(user: UserAccessibilityCondition) -> bool:
+    """
+    시각장애 접근성 가중치가 필요한 사용자인지 확인합니다.
+    """
+    return bool({"blind", "low_vision"} & set(user.disability_types))
+
+
+def has_hearing_disability(user: UserAccessibilityCondition) -> bool:
+    """
+    청각장애 접근성 가중치가 필요한 사용자인지 확인합니다.
+    """
+    return "hearing" in user.disability_types
+
+
+def clamp_score_by_range(
+    score: int,
+    min_score: int,
+    max_score: int,
+) -> int:
+    """
+    점수를 지정한 범위 안으로 제한합니다.
+    """
+    return max(min_score, min(score, max_score))
+
+
 def calculate_transport_score(
     user: UserAccessibilityCondition,
     gis_feature: GisFeature,
@@ -159,42 +198,39 @@ def calculate_transport_score(
     """
     대중교통 접근성 점수를 계산합니다.
 
-    기준 예시:
-    - 가까운 버스정류장이 많으면 가점
-    - 가까운 지하철역이 있으면 가점
-    - 사용자가 버스/지하철을 선호하는 경우 해당 항목 가중
+    최대 20점입니다.
     """
 
     score = 0
 
-    # 버스 선호 사용자인 경우 버스정류장 접근성을 반영합니다.
-    if user.transport_preferences.prefer_bus:
-        if gis_feature.nearby_bus_stop_count >= 3:
-            score += 15
-        elif gis_feature.nearby_bus_stop_count >= 1:
-            score += 8
-        else:
-            score += 0
+    if gis_feature.nearby_bus_stop_count >= 2:
+        score += 10
+    elif gis_feature.nearby_bus_stop_count == 1:
+        score += 6
 
-        if (
-            gis_feature.nearest_bus_stop_distance_meters is not None
-            and gis_feature.nearest_bus_stop_distance_meters <= 300
-        ):
+    if gis_feature.nearest_bus_stop_distance_meters is not None:
+        if gis_feature.nearest_bus_stop_distance_meters <= 300:
             score += 5
+        elif gis_feature.nearest_bus_stop_distance_meters <= 500:
+            score += 3
 
-    # 지하철 선호 사용자인 경우 지하철역 접근성을 반영합니다.
-    if user.transport_preferences.prefer_subway:
-        if gis_feature.nearby_subway_station_count >= 1:
-            score += 10
+    if (
+        has_wheelchair_access_need(user)
+        and "low_floor_bus" in user.required_supports
+        and gis_feature.nearby_bus_stop_count >= 1
+    ):
+        score += 3
 
-        if (
-            gis_feature.nearest_subway_station_distance_meters is not None
-            and gis_feature.nearest_subway_station_distance_meters <= 500
-        ):
-            score += 5
+    if has_mobility_access_need(user) and (
+        gis_feature.nearest_bus_stop_distance_meters is not None
+        and gis_feature.nearest_bus_stop_distance_meters <= 300
+    ):
+        score += 2
 
-    # transport_score는 최대 25점으로 제한합니다.
-    return min(score, 25)
+    if user.transport_preferences.prefer_bus and gis_feature.nearby_bus_stop_count >= 1:
+        score += 2
+
+    return clamp_score_by_range(score, 0, 20)
 
 
 def calculate_station_access_score(
@@ -204,28 +240,30 @@ def calculate_station_access_score(
     """
     지하철/역사 접근성 점수를 계산합니다.
 
-    휠체어 사용자의 경우 단순 지하철역 거리보다
-    엘리베이터/리프트 존재 여부가 더 중요합니다.
+    최대 20점입니다.
     """
 
     score = 0
 
-    needs_wheelchair_access = "wheelchair" in user.disability_types
-
     if gis_feature.has_station_elevator:
-        score += 10
-
-    if gis_feature.has_wheelchair_lift:
         score += 8
 
-    # 휠체어 사용자인데 엘리베이터 또는 리프트 정보가 있으면 추가 가점
-    if needs_wheelchair_access and (
-        gis_feature.has_station_elevator or gis_feature.has_wheelchair_lift
-    ):
-        score += 7
+    if gis_feature.has_wheelchair_lift:
+        score += 6
 
-    # station_access_score는 최대 20점으로 제한합니다.
-    return min(score, 20)
+    if gis_feature.nearest_subway_station_distance_meters is not None:
+        if gis_feature.nearest_subway_station_distance_meters <= 300:
+            score += 4
+        elif gis_feature.nearest_subway_station_distance_meters <= 500:
+            score += 2
+
+    if has_wheelchair_access_need(user) and gis_feature.has_station_elevator:
+        score += 4
+
+    if has_wheelchair_access_need(user) and gis_feature.has_wheelchair_lift:
+        score += 3
+
+    return clamp_score_by_range(score, 0, 20)
 
 
 def calculate_crosswalk_score(
@@ -235,8 +273,7 @@ def calculate_crosswalk_score(
     """
     횡단보도/보행 안전 점수를 계산합니다.
 
-    횡단보도 개수뿐 아니라 보행자신호등, 음향신호기,
-    보도턱낮춤, 점자블록 여부를 함께 반영합니다.
+    최대 20점입니다.
     """
 
     score = 0
@@ -250,18 +287,6 @@ def calculate_crosswalk_score(
         score += 3
 
     if gis_feature.has_accessible_pedestrian_signal:
-        score += 3
-
-    if gis_feature.has_curb_cut:
-        score += 3
-
-    if gis_feature.has_braille_block:
-        score += 2
-
-    if gis_feature.nearby_traffic_light_count >= 1:
-        score += 2
-
-    if gis_feature.has_functioning_pedestrian_signal:
         score += 2
 
     if gis_feature.has_audible_signal:
@@ -270,26 +295,25 @@ def calculate_crosswalk_score(
     if gis_feature.has_remaining_time_indicator:
         score += 2
 
-    # 휠체어 사용자에게는 보도턱낮춤이 특히 중요합니다.
-    if "wheelchair" in user.disability_types and gis_feature.has_curb_cut:
-        score += 2
-
-    # 시각장애 사용자에게는 음향신호기/점자블록이 특히 중요합니다.
-    has_visual_disability = bool({"blind", "low_vision"} & set(user.disability_types))
-
-    if has_visual_disability and gis_feature.has_accessible_pedestrian_signal:
-        score += 2
-
-    if has_visual_disability and gis_feature.has_braille_block:
-        score += 2
-
-    if has_visual_disability and gis_feature.has_audible_signal:
+    if gis_feature.has_curb_cut:
         score += 3
 
-    if has_visual_disability and gis_feature.has_functioning_pedestrian_signal:
+    if gis_feature.has_braille_block:
         score += 2
 
-    return min(score, 20)
+    if has_wheelchair_access_need(user) and gis_feature.has_curb_cut:
+        score += 2
+
+    if has_visual_disability(user) and gis_feature.has_audible_signal:
+        score += 3
+
+    if has_visual_disability(user) and gis_feature.has_accessible_pedestrian_signal:
+        score += 2
+
+    if has_visual_disability(user) and gis_feature.has_braille_block:
+        score += 2
+
+    return clamp_score_by_range(score, 0, 20)
 
 
 def calculate_facility_score(
@@ -300,8 +324,7 @@ def calculate_facility_score(
     """
     사업장/주변 편의시설 점수를 계산합니다.
 
-    표준사업장 여부, 장애인 친화 공고 여부,
-    장애인 화장실/계단 없는 접근 정보 등을 반영합니다.
+    최대 20점입니다.
     """
 
     score = 0
@@ -318,16 +341,13 @@ def calculate_facility_score(
     if gis_feature.has_step_free_access_nearby is True:
         score += 3
 
-    # 사용자가 필수 지원으로 장애인 화장실을 요구했고,
-    # 주변 화장실 정보가 확인되면 추가 가점
-    if (
-        "accessible_restroom" in user.required_supports
-        and gis_feature.has_accessible_restroom_nearby is True
-    ):
+    if has_wheelchair_access_need(user) and gis_feature.has_accessible_restroom_nearby is True:
         score += 3
 
-    # facility_score는 최대 20점으로 제한합니다.
-    return min(score, 20)
+    if has_wheelchair_access_need(user) and gis_feature.has_step_free_access_nearby:
+        score += 3
+
+    return clamp_score_by_range(score, 0, 20)
 
 
 def calculate_work_environment_score(
@@ -337,7 +357,7 @@ def calculate_work_environment_score(
     """
     직무/업무환경 접근성 점수를 계산합니다.
 
-    사용자 선호/기피 태그와 공고의 업무환경 태그를 비교합니다.
+    최대 20점입니다.
     """
 
     score = 10
@@ -346,7 +366,6 @@ def calculate_work_environment_score(
     job_tags = set(job.work_environment_tags)
     support_tags = set(job.support_tags)
 
-    # 선호 업무환경과 공고 태그가 일치하면 가점
     if "prefer_computer_based_work" in user_preferences and "computer_based" in job_tags:
         score += 4
 
@@ -354,23 +373,34 @@ def calculate_work_environment_score(
         score += 4
 
     if "prefer_document_work" in user_preferences and "document_work" in job_tags:
-        score += 3
+        score += 4
 
     if "document_work" in user_preferences and "document_work" in job_tags:
-        score += 3
+        score += 4
 
     if "prefer_quiet_environment" in user_preferences and "quiet_environment" in job_tags:
         score += 3
 
-    # 기피 업무환경과 공고 태그가 충돌하면 감점
+    if "chat_communication" in support_tags:
+        score += 3
+
+    if "interview_accommodation" in support_tags:
+        score += 3
+
+    if has_hearing_disability(user) and "chat_communication" in support_tags:
+        score += 4
+
+    if has_mobility_access_need(user) and {"computer_based", "document_work"} & job_tags:
+        score += 2
+
     if "avoid_phone_work" in user_preferences and "phone_work" in job_tags:
         score -= 5
 
     if "avoid_long_standing" in user_preferences and "long_standing_or_walking" in job_tags:
-        score -= 5
+        score -= 6
 
     if "avoid_heavy_lifting" in user_preferences and "heavy_lifting" in job_tags:
-        score -= 5
+        score -= 6
 
     if "avoid_noise" in user_preferences and "noisy_environment" in job_tags:
         score -= 4
@@ -378,15 +408,16 @@ def calculate_work_environment_score(
     if "avoid_night_shift" in user_preferences and "night_shift" in job_tags:
         score -= 4
 
-    # 지원 태그가 있으면 일부 보완 가능
-    if "chat_communication" in support_tags:
-        score += 2
+    if has_hearing_disability(user) and "phone_work" in job_tags:
+        score -= 3
 
-    if "interview_accommodation" in support_tags:
-        score += 2
+    if has_mobility_access_need(user) and "long_standing_or_walking" in job_tags:
+        score -= 3
 
-    # work_environment_score는 0~20 범위로 제한합니다.
-    return max(0, min(score, 20))
+    if has_mobility_access_need(user) and "heavy_lifting" in job_tags:
+        score -= 3
+
+    return clamp_score_by_range(score, 0, 20)
 
 
 def calculate_risk_penalty(
@@ -397,35 +428,66 @@ def calculate_risk_penalty(
     """
     위험 요소 감점을 계산합니다.
 
-    이 값은 음수로 반환합니다.
+    이 값은 음수로 반환하며, 하한은 -20점입니다.
     """
 
     penalty = 0
 
-    # 휠체어 사용자인데 엘리베이터/리프트 정보가 없으면 감점
-    if "wheelchair" in user.disability_types:
+    user_preferences = set(user.work_environment_preferences)
+    job_tags = set(job.work_environment_tags)
+
+    if has_wheelchair_access_need(user):
         if not gis_feature.has_station_elevator and not gis_feature.has_wheelchair_lift:
-            penalty -= 8
+            penalty -= 5
 
         if gis_feature.has_step_free_access_nearby is None:
             penalty -= 3
 
-    # 장애인 화장실이 필수인데 정보가 없으면 감점
+        if gis_feature.has_accessible_restroom_nearby is None:
+            penalty -= 3
+
     if (
         "accessible_restroom" in user.required_supports
         and gis_feature.has_accessible_restroom_nearby is None
     ):
         penalty -= 3
 
-    # 표준사업장 여부를 확인할 수 없으면 약한 감점
+    if (
+        "elevator" in user.required_supports
+        and not gis_feature.has_station_elevator
+        and not gis_feature.has_wheelchair_lift
+    ):
+        penalty -= 3
+
+    conflict_count = 0
+
+    if "avoid_phone_work" in user_preferences and "phone_work" in job_tags:
+        conflict_count += 1
+
+    if "avoid_long_standing" in user_preferences and "long_standing_or_walking" in job_tags:
+        conflict_count += 1
+
+    if "avoid_heavy_lifting" in user_preferences and "heavy_lifting" in job_tags:
+        conflict_count += 1
+
+    if "avoid_noise" in user_preferences and "noisy_environment" in job_tags:
+        conflict_count += 1
+
+    if "avoid_night_shift" in user_preferences and "night_shift" in job_tags:
+        conflict_count += 1
+
+    if conflict_count == 1:
+        penalty -= 5
+    elif conflict_count >= 2:
+        penalty -= 10
+
     if job.is_standard_workplace is None:
         penalty -= 2
 
-    # 장애인 우대 공고 여부를 확인할 수 없으면 약한 감점
     if job.is_disability_friendly_post is None:
         penalty -= 2
 
-    return penalty
+    return clamp_score_by_range(penalty, -20, 0)
 
 
 def calculate_grade(score: int) -> str:
