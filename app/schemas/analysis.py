@@ -22,6 +22,11 @@ class TransportPreferences(BaseModel):
     # False라면 환승이 많은 경로에 감점을 줄 수 있습니다.
     prefer_transfer: bool = False
 
+    # 직행 선호 여부
+    # 현재 점수 계산에서는 직접 사용하지 않더라도,
+    # tags/normalize 응답과 내부 분석 요청 계약을 맞추기 위해 포함합니다.
+    prefer_direct_route: bool = True
+
 
 class UserAccessibilityCondition(BaseModel):
     """
