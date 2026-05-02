@@ -14,39 +14,12 @@ Next.js Frontend → Spring Backend → FastAPI AI/GIS Service → PostgreSQL/Po
 
 FastAPI는 프론트에서 직접 호출하지 않고, Spring Backend의 내부 API 호출을 받아 분석 결과를 반환하는 것을 기본으로 한다.
 
-## 문서 목록
+## 데이터 소스
+사용하는 데이터는 ../backend/README.md에 안내된 데이터를 따른다.
 
-### `.agents/01-project-context.md`
+## 문서
+- docs/ 내부의 문서를 따른다
 
-프로젝트 목적, 핵심 사용자, 주요 기능, MVP 범위를 정의한다.
-
-### `.agents/02-architecture.md`
-
-Next.js, Spring, FastAPI, PostgreSQL/PostGIS, LLM Server, Redis의 역할과 배포 구조를 정의한다.
-
-### `.agents/03-ai-llm-policy.md`
-
-LLM 사용 범위, 프롬프트 원칙, 금지 표현, fallback 정책, 모델 후보를 정의한다.
-
-### `.agents/04-data-source-policy.md`
-
-공공데이터 SourceType, 동기화 대상 데이터, 원본 저장 방식, CSV export 기준을 정의한다.
-
-### `.agents/05-api-design.md`
-
-FastAPI endpoint, 요청/응답 schema, 에러 응답, Spring 연동 방식을 정의한다.
-
-### `.agents/06-db-gis-policy.md`
-
-PostgreSQL schema 분리, PostGIS 사용 원칙, 공간 질의, 접근성 피처 계산 기준을 정의한다.
-
-### `.agents/07-accessibility-policy.md`
-
-WCAG 2.2 AA 기준, 장애 유형별 접근성 고려사항, 사용자 표시 문장 원칙을 정의한다.
-
-### `.agents/08-development-rules.md`
-
-코드 스타일, 테스트, 로깅, 환경변수, Git/PR 규칙, 금지사항을 정의한다.
 
 ## 공통 작업 원칙
 

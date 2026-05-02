@@ -21,7 +21,23 @@ def build_check_needed_message(message: str) -> str:
     데이터가 없다고 해서 접근 불가로 단정하지 않고,
     사용자가 지원 전 확인할 수 있도록 안내합니다.
     """
-    return f"{message.strip()} 지원 전 확인을 권장합니다."
+    normalized = message.strip()
+
+    if normalized.endswith("지원 전 확인을 권장합니다."):
+        return normalized
+
+    return f"{normalized} 지원 전 확인을 권장합니다."
+
+
+def append_check_needed_risk(
+    risks: list[str],
+    message: str,
+) -> None:
+    """
+    데이터 부족 또는 확인 필요 성격의 위험 문구를
+    동일한 표현 정책으로 추가합니다.
+    """
+    append_unique(risks, build_check_needed_message(message))
 
 
 def has_visual_disability(user: UserAccessibilityCondition) -> bool:
@@ -50,6 +66,142 @@ def has_hearing_disability(user: UserAccessibilityCondition) -> bool:
     청각장애 관련 업무환경 확인이 필요한 사용자인지 확인합니다.
     """
     return "hearing" in user.disability_types
+
+
+def collect_missing_data_risks(
+    user: UserAccessibilityCondition,
+    job: JobCandidate,
+    gis_feature: GisFeature,
+) -> list[str]:
+    """
+    공공데이터 또는 공고 정보가 부족해서 지원 전 확인이 필요한 항목을 수집합니다.
+
+    이 함수는 '불가능'을 판단하지 않습니다.
+    단지 현재 데이터만으로 판단하기 어려운 항목을 risk_factors로 반환합니다.
+    """
+
+    risks: list[str] = []
+
+    # 공고/기업 메타데이터 부족
+    if job.is_standard_workplace is None:
+        append_unique(
+            risks,
+            "장애인 표준사업장 여부는 현재 데이터에서 확인되지 않았습니다.",
+        )
+
+    if job.is_disability_friendly_post is None:
+        append_unique(
+            risks,
+            "장애인 우대 또는 전형 여부는 현재 데이터에서 확인되지 않았습니다.",
+        )
+
+    # 위치/GIS 근거 부족
+    has_any_gis_evidence = any(
+        [
+            gis_feature.nearby_bus_stop_count > 0,
+            gis_feature.nearby_crosswalk_count > 0,
+            gis_feature.nearby_traffic_light_count > 0,
+            gis_feature.nearby_subway_station_count > 0,
+            gis_feature.has_station_elevator is True,
+            gis_feature.has_wheelchair_lift is True,
+        ]
+    )
+
+    if not has_any_gis_evidence:
+        append_check_needed_risk(
+            risks,
+            "근무지 주변 교통·보행 접근성 근거 데이터가 충분하지 않습니다.",
+        )
+
+    # 휠체어 사용자에게 중요한 정보 부족
+    if has_wheelchair_access_need(user):
+        if gis_feature.has_step_free_access_nearby is None:
+            append_check_needed_risk(
+                risks,
+                "근무지 출입구의 계단 없는 접근 가능 여부는 아직 확인되지 않았습니다.",
+            )
+
+        if gis_feature.has_accessible_restroom_nearby is None:
+            append_check_needed_risk(risks, "장애인 화장실 정보가 아직 확인되지 않았습니다.")
+
+        if gis_feature.has_station_elevator is None and gis_feature.has_wheelchair_lift is None:
+            append_check_needed_risk(
+                risks,
+                "휠체어 이동에 필요한 역 엘리베이터 또는 리프트 정보가 충분하지 않습니다.",
+            )
+
+        if gis_feature.nearby_crosswalk_count > 0 and gis_feature.has_curb_cut is None:
+            append_check_needed_risk(
+                risks,
+                "근무지 주변 횡단보도의 보도턱낮춤 여부가 아직 확인되지 않았습니다.",
+            )
+
+    # 시각장애 사용자에게 중요한 정보 부족
+    if has_visual_disability(user):
+        if gis_feature.nearby_crosswalk_count > 0:
+            if gis_feature.has_accessible_pedestrian_signal is None:
+                append_check_needed_risk(
+                    risks,
+                    "근무지 주변 음향신호기 또는 보행자작동신호기 여부가 아직 확인되지 않았습니다.",
+                )
+
+            if gis_feature.has_braille_block is None:
+                append_check_needed_risk(
+                    risks,
+                    "근무지 주변 점자블록 여부가 아직 확인되지 않았습니다.",
+                )
+
+        if gis_feature.nearby_traffic_light_count > 0:
+            if gis_feature.has_audible_signal is None:
+                append_check_needed_risk(
+                    risks,
+                    "근무지 주변 시각장애인용 음향신호기 여부가 아직 확인되지 않았습니다.",
+                )
+
+            if gis_feature.has_functioning_pedestrian_signal is None:
+                append_check_needed_risk(
+                    risks,
+                    "근무지 주변 보행자작동신호기 여부가 아직 확인되지 않았습니다.",
+                )
+
+    # 청각장애 사용자에게 중요한 정보 부족
+    if has_hearing_disability(user):
+        if "chat_communication" not in job.support_tags:
+            append_unique(
+                risks,
+                "문자·필담 기반 커뮤니케이션 지원 여부는 현재 공고 정보에서 확인되지 않았습니다.",
+            )
+
+        if "interview_accommodation" not in job.support_tags:
+            append_unique(
+                risks,
+                "면접 편의 제공 여부는 현재 공고 정보에서 확인되지 않았습니다.",
+            )
+
+    # 필수 지원 조건별 부족 정보
+    if (
+        "accessible_restroom" in user.required_supports
+        and gis_feature.has_accessible_restroom_nearby is None
+    ):
+        append_check_needed_risk(risks, "장애인 화장실 정보가 아직 확인되지 않았습니다.")
+
+    if (
+        "elevator" in user.required_supports
+        and gis_feature.has_station_elevator is None
+        and gis_feature.has_wheelchair_lift is None
+    ):
+        append_check_needed_risk(
+            risks,
+            "주변 역 또는 출입구의 엘리베이터·리프트 정보가 충분하지 않습니다.",
+        )
+
+    if "low_floor_bus" in user.required_supports:
+        append_check_needed_risk(
+            risks,
+            "저상버스 이용 가능 여부는 현재 데이터만으로 판단하기 어렵습니다.",
+        )
+
+    return risks
 
 
 def build_positive_factors(
@@ -180,30 +332,36 @@ def build_risk_factors(
 
     factors: list[str] = []
 
+    missing_data_risks = collect_missing_data_risks(
+        user=user,
+        job=job,
+        gis_feature=gis_feature,
+    )
+
+    for risk in missing_data_risks:
+        append_unique(factors, risk)
+
     user_preferences = set(user.work_environment_preferences)
     job_tags = set(job.work_environment_tags)
 
     # 휠체어 사용자에게 중요한 이동 접근성 확인
     if has_wheelchair_access_need(user):
         if not gis_feature.has_station_elevator and not gis_feature.has_wheelchair_lift:
-            factors.append(
-                build_check_needed_message(
-                    "휠체어 이동에 필요한 역 엘리베이터 또는 리프트 정보가 충분하지 않습니다."
-                )
+            append_check_needed_risk(
+                factors,
+                "휠체어 이동에 필요한 역 엘리베이터 또는 리프트 정보가 충분하지 않습니다.",
             )
 
         if gis_feature.has_step_free_access_nearby is None:
-            factors.append(
-                build_check_needed_message(
-                    "근무지 출입구의 계단 없는 접근 가능 여부는 아직 확인되지 않았습니다."
-                )
+            append_check_needed_risk(
+                factors,
+                "근무지 출입구의 계단 없는 접근 가능 여부는 아직 확인되지 않았습니다.",
             )
 
         if gis_feature.nearby_crosswalk_count > 0 and gis_feature.has_curb_cut is False:
-            factors.append(
-                build_check_needed_message(
-                    "근무지 주변 횡단보도의 보도턱낮춤 여부가 확인되지 않았습니다."
-                )
+            append_check_needed_risk(
+                factors,
+                "근무지 주변 횡단보도의 보도턱낮춤 여부가 확인되지 않았습니다.",
             )
 
     # 필수 지원 정보 확인
@@ -211,97 +369,100 @@ def build_risk_factors(
         "accessible_restroom" in user.required_supports
         and gis_feature.has_accessible_restroom_nearby is None
     ):
-        factors.append(build_check_needed_message("장애인 화장실 정보가 아직 확인되지 않았습니다."))
+        append_check_needed_risk(factors, "장애인 화장실 정보가 아직 확인되지 않았습니다.")
 
     if (
         "elevator" in user.required_supports
         and not gis_feature.has_station_elevator
         and not gis_feature.has_wheelchair_lift
     ):
-        factors.append(
-            build_check_needed_message(
-                "주변 역 또는 출입구의 엘리베이터·리프트 정보가 충분하지 않습니다."
-            )
+        append_check_needed_risk(
+            factors,
+            "주변 역 또는 출입구의 엘리베이터·리프트 정보가 충분하지 않습니다.",
         )
 
     if "low_floor_bus" in user.required_supports and gis_feature.nearby_bus_stop_count == 0:
-        factors.append(
-            build_check_needed_message(
-                "저상버스 이용 가능 여부는 현재 데이터만으로 판단하기 어렵습니다."
-            )
+        append_check_needed_risk(
+            factors,
+            "저상버스 이용 가능 여부는 현재 데이터만으로 판단하기 어렵습니다.",
         )
 
     # 시각장애 사용자에게 중요한 보행 안전 정보 확인
     if has_visual_disability(user) and gis_feature.nearby_crosswalk_count > 0:
         if gis_feature.has_accessible_pedestrian_signal is False:
-            factors.append(
-                build_check_needed_message(
-                    "근무지 주변 음향신호기 또는 보행자작동신호기 여부가 확인되지 않았습니다."
-                )
+            append_check_needed_risk(
+                factors,
+                "근무지 주변 음향신호기 또는 보행자작동신호기 여부가 확인되지 않았습니다.",
             )
 
         if gis_feature.has_braille_block is False:
-            factors.append(
-                build_check_needed_message("근무지 주변 점자블록 여부가 확인되지 않았습니다.")
-            )
+            append_check_needed_risk(factors, "근무지 주변 점자블록 여부가 확인되지 않았습니다.")
 
     if has_visual_disability(user) and gis_feature.nearby_traffic_light_count > 0:
         if gis_feature.has_audible_signal is False:
-            factors.append(
-                build_check_needed_message(
-                    "근무지 주변 시각장애인용 음향신호기 여부가 확인되지 않았습니다."
-                )
+            append_check_needed_risk(
+                factors,
+                "근무지 주변 시각장애인용 음향신호기 여부가 확인되지 않았습니다.",
             )
 
         if gis_feature.has_functioning_pedestrian_signal is False:
-            factors.append(
-                build_check_needed_message("근무지 주변 보행자작동신호기 여부가 확인되지 않았습니다.")
+            append_check_needed_risk(
+                factors,
+                "근무지 주변 보행자작동신호기 여부가 확인되지 않았습니다.",
             )
 
     # 업무환경 충돌 확인
     if "avoid_phone_work" in user_preferences and "phone_work" in job_tags:
-        factors.append("전화 응대 업무가 포함될 수 있어 사용자의 선호 조건과 다를 수 있습니다.")
+        append_unique(
+            factors, "전화 응대 업무가 포함될 수 있어 사용자의 선호 조건과 다를 수 있습니다."
+        )
 
     if "avoid_long_standing" in user_preferences and "long_standing_or_walking" in job_tags:
-        factors.append("장시간 서기 또는 이동이 필요한 업무일 수 있어 확인이 필요합니다.")
+        append_unique(factors, "장시간 서기 또는 이동이 필요한 업무일 수 있어 확인이 필요합니다.")
 
     if "avoid_heavy_lifting" in user_preferences and "heavy_lifting" in job_tags:
-        factors.append("무거운 물건을 취급하는 업무가 포함될 수 있어 확인이 필요합니다.")
+        append_unique(factors, "무거운 물건을 취급하는 업무가 포함될 수 있어 확인이 필요합니다.")
 
     if "avoid_noise" in user_preferences and "noisy_environment" in job_tags:
-        factors.append("소음이 있는 근무환경일 수 있어 확인이 필요합니다.")
+        append_unique(factors, "소음이 있는 근무환경일 수 있어 확인이 필요합니다.")
 
     if "avoid_night_shift" in user_preferences and "night_shift" in job_tags:
-        factors.append("야간 근무가 포함될 수 있어 근무 가능 여부 확인이 필요합니다.")
+        append_unique(factors, "야간 근무가 포함될 수 있어 근무 가능 여부 확인이 필요합니다.")
 
     # 청각장애 사용자에게 중요한 업무환경 확인
     if has_hearing_disability(user) and "phone_work" in job_tags:
-        factors.append("청각장애 사용자에게 부담이 될 수 있는 전화 응대 업무가 포함될 수 있습니다.")
+        append_unique(
+            factors,
+            "청각장애 사용자에게 부담이 될 수 있는 전화 응대 업무가 포함될 수 있습니다.",
+        )
 
     if has_hearing_disability(user) and "chat_communication" not in job.support_tags:
-        factors.append(
-            "문자·필담 기반 커뮤니케이션 지원 여부는 현재 공고 정보에서 확인되지 않았습니다."
+        append_unique(
+            factors, "문자·필담 기반 커뮤니케이션 지원 여부는 현재 공고 정보에서 확인되지 않았습니다."
         )
 
     # 이동약자/지체장애 사용자에게 중요한 업무환경 확인
     if has_mobility_access_need(user) and "long_standing_or_walking" in job_tags:
-        factors.append(
-            "이동약자에게 부담이 될 수 있는 장시간 서기 또는 이동 업무가 포함될 수 있습니다."
+        append_unique(
+            factors, "이동약자에게 부담이 될 수 있는 장시간 서기 또는 이동 업무가 포함될 수 있습니다."
         )
 
     if has_mobility_access_need(user) and "heavy_lifting" in job_tags:
-        factors.append("이동약자에게 부담이 될 수 있는 무거운 물건 취급 업무가 포함될 수 있습니다.")
+        append_unique(
+            factors,
+            "이동약자에게 부담이 될 수 있는 무거운 물건 취급 업무가 포함될 수 있습니다.",
+        )
 
-    # 공고/기업 메타데이터 확인 필요
-    if job.is_standard_workplace is None:
-        factors.append("장애인 표준사업장 여부는 현재 데이터에서 확인되지 않았습니다.")
-
-    if job.is_disability_friendly_post is None:
-        factors.append("장애인 우대 또는 전형 여부는 현재 데이터에서 확인되지 않았습니다.")
+    # # 공고/기업 메타데이터 확인 필요
+    # if job.is_standard_workplace is None:
+    #     factors.append("장애인 표준사업장 여부는 현재 데이터에서 확인되지 않았습니다.")
+    #
+    # if job.is_disability_friendly_post is None:
+    #     factors.append("장애인 우대 또는 전형 여부는 현재 데이터에서 확인되지 않았습니다.")
 
     # 위험 요인이 하나도 없으면 빈 배열 대신 안전한 기본 문구를 반환합니다.
     if not factors:
-        factors.append("현재 확인된 주요 위험 요인은 없습니다.")
+        append_unique(factors, "현재 확인된 주요 위험 요인은 없습니다.")
 
     return factors
 
@@ -332,3 +493,14 @@ def build_summary(
         return "일부 접근성 정보는 확인이 필요하지만, 검토해볼 수 있는 공고입니다."
 
     return "사용자 조건과 맞지 않을 수 있는 항목이 있어 지원 전 확인이 필요합니다."
+
+
+def append_unique(
+    factors: list[str],
+    message: str,
+) -> None:
+    """
+    같은 문구가 risk_factors 또는 positive_factors에 중복으로 들어가지 않도록 추가합니다.
+    """
+    if message not in factors:
+        factors.append(message)

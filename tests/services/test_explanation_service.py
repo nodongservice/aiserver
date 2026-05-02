@@ -4,6 +4,7 @@ from app.services.explanation_service import (
     build_positive_factors,
     build_risk_factors,
     build_summary,
+    collect_missing_data_risks,
 )
 
 
@@ -287,3 +288,91 @@ def test_risk_factor_does_not_use_deterministic_impossible_expression():
 
     assert "불가능" not in joined
     assert "확인" in joined
+
+
+def test_collect_missing_data_risks_for_wheelchair_user():
+    """
+    휠체어 사용자에게 중요한 접근성 정보가 부족하면
+    확인 필요 문구를 반환해야 한다.
+    """
+    user = UserAccessibilityCondition(
+        user_id=1,
+        home_lat=37.5665,
+        home_lng=126.978,
+        commute_limit_minutes=60,
+        disability_types=["wheelchair"],
+        required_supports=[
+            "elevator",
+            "accessible_restroom",
+            "low_floor_bus",
+        ],
+        work_environment_preferences=[],
+    )
+
+    job = JobCandidate(
+        job_post_id=1,
+        company_id=1,
+        company_name="테스트회사",
+        job_title="사무보조",
+        work_lat=37.5665,
+        work_lng=126.978,
+        is_standard_workplace=None,
+        is_disability_friendly_post=None,
+        work_environment_tags=[],
+        support_tags=[],
+    )
+
+    gis_feature = GisFeature()
+
+    risks = collect_missing_data_risks(
+        user=user,
+        job=job,
+        gis_feature=gis_feature,
+    )
+
+    joined = " ".join(risks)
+
+    assert "계단 없는 접근" in joined
+    assert "장애인 화장실" in joined
+    assert "엘리베이터" in joined or "리프트" in joined
+    assert "저상버스" in joined
+    assert "확인" in joined
+    assert "불가능" not in joined
+
+
+def test_build_risk_factors_does_not_duplicate_missing_data_messages():
+    """
+    데이터 부족 문구가 중복으로 여러 번 들어가지 않아야 한다.
+    """
+    user = UserAccessibilityCondition(
+        user_id=1,
+        home_lat=37.5665,
+        home_lng=126.978,
+        commute_limit_minutes=60,
+        disability_types=["wheelchair"],
+        required_supports=["elevator"],
+        work_environment_preferences=[],
+    )
+
+    job = JobCandidate(
+        job_post_id=1,
+        company_id=1,
+        company_name="테스트회사",
+        job_title="사무보조",
+        work_lat=37.5665,
+        work_lng=126.978,
+        is_standard_workplace=None,
+        is_disability_friendly_post=None,
+        work_environment_tags=[],
+        support_tags=[],
+    )
+
+    gis_feature = GisFeature()
+
+    factors = build_risk_factors(
+        user=user,
+        job=job,
+        gis_feature=gis_feature,
+    )
+
+    assert len(factors) == len(set(factors))

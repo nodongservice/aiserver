@@ -1,5 +1,4 @@
 # PostGIS 공간 데이터 설계 가이드
-
 ## 1. 목적
 
 이 문서는 BridgeWork FastAPI AI/GIS Service에서 PostGIS 기반 근접 검색을 수행하기 위한 공간 데이터 설계 기준을 정의한다.
@@ -8,12 +7,43 @@
 
 FastAPI는 이 데이터를 읽어 접근성 분석에 활용한다.
 
-Phase 23의 목표는 다음과 같다.
+이 문서의 데이터 범위는 반드시 [README.md](/Users/emfpdlzj/Desktop/nodong/aiserver/README.md:75)의 `사용데이터 목록`만 따른다.
+
+현재 목표는 다음과 같다.
 
 - 어떤 공공데이터가 공간 검색 대상인지 분류한다.
 - 어떤 SourceType에 위도/경도 또는 WKT가 있는지 정리한다.
 - PostGIS 전용 가공 테이블 구조를 설계한다.
 - 추후 `ST_DWithin`, `ST_DistanceSphere`, `ST_Intersects` 기반 검색으로 교체할 수 있게 한다.
+
+---
+
+## 1.1 README 기준 사용 가능 SourceType
+
+PostGIS 설계 범위에 포함되는 SourceType은 다음 17개다.
+
+- `KEPAD_RECRUITMENT`
+- `KEPAD_JOB_CATEGORY`
+- `KEPAD_STANDARD_WORKPLACE`
+- `KEPAD_SUPPORT_AGENCY`
+- `KORAIL_WEEK_PERSON_FACILITIES`
+- `SEOUL_TRANSPORT_WEAK_WHEELCHAIR_LIFT`
+- `TRANSPORT_SUPPORT_CENTER`
+- `RAIL_WHEELCHAIR_LIFT`
+- `RAIL_WHEELCHAIR_LIFT_MOVEMENT`
+- `SEOUL_WHEELCHAIR_LIFT`
+- `SEOUL_SUBWAY_ENTRANCE_LIFT`
+- `SEOUL_WALKING_NETWORK`
+- `NATIONWIDE_BUS_STOP`
+- `NATIONWIDE_TRAFFIC_LIGHT`
+- `NATIONWIDE_CROSSWALK`
+- `VOCATIONAL_TRAINING`
+- `JOBSEEKER_COMPETENCY_PROGRAM`
+
+주의:
+
+- 이 목록에 없는 데이터는 PostGIS feature 설계의 전제 데이터로 사용하지 않는다.
+- 저상버스 운행 여부, 건물 내부 편의시설, 실시간 고장 여부 같은 항목은 별도 데이터 소스가 추가되기 전까지 `확인 필요` 범주다.
 
 ---
 
@@ -97,7 +127,7 @@ Spring이 공공데이터 동기화 후 `public_accessibility_gis_feature`까지
 
 ## 4. 공간 검색 대상 SourceType 분류
 
-### 4.1 위도/경도가 명확한 SourceType
+### 4.1 위도/경도가 명확하거나 README 기준으로 좌표 API 호출이 가능한 SourceType
 
 아래 데이터는 위도/경도 필드가 명확하므로 POINT geometry를 만들 수 있다.
 
@@ -118,22 +148,27 @@ Spring이 공공데이터 동기화 후 `public_accessibility_gis_feature`까지
 | SEOUL_WALKING_NETWORK | NODE_WKT | POINT 예상 | 보행 네트워크 노드 |
 | SEOUL_WALKING_NETWORK | LNKG_WKT | LINESTRING 예상 | 보행 네트워크 링크 |
 
-### 4.3 좌표가 직접 없는 SourceType
+### 4.3 좌표가 직접 없거나 별도 매핑/지오코딩이 필요한 SourceType
 
 아래 데이터는 주소, 역명, 코드 중심이므로 별도 보강이 필요하다.
 
 | SourceType | 주요 위치 정보 | 보강 방식 |
 |---|---|---|
-| KEPAD_RECRUITMENT | compAddr | 주소 지오코딩 필요 |
-| KEPAD_STANDARD_WORKPLACE | address | 주소 지오코딩 필요 |
-| KEPAD_SUPPORT_AGENCY | excInstnAddr | 주소 지오코딩 필요 |
+| KEPAD_RECRUITMENT | 사업장 주소 계열 필드 | 주소 지오코딩 필요 |
+| KEPAD_STANDARD_WORKPLACE | 사업장 주소 계열 필드 | 주소 지오코딩 필요 |
+| KEPAD_SUPPORT_AGENCY | 수행기관 주소 계열 필드 | 주소 지오코딩 필요 |
 | KORAIL_WEEK_PERSON_FACILITIES | stn_cd, stn_nm | 역 코드/역 좌표 매핑 필요 |
 | SEOUL_TRANSPORT_WEAK_WHEELCHAIR_LIFT | stnCd, stnNm, vcntEntrcNo | 역/출입구 좌표 매핑 필요 |
 | RAIL_WHEELCHAIR_LIFT | stinCd, exitNo | 역/출입구 좌표 매핑 필요 |
 | RAIL_WHEELCHAIR_LIFT_MOVEMENT | stinCd | 역 좌표 매핑 필요 |
 | SEOUL_WHEELCHAIR_LIFT | STATION NAME, ENTRANCE NUMBER | 역/출입구 좌표 매핑 필요 |
-| VOCATIONAL_TRAINING | ADDRESS | 주소 지오코딩 필요 |
-| JOBSEEKER_COMPETENCY_PROGRAM | openPlcCont | 주소/장소명 지오코딩 필요 |
+| VOCATIONAL_TRAINING | 훈련기관 주소 계열 필드 | 주소 지오코딩 필요 |
+| JOBSEEKER_COMPETENCY_PROGRAM | 프로그램 장소 계열 필드 | 주소/장소명 지오코딩 필요 |
+
+주의:
+
+- README 사용데이터 목록은 API/데이터셋 범위를 정의하는 문서다.
+- 개별 필드명은 실제 적재 payload에 따라 다를 수 있으므로, 위 표의 필드 설명은 현재 설계 가정으로 관리한다.
 
 ---
 
