@@ -2,6 +2,7 @@ from app.repositories.nearby_public_data_repository import (
     extract_lat_lng_from_field_map,
     find_first_value_by_candidates,
     parse_float,
+    parse_point_wkt,
 )
 
 
@@ -81,3 +82,48 @@ def test_extract_lat_lng_from_field_map_returns_none_when_missing():
 
     assert lat is None
     assert lng is None
+
+
+def test_parse_point_wkt_returns_lat_lng():
+    """
+    POINT WKT에서 latitude/longitude를 올바르게 추출해야 한다.
+    """
+    lat, lng = parse_point_wkt("POINT(126.9780 37.5665)")
+
+    assert lat == 37.5665
+    assert lng == 126.9780
+
+
+def test_extract_lat_lng_from_field_map_for_bus_stop_source_type():
+    """
+    버스정류장 원본 필드명 GPS_LATI/GPS_LONG도 source_type 기준으로 읽어야 한다.
+    """
+    field_map = {
+        "GPS_LATI": "37.5665",
+        "GPS_LONG": "126.9780",
+    }
+
+    lat, lng = extract_lat_lng_from_field_map(
+        field_map,
+        source_type="NATIONWIDE_BUS_STOP",
+    )
+
+    assert lat == 37.5665
+    assert lng == 126.9780
+
+
+def test_extract_lat_lng_from_field_map_for_subway_wkt_source_type():
+    """
+    지하철 출입구 리프트 원본의 NODE_WKT도 fallback 좌표로 해석해야 한다.
+    """
+    field_map = {
+        "NODE_WKT": "POINT(126.9780 37.5665)",
+    }
+
+    lat, lng = extract_lat_lng_from_field_map(
+        field_map,
+        source_type="SEOUL_SUBWAY_ENTRANCE_LIFT",
+    )
+
+    assert lat == 37.5665
+    assert lng == 126.9780

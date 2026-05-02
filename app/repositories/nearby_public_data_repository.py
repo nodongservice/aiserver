@@ -1,7 +1,14 @@
+import re
 from typing import List, Optional
 
 from sqlalchemy.orm import Session
 
+from app.core.public_data_sources import (
+    NATIONWIDE_BUS_STOP,
+    NATIONWIDE_CROSSWALK,
+    NATIONWIDE_TRAFFIC_LIGHT,
+    SEOUL_SUBWAY_ENTRANCE_LIFT,
+)
 from app.repositories.public_data_repository import (
     get_record_field_value_map,
     get_records_with_fields_by_source_type,
@@ -26,6 +33,27 @@ LONGITUDE_FIELD_CANDIDATES = [
     "X",
 ]
 
+SOURCE_LATITUDE_FIELD_CANDIDATES: dict[str, list[str]] = {
+    NATIONWIDE_BUS_STOP: ["GPS_LATI"],
+    NATIONWIDE_CROSSWALK: ["latitude"],
+    NATIONWIDE_TRAFFIC_LIGHT: ["latitude"],
+}
+
+SOURCE_LONGITUDE_FIELD_CANDIDATES: dict[str, list[str]] = {
+    NATIONWIDE_BUS_STOP: ["GPS_LONG"],
+    NATIONWIDE_CROSSWALK: ["longitude"],
+    NATIONWIDE_TRAFFIC_LIGHT: ["longitude"],
+}
+
+SOURCE_WKT_FIELD_CANDIDATES: dict[str, list[str]] = {
+    SEOUL_SUBWAY_ENTRANCE_LIFT: ["NODE_WKT"],
+}
+
+POINT_WKT_PATTERN = re.compile(
+    r"^\s*POINT\s*\(\s*([-+]?\d+(?:\.\d+)?)\s+([-+]?\d+(?:\.\d+)?)\s*\)\s*$",
+    re.IGNORECASE,
+)
+
 
 def parse_float(value: Optional[str]) -> Optional[float]:
     """
@@ -41,6 +69,25 @@ def parse_float(value: Optional[str]) -> Optional[float]:
         return float(value.strip())
     except ValueError:
         return None
+
+
+def parse_point_wkt(value: Optional[str]) -> tuple[Optional[float], Optional[float]]:
+    """
+    POINT WKT 문자열에서 longitude, latitude를 추출합니다.
+
+    현재 fallback에서는 POINT만 지원합니다.
+    """
+    if value is None:
+        return None, None
+
+    match = POINT_WKT_PATTERN.match(value.strip())
+    if not match:
+        return None, None
+
+    longitude = parse_float(match.group(1))
+    latitude = parse_float(match.group(2))
+
+    return latitude, longitude
 
 
 def find_first_value_by_candidates(
@@ -59,10 +106,40 @@ def find_first_value_by_candidates(
 
 def extract_lat_lng_from_field_map(
     field_map: dict[str, str],
+    source_type: Optional[str] = None,
 ) -> tuple[Optional[float], Optional[float]]:
     """
     field_path/value map에서 위도/경도를 추출합니다.
     """
+    if source_type is not None:
+        wkt_candidates = SOURCE_WKT_FIELD_CANDIDATES.get(source_type, [])
+        wkt_value = find_first_value_by_candidates(
+            field_map=field_map,
+            candidates=wkt_candidates,
+        )
+        lat, lng = parse_point_wkt(wkt_value)
+        if lat is not None and lng is not None:
+            return lat, lng
+
+        lat_candidates = SOURCE_LATITUDE_FIELD_CANDIDATES.get(source_type, [])
+        lng_candidates = SOURCE_LONGITUDE_FIELD_CANDIDATES.get(source_type, [])
+
+        if lat_candidates or lng_candidates:
+            lat_value = find_first_value_by_candidates(
+                field_map=field_map,
+                candidates=lat_candidates,
+            )
+            lng_value = find_first_value_by_candidates(
+                field_map=field_map,
+                candidates=lng_candidates,
+            )
+
+            lat = parse_float(lat_value)
+            lng = parse_float(lng_value)
+
+            if lat is not None and lng is not None:
+                return lat, lng
+
     lat_value = find_first_value_by_candidates(
         field_map=field_map,
         candidates=LATITUDE_FIELD_CANDIDATES,
@@ -110,7 +187,7 @@ def find_nearby_records_by_source_type(
             record_id=record.id,
         )
 
-        lat, lng = extract_lat_lng_from_field_map(field_map)
+        lat, lng = extract_lat_lng_from_field_map(field_map, source_type=source_type)
 
         distance = calculate_haversine_distance_meters(
             from_lat=base_lat,
