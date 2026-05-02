@@ -333,6 +333,7 @@
 - 나머지 핵심 분석 필드: 필수
 - 설명 API는 점수/등급/근거를 바꾸지 않는다
 - 현재 구현은 rule fallback만 사용한다
+- 내부 구현은 provider interface를 통해 분리되어 있으며, 현재 기본 provider는 `rule_fallback`이다
 
 ---
 
