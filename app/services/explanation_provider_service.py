@@ -6,11 +6,13 @@ from app.schemas.explanation import (
     ExplanationGenerateResponse,
 )
 from app.services.explanation_provider import ExplanationProvider
+from app.services.openai_explanation_provider import OpenAIExplanationProvider
 from app.services.rule_fallback_explanation_provider import (
     RuleFallbackExplanationProvider,
 )
 
 RULE_FALLBACK_PROVIDER_NAME = "rule_fallback"
+OPENAI_PROVIDER_NAME = "openai"
 
 
 def get_explanation_provider(
@@ -27,6 +29,9 @@ def get_explanation_provider(
     if resolved_provider_name == RULE_FALLBACK_PROVIDER_NAME:
         return RuleFallbackExplanationProvider()
 
+    if resolved_provider_name == OPENAI_PROVIDER_NAME:
+        return OpenAIExplanationProvider()
+
     return RuleFallbackExplanationProvider()
 
 
@@ -37,5 +42,14 @@ def generate_explanation_with_provider(
     """
     선택된 provider를 사용해 설명을 생성합니다.
     """
-    provider = get_explanation_provider(provider_name=provider_name)
-    return provider.generate(request)
+    resolved_provider_name = provider_name or settings.explanation_provider
+    provider = get_explanation_provider(provider_name=resolved_provider_name)
+
+    if resolved_provider_name == RULE_FALLBACK_PROVIDER_NAME:
+        return provider.generate(request)
+
+    try:
+        return provider.generate(request)
+    except Exception:
+        fallback_provider = RuleFallbackExplanationProvider()
+        return fallback_provider.generate(request)

@@ -332,8 +332,10 @@
 - `user_id`: 선택
 - 나머지 핵심 분석 필드: 필수
 - 설명 API는 점수/등급/근거를 바꾸지 않는다
-- 현재 구현은 rule fallback만 사용한다
-- 내부 구현은 provider interface를 통해 분리되어 있으며, 현재 기본 provider는 `rule_fallback`이다
+- 내부 구현은 provider interface를 통해 분리되어 있다
+- `EXPLANATION_PROVIDER=rule_fallback`이면 `v1-rule-fallback`, `used_llm=false`를 반환한다
+- `EXPLANATION_PROVIDER=openai`이면 OpenAI 설명 생성 후 sanitizer를 거친 응답을 우선 사용한다
+- OpenAI 호출 실패, timeout, 응답 파싱 실패 시 자동으로 `v1-rule-fallback`으로 내려간다
 
 ---
 

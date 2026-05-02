@@ -1,10 +1,12 @@
 from app.schemas.analysis import EvidenceItem, ScoreDetail
 from app.schemas.explanation import ExplanationGenerateRequest
 from app.services.explanation_provider_service import (
+    OPENAI_PROVIDER_NAME,
     RULE_FALLBACK_PROVIDER_NAME,
     generate_explanation_with_provider,
     get_explanation_provider,
 )
+from app.services.openai_explanation_provider import OpenAIExplanationProvider
 from app.services.rule_fallback_explanation_provider import (
     RuleFallbackExplanationProvider,
 )
@@ -56,6 +58,12 @@ def test_get_explanation_provider_falls_back_safely_for_unknown_provider():
     assert isinstance(provider, RuleFallbackExplanationProvider)
 
 
+def test_get_explanation_provider_returns_openai_provider():
+    provider = get_explanation_provider(OPENAI_PROVIDER_NAME)
+
+    assert isinstance(provider, OpenAIExplanationProvider)
+
+
 def test_generate_explanation_with_provider_keeps_existing_contract():
     response = generate_explanation_with_provider(build_request())
 
@@ -64,3 +72,22 @@ def test_generate_explanation_with_provider_keeps_existing_contract():
     assert response.short_summary
     assert response.detail_explanation
     assert isinstance(response.check_points, list)
+
+
+def test_generate_explanation_with_provider_falls_back_when_openai_provider_fails(monkeypatch):
+    def _raise(*args, **kwargs):
+        raise RuntimeError("openai unavailable")
+
+    monkeypatch.setattr(
+        OpenAIExplanationProvider,
+        "generate",
+        _raise,
+    )
+
+    response = generate_explanation_with_provider(
+        build_request(),
+        provider_name=OPENAI_PROVIDER_NAME,
+    )
+
+    assert response.explanation_version == "v1-rule-fallback"
+    assert response.used_llm is False
