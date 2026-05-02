@@ -1,17 +1,7 @@
-from fastapi.testclient import TestClient
-
-from app.db.session import get_db
-from app.main import app
 from app.schemas.nearby import NearbyFeatureItem
 
-client = TestClient(app)
 
-
-def override_get_db():
-    yield object()
-
-
-def test_nearby_features_returns_debuggable_evidence(monkeypatch):
+def test_nearby_features_returns_debuggable_evidence(client, monkeypatch, override_get_db):
     def fake_find_nearby_accessibility_evidence(
         db,
         base_lat,
@@ -46,21 +36,16 @@ def test_nearby_features_returns_debuggable_evidence(monkeypatch):
         "app.api.v1.routes_gis.find_nearby_accessibility_evidence",
         fake_find_nearby_accessibility_evidence,
     )
-    app.dependency_overrides[get_db] = override_get_db
-
-    try:
-        response = client.get(
-            "/api/v1/gis/nearby-features",
-            params={
-                "lat": 37.5701,
-                "lng": 126.9823,
-                "radius": 500,
-                "source_type": "NATIONWIDE_BUS_STOP",
-                "limit": 10,
-            },
-        )
-    finally:
-        app.dependency_overrides.clear()
+    response = client.get(
+        "/api/v1/gis/nearby-features",
+        params={
+            "lat": 37.5701,
+            "lng": 126.9823,
+            "radius": 500,
+            "source_type": "NATIONWIDE_BUS_STOP",
+            "limit": 10,
+        },
+    )
 
     assert response.status_code == 200, response.json()
 
@@ -77,7 +62,7 @@ def test_nearby_features_returns_debuggable_evidence(monkeypatch):
     assert data["items"][0]["feature_type_name"] == "버스정류장"
 
 
-def test_nearby_features_rejects_unsupported_source_type():
+def test_nearby_features_rejects_unsupported_source_type(client):
     response = client.get(
         "/api/v1/gis/nearby-features",
         params={

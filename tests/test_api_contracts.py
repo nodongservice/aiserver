@@ -1,26 +1,11 @@
-from fastapi.testclient import TestClient
-
-from app.main import app
-
-client = TestClient(app)
-
-
-def test_tags_normalize_contract_keys_are_stable():
-    payload = {
-        "user_id": 1,
-        "disability_labels": ["지체 - 휠체어"],
-        "required_support_labels": [
+def test_tags_normalize_contract_keys_are_stable(client, build_tag_normalize_payload):
+    payload = build_tag_normalize_payload(
+        required_support_labels=[
             "계단 없는 출입 필요",
             "엘리베이터 필요",
         ],
-        "work_environment_labels": ["조용한 근무환경 선호"],
-        "transport_preferences": {
-            "prefer_bus": True,
-            "prefer_subway": True,
-            "prefer_transfer": False,
-            "prefer_direct_route": True,
-        },
-    }
+        work_environment_labels=["조용한 근무환경 선호"],
+    )
 
     response = client.post("/api/v1/tags/normalize", json=payload)
 
@@ -43,9 +28,11 @@ def test_tags_normalize_contract_keys_are_stable():
     }
 
 
-def test_analyze_batch_contract_accepts_prefer_direct_route_and_returns_stable_keys():
-    payload = {
-        "user": {
+def test_analyze_batch_contract_accepts_prefer_direct_route_and_returns_stable_keys(
+    client, build_analyze_batch_payload
+):
+    payload = build_analyze_batch_payload(
+        user={
             "user_id": 1,
             "home_lat": 37.5665,
             "home_lng": 126.978,
@@ -60,7 +47,7 @@ def test_analyze_batch_contract_accepts_prefer_direct_route_and_returns_stable_k
                 "prefer_direct_route": True,
             },
         },
-        "jobs": [
+        jobs=[
             {
                 "job_post_id": 101,
                 "company_id": 55,
@@ -70,7 +57,7 @@ def test_analyze_batch_contract_accepts_prefer_direct_route_and_returns_stable_k
                 "work_lng": 126.9823,
             }
         ],
-    }
+    )
 
     response = client.post("/api/v1/accessibility/analyze-batch", json=payload)
 
@@ -102,15 +89,9 @@ def test_analyze_batch_contract_accepts_prefer_direct_route_and_returns_stable_k
     }
 
 
-def test_explanation_contract_response_keys_are_stable():
-    payload = {
-        "user_id": 1,
-        "job_post_id": 101,
-        "company_name": "ABC복지센터",
-        "job_title": "사무보조",
-        "accessibility_score": 86,
-        "accessibility_grade": "GOOD",
-        "score_detail": {
+def test_explanation_contract_response_keys_are_stable(client, build_explanation_payload):
+    payload = build_explanation_payload(
+        score_detail={
             "transport_score": 20,
             "station_access_score": 20,
             "crosswalk_score": 20,
@@ -118,10 +99,10 @@ def test_explanation_contract_response_keys_are_stable():
             "work_environment_score": 20,
             "risk_penalty": 0,
         },
-        "positive_factors": ["현재 공공데이터 기준으로 근무지 주변 버스정류장 정보가 확인됩니다."],
-        "risk_factors": ["현재 확인된 주요 위험 요인은 없습니다."],
-        "evidence_items": [],
-    }
+        positive_factors=["현재 공공데이터 기준으로 근무지 주변 버스정류장 정보가 확인됩니다."],
+        risk_factors=["현재 확인된 주요 위험 요인은 없습니다."],
+        evidence_items=[],
+    )
 
     response = client.post("/api/v1/explanations/accessibility", json=payload)
 
@@ -137,7 +118,7 @@ def test_explanation_contract_response_keys_are_stable():
     }
 
 
-def test_analyze_batch_validation_error_contract_includes_request_id():
+def test_analyze_batch_validation_error_contract_includes_request_id(client):
     response = client.post(
         "/api/v1/accessibility/analyze-batch",
         json={

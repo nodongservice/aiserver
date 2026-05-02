@@ -1,11 +1,4 @@
-from fastapi.testclient import TestClient
-
-from app.main import app
-
-client = TestClient(app)
-
-
-def test_validation_error_response_format():
+def test_validation_error_response_format(client):
     """
     필수 필드가 누락된 요청을 보냈을 때,
     FastAPI 기본 422 응답이 아니라
@@ -36,7 +29,7 @@ def test_validation_error_response_format():
     assert isinstance(data["detail"], list)
 
 
-def test_not_found_error_response_format():
+def test_not_found_error_response_format(client):
     """
     존재하지 않는 API를 호출했을 때도
     공통 에러 포맷으로 반환되는지 확인한다.

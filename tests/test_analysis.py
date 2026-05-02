@@ -1,11 +1,4 @@
-from fastapi.testclient import TestClient
-
-from app.main import app
-
-client = TestClient(app)
-
-
-def test_analyze_batch_returns_accessibility_results():
+def test_analyze_batch_returns_accessibility_results(client, build_analyze_batch_payload):
     """
     Spring이 후보 공고 목록을 넘기면,
     FastAPI가 공고별 접근성 분석 결과를 반환하는지 확인한다.
@@ -14,56 +7,7 @@ def test_analyze_batch_returns_accessibility_results():
     접근성 점수/등급/요인/근거 데이터를 반환한다.
     회사명과 공고명은 Spring이 원본 후보 공고 데이터와 매핑해서 사용할 수 있다.
     """
-    payload = {
-        "user": {
-            "user_id": 1,
-            "home_lat": 37.5665,
-            "home_lng": 126.978,
-            "commute_limit_minutes": 60,
-            "disability_types": ["wheelchair"],
-            "required_supports": [
-                "step_free_access",
-                "elevator",
-                "low_floor_bus",
-                "accessible_restroom",
-            ],
-            "work_environment_preferences": [
-                "avoid_phone_work",
-                "avoid_long_standing",
-                "avoid_heavy_lifting",
-                "prefer_computer_based_work",
-                "prefer_document_work",
-                "prefer_quiet_environment",
-            ],
-            "transport_preferences": {
-                "prefer_subway": True,
-                "prefer_bus": True,
-                "prefer_transfer": False,
-            },
-        },
-        "jobs": [
-            {
-                "job_post_id": 101,
-                "company_id": 55,
-                "company_name": "ABC복지센터",
-                "job_title": "사무보조",
-                "work_lat": 37.5701,
-                "work_lng": 126.9823,
-                "work_address": "서울특별시 중구 세종대로 110",
-                "is_standard_workplace": True,
-                "is_disability_friendly_post": True,
-                "work_environment_tags": [
-                    "computer_based",
-                    "document_work",
-                    "quiet_environment",
-                ],
-                "support_tags": [
-                    "interview_accommodation",
-                    "chat_communication",
-                ],
-            }
-        ],
-    }
+    payload = build_analyze_batch_payload()
 
     response = client.post("/api/v1/accessibility/analyze-batch", json=payload)
 

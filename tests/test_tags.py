@@ -1,39 +1,19 @@
-from fastapi.testclient import TestClient
-
-from app.main import app
-
-client = TestClient(app)
-
-
-def test_normalize_tags_for_wheelchair_user():
+def test_normalize_tags_for_wheelchair_user(client, build_tag_normalize_payload):
     """
     한글 온보딩 선택값이 FastAPI 내부 표준 태그로 변환되는지 확인한다.
 
     Spring은 사용자 입력값을 그대로 넘길 수 있고,
     FastAPI는 이를 내부 분석용 태그로 정규화해야 한다.
     """
-    payload = {
-        "user_id": 1,
-        "disability_labels": ["지체 - 휠체어"],
-        "required_support_labels": [
+    payload = build_tag_normalize_payload(
+        required_support_labels=[
             "계단 없는 출입 필요",
             "엘리베이터 필요",
             "장애인 화장실 필요",
             "저상버스 필요",
             "전화 응대 적은 업무 선호",
-        ],
-        "work_environment_labels": [
-            "컴퓨터 사용 중심",
-            "문서 작업 많음",
-            "조용한 근무환경 선호",
-        ],
-        "transport_preferences": {
-            "prefer_bus": True,
-            "prefer_subway": True,
-            "prefer_transfer": False,
-            "prefer_direct_route": True,
-        },
-    }
+        ]
+    )
 
     response = client.post("/api/v1/tags/normalize", json=payload)
 

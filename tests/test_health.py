@@ -1,11 +1,4 @@
-from fastapi.testclient import TestClient
-
-from app.main import app
-
-client = TestClient(app)
-
-
-def test_health_check_returns_ok():
+def test_health_check_returns_ok(client):
     """
     /health API가 정상적으로 응답하는지 확인한다.
     이 테스트는 서버 기본 라우팅이 깨지지 않았는지 확인하는 가장 단순한 smoke test다.
@@ -16,7 +9,7 @@ def test_health_check_returns_ok():
     assert data == {"status": "ok"}
 
 
-def db_test_health_check_returns_ok():
+def test_db_health_check_returns_ok(client):
     """
     /db health API가 정상적으로 응답하는지 확인한다.
     이 테스트는 서버 기본 라우팅이 깨지지 않았는지 확인하는 가장 단순한 smoke test다.
@@ -27,7 +20,7 @@ def db_test_health_check_returns_ok():
     assert data == {"status": "ok", "database": "connected"}
 
 
-def test_postgis_health_returns_valid_status():
+def test_postgis_health_returns_valid_status(client):
     """
     /postgis-health API가 PostGIS 상태를 명확히 반환하는지 확인한다.
 

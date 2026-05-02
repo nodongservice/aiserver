@@ -1,11 +1,4 @@
-from fastapi.testclient import TestClient
-
-from app.main import app
-
-client = TestClient(app)
-
-
-def test_list_public_data_records_returns_valid_response():
+def test_list_public_data_records_returns_valid_response(client):
     """
     공공데이터 조회 API가 기본 응답 구조를 반환하는지 확인한다.
 

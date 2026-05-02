@@ -1,4 +1,3 @@
-from fastapi.testclient import TestClient
 from sqlalchemy import text
 
 from app.core.gis_feature_types import BUS_STOP, CROSSWALK, TRAFFIC_LIGHT
@@ -8,9 +7,6 @@ from app.core.public_data_sources import (
     NATIONWIDE_TRAFFIC_LIGHT,
 )
 from app.db.session import SessionLocal
-from app.main import app
-
-client = TestClient(app)
 
 
 def cleanup_test_data(db):
@@ -127,7 +123,7 @@ def insert_test_gis_feature(
     )
 
 
-def test_analyze_batch_includes_postgis_evidence_record_ids():
+def test_analyze_batch_includes_postgis_evidence_record_ids(client):
     """
     analyze-batch가 PostGIS 기반 GIS feature를 조회하고,
     evidence_items.record_id에 public_data_record.id를 포함하는지 확인한다.
