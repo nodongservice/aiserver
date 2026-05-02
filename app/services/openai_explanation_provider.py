@@ -121,7 +121,7 @@ class OpenAIExplanationProvider(ExplanationProvider):
                                 "company_name": request.company_name,
                                 "accessibility_score": request.accessibility_score,
                                 "accessibility_grade": request.accessibility_grade,
-                                "score_detail": request.score_detail.dict(),
+                                "score_detail": request.score_detail.model_dump(),
                                 "positive_factors": request.positive_factors[:5],
                                 "risk_factors": request.risk_factors[:5],
                                 "evidence_items": [

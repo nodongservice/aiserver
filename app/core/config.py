@@ -16,8 +16,8 @@ class Settings:
     llm_api_key: Optional[str] = os.getenv("LLM_API_KEY")
     openai_base_url: str = os.getenv("OPENAI_BASE_URL", "https://api.openai.com/v1")
     openai_api_key: Optional[str] = os.getenv("OPENAI_API_KEY")
-    openai_model: str = os.getenv("OPENAI_MODEL", "gpt-5.2")
-    openai_timeout_seconds: float = float(os.getenv("OPENAI_TIMEOUT_SECONDS", "15"))
+    openai_model: str = os.getenv("OPENAI_MODEL", "gpt-5.4-nano")
+    openai_timeout_seconds: float = float(os.getenv("OPENAI_TIMEOUT_SECONDS", "8"))
 
 
 settings = Settings()

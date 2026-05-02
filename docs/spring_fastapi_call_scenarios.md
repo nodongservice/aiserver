@@ -210,6 +210,13 @@ Spring은 모든 분석 결과에 대해 설명 API를 즉시 호출할 필요�
 
 현재 구현 기준에서는 `used_llm=false`일 수 있으므로, 설명 API는 여전히 deterministic fallback 문서 생성기로 봐도 된다.
 
+운영에서 `EXPLANATION_PROVIDER=openai`를 사용할 경우에도 설명 API는 fail-fast로 동작하는 것을 권장한다.
+
+현재 권장 운영값:
+
+- `OPENAI_MODEL=gpt-5.4-nano`
+- `OPENAI_TIMEOUT_SECONDS=8`
+
 ---
 
 ## 5. 권장 응답 조합

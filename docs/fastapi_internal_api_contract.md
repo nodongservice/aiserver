@@ -336,6 +336,7 @@
 - `EXPLANATION_PROVIDER=rule_fallback`이면 `v1-rule-fallback`, `used_llm=false`를 반환한다
 - `EXPLANATION_PROVIDER=openai`이면 OpenAI 설명 생성 후 sanitizer를 거친 응답을 우선 사용한다
 - OpenAI 호출 실패, timeout, 응답 파싱 실패 시 자동으로 `v1-rule-fallback`으로 내려간다
+- 현재 운영 기본값은 `OPENAI_MODEL=gpt-5.4-nano`, `OPENAI_TIMEOUT_SECONDS=8`을 권장한다
 
 ---
 
