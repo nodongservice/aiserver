@@ -62,6 +62,63 @@ def test_nearby_features_returns_debuggable_evidence(client, monkeypatch, overri
     assert data["items"][0]["feature_type_name"] == "버스정류장"
 
 
+def test_nearby_features_supports_multiple_feature_types_per_source(
+    client, monkeypatch, override_get_db
+):
+    def fake_find_nearby_accessibility_evidence(
+        db,
+        base_lat,
+        base_lng,
+        radius_meters,
+        source_type,
+        limit,
+    ):
+        assert source_type == "NATIONWIDE_TRAFFIC_LIGHT"
+
+        return [
+            NearbyFeatureItem(
+                record_id=1,
+                source_type="NATIONWIDE_TRAFFIC_LIGHT",
+                source_name="전국신호등표준데이터",
+                feature_type="TRAFFIC_LIGHT",
+                feature_type_name="신호등",
+                distance_meters=120.0,
+                field_map={"feature_type": "TRAFFIC_LIGHT"},
+            ),
+            NearbyFeatureItem(
+                record_id=2,
+                source_type="NATIONWIDE_TRAFFIC_LIGHT",
+                source_name="전국신호등표준데이터",
+                feature_type="AUDIBLE_SIGNAL",
+                feature_type_name="음향신호기",
+                distance_meters=130.0,
+                field_map={"feature_type": "AUDIBLE_SIGNAL"},
+            ),
+        ]
+
+    monkeypatch.setattr(
+        "app.api.v1.routes_gis.find_nearby_accessibility_evidence",
+        fake_find_nearby_accessibility_evidence,
+    )
+    response = client.get(
+        "/api/v1/gis/nearby-features",
+        params={
+            "lat": 37.5701,
+            "lng": 126.9823,
+            "source_type": "NATIONWIDE_TRAFFIC_LIGHT",
+        },
+    )
+
+    assert response.status_code == 200, response.json()
+
+    data = response.json()
+    assert data["count"] == 2
+    assert {item["feature_type"] for item in data["items"]} == {
+        "TRAFFIC_LIGHT",
+        "AUDIBLE_SIGNAL",
+    }
+
+
 def test_nearby_features_rejects_unsupported_source_type(client):
     response = client.get(
         "/api/v1/gis/nearby-features",

@@ -1,6 +1,6 @@
 from sqlalchemy import text
 
-from app.core.gis_feature_types import BUS_STOP, CROSSWALK, TRAFFIC_LIGHT
+from app.core.gis_feature_types import AUDIBLE_SIGNAL, BUS_STOP, CROSSWALK, TRAFFIC_LIGHT
 from app.core.public_data_sources import (
     NATIONWIDE_BUS_STOP,
     NATIONWIDE_CROSSWALK,
@@ -148,6 +148,11 @@ def test_analyze_batch_includes_postgis_evidence_record_ids(client):
             source_type=NATIONWIDE_TRAFFIC_LIGHT,
             external_id="TEST_ANALYSIS_TRAFFIC_LIGHT",
         )
+        audible_signal_record_id = insert_test_public_data_record(
+            db=db,
+            source_type=NATIONWIDE_TRAFFIC_LIGHT,
+            external_id="TEST_ANALYSIS_AUDIBLE_SIGNAL",
+        )
 
         insert_test_gis_feature(
             db=db,
@@ -189,6 +194,16 @@ def test_analyze_batch_includes_postgis_evidence_record_ids(client):
                 '"sondSgngnrYn": "Y", '
                 '"remndrIdctYn": "Y"}'
             ),
+        )
+        insert_test_gis_feature(
+            db=db,
+            public_data_record_id=audible_signal_record_id,
+            source_type=NATIONWIDE_TRAFFIC_LIGHT,
+            feature_type=AUDIBLE_SIGNAL,
+            name="TEST_ANALYSIS_AUDIBLE_SIGNAL",
+            latitude=37.56675,
+            longitude=126.97825,
+            properties_json='{"sondSgngnrYn": "Y"}',
         )
 
         db.commit()
@@ -282,6 +297,7 @@ def test_analyze_batch_includes_postgis_evidence_record_ids(client):
 
         assert NATIONWIDE_TRAFFIC_LIGHT in source_types
         assert traffic_light_record_id in evidence_record_ids
+        assert audible_signal_record_id in evidence_record_ids
         traffic_light_evidence = [
             item for item in evidence_items if item["source_type"] == NATIONWIDE_TRAFFIC_LIGHT
         ]
