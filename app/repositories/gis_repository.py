@@ -9,6 +9,7 @@ from app.core.gis_feature_types import (
     SUBWAY_ENTRANCE_LIFT,
     TRAFFIC_LIGHT,
     WHEELCHAIR_LIFT,
+    get_feature_type_name,
 )
 from app.core.public_data_sources import (
     NATIONWIDE_BUS_STOP,
@@ -16,6 +17,7 @@ from app.core.public_data_sources import (
     NATIONWIDE_TRAFFIC_LIGHT,
     SEOUL_SUBWAY_ENTRANCE_LIFT,
     SEOUL_WHEELCHAIR_LIFT,
+    get_source_name,
 )
 from app.repositories.gis_feature_repository import find_nearby_gis_features
 from app.repositories.nearby_public_data_repository import (
@@ -23,10 +25,17 @@ from app.repositories.nearby_public_data_repository import (
 )
 from app.schemas.analysis import JobCandidate
 from app.schemas.gis import GisFeature, NearbyPublicDataRecord
-from app.schemas.nearby import NearbyRecordSearchResult
+from app.schemas.nearby import NearbyFeatureItem, NearbyRecordSearchResult
 from app.services.gis_service import get_dummy_gis_feature
 
 DEFAULT_SEARCH_RADIUS_METERS = 500
+SUPPORTED_NEARBY_FEATURE_SEARCHES: dict[str, list[str]] = {
+    NATIONWIDE_BUS_STOP: [BUS_STOP],
+    NATIONWIDE_CROSSWALK: [CROSSWALK],
+    NATIONWIDE_TRAFFIC_LIGHT: [TRAFFIC_LIGHT],
+    SEOUL_SUBWAY_ENTRANCE_LIFT: [SUBWAY_ENTRANCE_LIFT],
+    SEOUL_WHEELCHAIR_LIFT: [WHEELCHAIR_LIFT],
+}
 
 
 def is_yes_value(value: object) -> bool:
@@ -49,6 +58,69 @@ def is_yes_value(value: object) -> bool:
         "설치됨",
         "예",
     }
+
+
+def get_supported_nearby_source_types() -> list[str]:
+    """
+    GIS 근거 조회 API에서 지원하는 source_type 목록을 반환합니다.
+    """
+    return list(SUPPORTED_NEARBY_FEATURE_SEARCHES.keys())
+
+
+def find_nearby_accessibility_evidence(
+    db: Session,
+    base_lat: float,
+    base_lng: float,
+    radius_meters: float = DEFAULT_SEARCH_RADIUS_METERS,
+    source_type: Optional[str] = None,
+    limit: int = 20,
+) -> list[NearbyFeatureItem]:
+    """
+    디버그/근거 확인용으로 기준 좌표 주변 접근성 feature를 조회합니다.
+
+    현재는 실제 근접 검색이 구현된 핵심 source_type만 지원합니다.
+    """
+
+    if source_type is not None and source_type not in SUPPORTED_NEARBY_FEATURE_SEARCHES:
+        raise ValueError(f"Unsupported source_type: {source_type}")
+
+    source_types = [source_type] if source_type is not None else get_supported_nearby_source_types()
+
+    items: list[NearbyFeatureItem] = []
+
+    for current_source_type in source_types:
+        for feature_type in SUPPORTED_NEARBY_FEATURE_SEARCHES[current_source_type]:
+            search_results = find_nearby_records_with_fallback(
+                db=db,
+                source_type=current_source_type,
+                feature_type=feature_type,
+                base_lat=base_lat,
+                base_lng=base_lng,
+                radius_meters=radius_meters,
+            )
+
+            for result in search_results:
+                field_map = dict(result.field_map)
+                field_map.setdefault("feature_type", feature_type)
+
+                items.append(
+                    NearbyFeatureItem(
+                        record_id=result.record_id,
+                        source_type=result.source_type,
+                        source_name=get_source_name(result.source_type),
+                        feature_type=feature_type,
+                        feature_type_name=get_feature_type_name(feature_type),
+                        external_id=result.external_id,
+                        distance_meters=result.distance_meters,
+                        field_map=field_map,
+                    )
+                )
+
+    items.sort(
+        key=lambda item: item.distance_meters if item.distance_meters is not None else float("inf")
+    )
+
+    return items[:limit]
 
 
 def get_accessibility_gis_feature(

@@ -31,3 +31,32 @@ class NearbyRecordSearchResult(BaseModel):
     # 원본 field_path/value map
     # 디버깅이나 향후 근거 설명 확장에 사용할 수 있습니다.
     field_map: Dict[str, str] = Field(default_factory=dict)
+
+
+class NearbyFeatureItem(BaseModel):
+    """
+    GIS 근거 조회 API에서 반환하는 근처 feature 1개입니다.
+    """
+
+    record_id: int
+    source_type: str
+    source_name: str
+    feature_type: str
+    feature_type_name: str
+    external_id: Optional[str] = None
+    distance_meters: Optional[float] = None
+    field_map: Dict[str, str] = Field(default_factory=dict)
+
+
+class NearbyFeaturesResponse(BaseModel):
+    """
+    GIS 근거 조회 API 응답입니다.
+    """
+
+    lat: float
+    lng: float
+    radius_meters: float
+    source_type: Optional[str] = None
+    limit: int
+    count: int
+    items: list[NearbyFeatureItem] = Field(default_factory=list)

@@ -26,6 +26,64 @@
 
 ## 엔드포인트 목록
 
+### `GET /api/v1/gis/nearby-features`
+
+목적:
+
+- 기준 좌표 주변의 접근성 근거 데이터를 디버깅/검증용으로 조회
+
+쿼리 파라미터:
+
+- `lat`: 필수, 기준 위도
+- `lng`: 필수, 기준 경도
+- `radius`: 선택, meter, 기본값 `500`
+- `source_type`: 선택, 특정 SourceType만 조회할 때 사용
+- `limit`: 선택, 기본값 `20`
+
+현재 지원하는 `source_type`:
+
+- `NATIONWIDE_BUS_STOP`
+- `NATIONWIDE_CROSSWALK`
+- `NATIONWIDE_TRAFFIC_LIGHT`
+- `SEOUL_SUBWAY_ENTRANCE_LIFT`
+- `SEOUL_WHEELCHAIR_LIFT`
+
+응답 스키마:
+
+```json
+{
+  "lat": 37.5701,
+  "lng": 126.9823,
+  "radius_meters": 500,
+  "source_type": "NATIONWIDE_BUS_STOP",
+  "limit": 20,
+  "count": 1,
+  "items": [
+    {
+      "record_id": 123,
+      "source_type": "NATIONWIDE_BUS_STOP",
+      "source_name": "전국 버스정류장 위치정보",
+      "feature_type": "BUS_STOP",
+      "feature_type_name": "버스정류장",
+      "external_id": "BUS-001",
+      "distance_meters": 180.0,
+      "field_map": {
+        "feature_type": "BUS_STOP",
+        "name": "시청앞"
+      }
+    }
+  ]
+}
+```
+
+계약 주의사항:
+
+- 이 API는 점수 계산 전 근거 데이터 확인용이다.
+- `items`는 거리 오름차순으로 정렬된다.
+- 지원하지 않는 `source_type`은 HTTP 400으로 반환한다.
+
+---
+
 ### `POST /api/v1/tags/normalize`
 
 목적:
