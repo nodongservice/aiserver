@@ -4,6 +4,8 @@
 
 이 문서는 Spring Backend가 BridgeWork FastAPI AI/GIS Service를 내부 호출할 때 따라야 하는 현재 계약을 고정한다.
 
+저장/캐시 운영 기준은 `docs/spring_analysis_storage_cache_policy.md`를 함께 따른다.
+
 기준:
 
 - 실제 구현 스키마는 `app/schemas/*.py`를 따른다.
