@@ -173,11 +173,7 @@ def test_analyze_batch_includes_postgis_evidence_record_ids(client):
             latitude=37.5667,
             longitude=126.9782,
             properties_json=(
-                '{"tfclghtYn": "Y", '
-                '"fnctngSgngnrYn": "Y", '
-                '"sondSgngnrYn": "Y", '
-                '"ftpthLowerYn": "Y", '
-                '"brllBlckYn": "Y"}'
+                '{"tfclghtYn": "Y", "fnctngSgngnrYn": "Y", "sondSgngnrYn": "Y", "ftpthLowerYn": "Y", "brllBlckYn": "Y"}'
             ),
         )
         insert_test_gis_feature(
@@ -189,10 +185,7 @@ def test_analyze_batch_includes_postgis_evidence_record_ids(client):
             latitude=37.5668,
             longitude=126.9783,
             properties_json=(
-                '{"tfclghtSe": "보행신호등", '
-                '"fnctngSgngnrYn": "Y", '
-                '"sondSgngnrYn": "Y", '
-                '"remndrIdctYn": "Y"}'
+                '{"tfclghtSe": "보행신호등", "fnctngSgngnrYn": "Y", "sondSgngnrYn": "Y", "remndrIdctYn": "Y"}'
             ),
         )
         insert_test_gis_feature(
@@ -285,9 +278,7 @@ def test_analyze_batch_includes_postgis_evidence_record_ids(client):
 
         assert result["score_detail"]["crosswalk_score"] >= 10
 
-        crosswalk_evidence = [
-            item for item in evidence_items if item["source_type"] == NATIONWIDE_CROSSWALK
-        ]
+        crosswalk_evidence = [item for item in evidence_items if item["source_type"] == NATIONWIDE_CROSSWALK]
 
         assert crosswalk_evidence
         assert "보행자신호등" in crosswalk_evidence[0]["description"]
@@ -298,9 +289,7 @@ def test_analyze_batch_includes_postgis_evidence_record_ids(client):
         assert NATIONWIDE_TRAFFIC_LIGHT in source_types
         assert traffic_light_record_id in evidence_record_ids
         assert audible_signal_record_id in evidence_record_ids
-        traffic_light_evidence = [
-            item for item in evidence_items if item["source_type"] == NATIONWIDE_TRAFFIC_LIGHT
-        ]
+        traffic_light_evidence = [item for item in evidence_items if item["source_type"] == NATIONWIDE_TRAFFIC_LIGHT]
 
         assert traffic_light_evidence
         assert "신호등" in traffic_light_evidence[0]["description"]

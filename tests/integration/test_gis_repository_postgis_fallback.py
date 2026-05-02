@@ -118,9 +118,7 @@ def insert_test_gis_feature(
     )
 
 
-def insert_test_public_data_record_field(
-    db, record_id: int, source_type: str, field_path: str, field_value: str
-):
+def insert_test_public_data_record_field(db, record_id: int, source_type: str, field_path: str, field_value: str):
     db.execute(
         text(
             """

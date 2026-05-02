@@ -109,9 +109,7 @@ def get_record_field_value_map(
     Phase 19에서는 공공데이터 좌표 필드를 읽기 위해 사용합니다.
     """
 
-    fields = (
-        db.query(PublicDataRecordField).filter(PublicDataRecordField.record_id == record_id).all()
-    )
+    fields = db.query(PublicDataRecordField).filter(PublicDataRecordField.record_id == record_id).all()
 
     return {field.field_path: field.field_value for field in fields if field.field_value is not None}
 

@@ -72,9 +72,7 @@ def insert_test_public_data_record(db, source_type: str, external_id: str) -> in
     return int(result.scalar_one())
 
 
-def insert_test_public_data_record_field(
-    db, record_id: int, source_type: str, field_path: str, field_value: str
-):
+def insert_test_public_data_record_field(db, record_id: int, source_type: str, field_path: str, field_value: str):
     db.execute(
         text(
             """
@@ -113,15 +111,9 @@ def test_find_nearby_records_with_fallback_uses_public_data_record_fields_for_bu
             external_id="TEST_FALLBACK_BUS_STOP",
         )
 
-        insert_test_public_data_record_field(
-            db, record_id, NATIONWIDE_BUS_STOP, "GPS_LATI", "37.5666"
-        )
-        insert_test_public_data_record_field(
-            db, record_id, NATIONWIDE_BUS_STOP, "GPS_LONG", "126.9781"
-        )
-        insert_test_public_data_record_field(
-            db, record_id, NATIONWIDE_BUS_STOP, "NODE_NM", "테스트정류장"
-        )
+        insert_test_public_data_record_field(db, record_id, NATIONWIDE_BUS_STOP, "GPS_LATI", "37.5666")
+        insert_test_public_data_record_field(db, record_id, NATIONWIDE_BUS_STOP, "GPS_LONG", "126.9781")
+        insert_test_public_data_record_field(db, record_id, NATIONWIDE_BUS_STOP, "NODE_NM", "테스트정류장")
         db.commit()
 
         results = find_nearby_records_with_fallback(

@@ -179,10 +179,7 @@ def collect_missing_data_risks(
             )
 
     # 필수 지원 조건별 부족 정보
-    if (
-        "accessible_restroom" in user.required_supports
-        and gis_feature.has_accessible_restroom_nearby is None
-    ):
+    if "accessible_restroom" in user.required_supports and gis_feature.has_accessible_restroom_nearby is None:
         append_check_needed_risk(risks, "장애인 화장실 정보가 아직 확인되지 않았습니다.")
 
     if (
@@ -233,45 +230,29 @@ def build_positive_factors(
 
     # 지하철/역사 접근성 관련 긍정 요인
     if gis_feature.has_station_elevator:
-        factors.append(
-            build_data_based_message("근처 지하철역 또는 출입구의 엘리베이터 정보가 확인됩니다.")
-        )
+        factors.append(build_data_based_message("근처 지하철역 또는 출입구의 엘리베이터 정보가 확인됩니다."))
 
     if gis_feature.has_wheelchair_lift:
         factors.append(build_data_based_message("근처 휠체어 리프트 정보가 확인됩니다."))
 
     # 횡단보도/보행 안전 관련 긍정 요인
     if gis_feature.has_pedestrian_traffic_light:
-        factors.append(
-            build_data_based_message("근무지 주변 횡단보도에 보행자신호등 정보가 확인됩니다.")
-        )
+        factors.append(build_data_based_message("근무지 주변 횡단보도에 보행자신호등 정보가 확인됩니다."))
 
     if gis_feature.has_accessible_pedestrian_signal:
-        factors.append(
-            build_data_based_message(
-                "근무지 주변에 보행자작동신호기 또는 음향신호기 정보가 확인됩니다."
-            )
-        )
+        factors.append(build_data_based_message("근무지 주변에 보행자작동신호기 또는 음향신호기 정보가 확인됩니다."))
 
     if gis_feature.has_audible_signal:
-        factors.append(
-            build_data_based_message("근무지 주변 시각장애인용 음향신호기 정보가 확인됩니다.")
-        )
+        factors.append(build_data_based_message("근무지 주변 시각장애인용 음향신호기 정보가 확인됩니다."))
 
     if gis_feature.has_remaining_time_indicator:
-        factors.append(
-            build_data_based_message("근무지 주변 신호등에 잔여시간표시기 정보가 확인됩니다.")
-        )
+        factors.append(build_data_based_message("근무지 주변 신호등에 잔여시간표시기 정보가 확인됩니다."))
 
     if has_wheelchair_access_need(user) and gis_feature.has_curb_cut:
-        factors.append(
-            build_data_based_message("근무지 주변 횡단보도에 보도턱낮춤 정보가 확인됩니다.")
-        )
+        factors.append(build_data_based_message("근무지 주변 횡단보도에 보도턱낮춤 정보가 확인됩니다."))
 
     if has_visual_disability(user) and gis_feature.has_braille_block:
-        factors.append(
-            build_data_based_message("근무지 주변 보행 구간에 점자블록 정보가 확인됩니다.")
-        )
+        factors.append(build_data_based_message("근무지 주변 보행 구간에 점자블록 정보가 확인됩니다."))
 
     # 사업장/공고 성격 관련 긍정 요인
     if job.is_standard_workplace is True:
@@ -365,10 +346,7 @@ def build_risk_factors(
             )
 
     # 필수 지원 정보 확인
-    if (
-        "accessible_restroom" in user.required_supports
-        and gis_feature.has_accessible_restroom_nearby is None
-    ):
+    if "accessible_restroom" in user.required_supports and gis_feature.has_accessible_restroom_nearby is None:
         append_check_needed_risk(factors, "장애인 화장실 정보가 아직 확인되지 않았습니다.")
 
     if (
@@ -413,9 +391,7 @@ def build_risk_factors(
 
     # 업무환경 충돌 확인
     if "avoid_phone_work" in user_preferences and "phone_work" in job_tags:
-        append_unique(
-            factors, "전화 응대 업무가 포함될 수 있어 사용자의 선호 조건과 다를 수 있습니다."
-        )
+        append_unique(factors, "전화 응대 업무가 포함될 수 있어 사용자의 선호 조건과 다를 수 있습니다.")
 
     if "avoid_long_standing" in user_preferences and "long_standing_or_walking" in job_tags:
         append_unique(factors, "장시간 서기 또는 이동이 필요한 업무일 수 있어 확인이 필요합니다.")
@@ -437,15 +413,11 @@ def build_risk_factors(
         )
 
     if has_hearing_disability(user) and "chat_communication" not in job.support_tags:
-        append_unique(
-            factors, "문자·필담 기반 커뮤니케이션 지원 여부는 현재 공고 정보에서 확인되지 않았습니다."
-        )
+        append_unique(factors, "문자·필담 기반 커뮤니케이션 지원 여부는 현재 공고 정보에서 확인되지 않았습니다.")
 
     # 이동약자/지체장애 사용자에게 중요한 업무환경 확인
     if has_mobility_access_need(user) and "long_standing_or_walking" in job_tags:
-        append_unique(
-            factors, "이동약자에게 부담이 될 수 있는 장시간 서기 또는 이동 업무가 포함될 수 있습니다."
-        )
+        append_unique(factors, "이동약자에게 부담이 될 수 있는 장시간 서기 또는 이동 업무가 포함될 수 있습니다.")
 
     if has_mobility_access_need(user) and "heavy_lifting" in job_tags:
         append_unique(

@@ -84,10 +84,7 @@ def build_gis_evidence_items(gis_feature: GisFeature) -> list[EvidenceItem]:
                 EvidenceItem(
                     source_type=NATIONWIDE_BUS_STOP,
                     source_name=get_source_name(NATIONWIDE_BUS_STOP),
-                    description=(
-                        f"근무지 반경 내 버스정류장 "
-                        f"{gis_feature.nearby_bus_stop_count}개가 확인됩니다."
-                    ),
+                    description=(f"근무지 반경 내 버스정류장 {gis_feature.nearby_bus_stop_count}개가 확인됩니다."),
                     distance_meters=gis_feature.nearest_bus_stop_distance_meters,
                     record_id=None,
                 )
@@ -124,10 +121,7 @@ def build_gis_evidence_items(gis_feature: GisFeature) -> list[EvidenceItem]:
                 EvidenceItem(
                     source_type=NATIONWIDE_CROSSWALK,
                     source_name=get_source_name(NATIONWIDE_CROSSWALK),
-                    description=(
-                        f"근무지 반경 내 횡단보도 "
-                        f"{gis_feature.nearby_crosswalk_count}개가 확인됩니다."
-                    ),
+                    description=(f"근무지 반경 내 횡단보도 {gis_feature.nearby_crosswalk_count}개가 확인됩니다."),
                     distance_meters=None,
                     record_id=None,
                 )

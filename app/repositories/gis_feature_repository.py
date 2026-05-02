@@ -75,9 +75,7 @@ def find_nearby_gis_features(
             record_id=row["record_id"],
             source_type=row["source_type"],
             external_id=None,
-            distance_meters=float(row["distance_meters"])
-            if row["distance_meters"] is not None
-            else None,
+            distance_meters=float(row["distance_meters"]) if row["distance_meters"] is not None else None,
             field_map={
                 "feature_type": row["feature_type"],
                 "name": row["name"] or "",

@@ -116,9 +116,7 @@ def find_nearby_accessibility_evidence(
                     )
                 )
 
-    items.sort(
-        key=lambda item: item.distance_meters if item.distance_meters is not None else float("inf")
-    )
+    items.sort(key=lambda item: item.distance_meters if item.distance_meters is not None else float("inf"))
 
     return items[:limit]
 
@@ -273,9 +271,7 @@ def build_gis_feature_from_public_data_records(
         has_step_free_access_nearby=None,
         nearby_traffic_light_count=len(nearby_traffic_lights),
         nearby_audible_signal_count=len(nearby_audible_signals),
-        has_functioning_pedestrian_signal=traffic_light_accessibility[
-            "has_functioning_pedestrian_signal"
-        ],
+        has_functioning_pedestrian_signal=traffic_light_accessibility["has_functioning_pedestrian_signal"],
         has_audible_signal=traffic_light_accessibility["has_audible_signal"],
         has_remaining_time_indicator=traffic_light_accessibility["has_remaining_time_indicator"],
         nearby_traffic_light_records=traffic_light_evidence_records,
@@ -373,21 +369,16 @@ def summarize_crosswalk_accessibility(
             "has_braille_block": None,
         }
 
-    has_pedestrian_traffic_light = any(
-        is_yes_value(item.field_map.get("tfclghtYn")) for item in nearby_crosswalks
-    )
+    has_pedestrian_traffic_light = any(is_yes_value(item.field_map.get("tfclghtYn")) for item in nearby_crosswalks)
 
     has_accessible_pedestrian_signal = any(
-        is_yes_value(item.field_map.get("fnctngSgngnrYn"))
-        or is_yes_value(item.field_map.get("sondSgngnrYn"))
+        is_yes_value(item.field_map.get("fnctngSgngnrYn")) or is_yes_value(item.field_map.get("sondSgngnrYn"))
         for item in nearby_crosswalks
     )
 
     has_curb_cut = any(is_yes_value(item.field_map.get("ftpthLowerYn")) for item in nearby_crosswalks)
 
-    has_braille_block = any(
-        is_yes_value(item.field_map.get("brllBlckYn")) for item in nearby_crosswalks
-    )
+    has_braille_block = any(is_yes_value(item.field_map.get("brllBlckYn")) for item in nearby_crosswalks)
 
     return {
         "has_pedestrian_traffic_light": has_pedestrian_traffic_light,
@@ -418,13 +409,9 @@ def summarize_traffic_light_accessibility(
         is_yes_value(item.field_map.get("fnctngSgngnrYn")) for item in nearby_traffic_lights
     )
 
-    has_audible_signal = any(
-        is_yes_value(item.field_map.get("sondSgngnrYn")) for item in nearby_traffic_lights
-    )
+    has_audible_signal = any(is_yes_value(item.field_map.get("sondSgngnrYn")) for item in nearby_traffic_lights)
 
-    has_remaining_time_indicator = any(
-        is_yes_value(item.field_map.get("remndrIdctYn")) for item in nearby_traffic_lights
-    )
+    has_remaining_time_indicator = any(is_yes_value(item.field_map.get("remndrIdctYn")) for item in nearby_traffic_lights)
 
     return {
         "has_functioning_pedestrian_signal": has_functioning_pedestrian_signal,

@@ -210,8 +210,6 @@ def find_nearby_records_by_source_type(
                 )
             )
 
-    nearby_records.sort(
-        key=lambda item: item.distance_meters if item.distance_meters is not None else float("inf")
-    )
+    nearby_records.sort(key=lambda item: item.distance_meters if item.distance_meters is not None else float("inf"))
 
     return nearby_records

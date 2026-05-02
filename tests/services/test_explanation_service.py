@@ -158,20 +158,12 @@ def test_build_risk_factors_returns_check_needed_when_data_is_missing():
     )
 
     wheelchair_station_message = (
-        "휠체어 이동에 필요한 역 엘리베이터 또는 리프트 정보가 충분하지 않습니다. "
-        "지원 전 확인을 권장합니다."
+        "휠체어 이동에 필요한 역 엘리베이터 또는 리프트 정보가 충분하지 않습니다. 지원 전 확인을 권장합니다."
     )
-    step_free_message = (
-        "근무지 출입구의 계단 없는 접근 가능 여부는 아직 확인되지 않았습니다. "
-        "지원 전 확인을 권장합니다."
-    )
+    step_free_message = "근무지 출입구의 계단 없는 접근 가능 여부는 아직 확인되지 않았습니다. 지원 전 확인을 권장합니다."
     restroom_message = "장애인 화장실 정보가 아직 확인되지 않았습니다. 지원 전 확인을 권장합니다."
-    elevator_message = (
-        "주변 역 또는 출입구의 엘리베이터·리프트 정보가 충분하지 않습니다. 지원 전 확인을 권장합니다."
-    )
-    low_floor_bus_message = (
-        "저상버스 이용 가능 여부는 현재 데이터만으로 판단하기 어렵습니다. 지원 전 확인을 권장합니다."
-    )
+    elevator_message = "주변 역 또는 출입구의 엘리베이터·리프트 정보가 충분하지 않습니다. 지원 전 확인을 권장합니다."
+    low_floor_bus_message = "저상버스 이용 가능 여부는 현재 데이터만으로 판단하기 어렵습니다. 지원 전 확인을 권장합니다."
 
     assert isinstance(factors, list)
 

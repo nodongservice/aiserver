@@ -28,9 +28,7 @@ def test_tags_normalize_contract_keys_are_stable(client, build_tag_normalize_pay
     }
 
 
-def test_analyze_batch_contract_accepts_prefer_direct_route_and_returns_stable_keys(
-    client, build_analyze_batch_payload
-):
+def test_analyze_batch_contract_accepts_prefer_direct_route_and_returns_stable_keys(client, build_analyze_batch_payload):
     payload = build_analyze_batch_payload(
         user={
             "user_id": 1,

@@ -100,12 +100,7 @@ def analyze_single_job(
     # 4. 최종 점수 계산
     # risk_penalty는 음수 값으로 반환되므로 그대로 더합니다.
     total_score = (
-        transport_score
-        + station_access_score
-        + crosswalk_score
-        + facility_score
-        + work_environment_score
-        + risk_penalty
+        transport_score + station_access_score + crosswalk_score + facility_score + work_environment_score + risk_penalty
     )
 
     # 5. 0~100 범위로 제한
@@ -231,8 +226,7 @@ def calculate_transport_score(
         score += 3
 
     if has_mobility_access_need(user) and (
-        gis_feature.nearest_bus_stop_distance_meters is not None
-        and gis_feature.nearest_bus_stop_distance_meters <= 300
+        gis_feature.nearest_bus_stop_distance_meters is not None and gis_feature.nearest_bus_stop_distance_meters <= 300
     ):
         score += 2
 
@@ -455,10 +449,7 @@ def calculate_risk_penalty(
         if gis_feature.has_accessible_restroom_nearby is None:
             penalty -= 3
 
-    if (
-        "accessible_restroom" in user.required_supports
-        and gis_feature.has_accessible_restroom_nearby is None
-    ):
+    if "accessible_restroom" in user.required_supports and gis_feature.has_accessible_restroom_nearby is None:
         penalty -= 3
 
     if (

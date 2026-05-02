@@ -62,9 +62,7 @@ def test_nearby_features_returns_debuggable_evidence(client, monkeypatch, overri
     assert data["items"][0]["feature_type_name"] == "버스정류장"
 
 
-def test_nearby_features_supports_multiple_feature_types_per_source(
-    client, monkeypatch, override_get_db
-):
+def test_nearby_features_supports_multiple_feature_types_per_source(client, monkeypatch, override_get_db):
     def fake_find_nearby_accessibility_evidence(
         db,
         base_lat,
