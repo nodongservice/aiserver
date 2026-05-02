@@ -1,21 +1,33 @@
 from app.core.gis_feature_types import (
+    AUDIBLE_SIGNAL,
     BUS_STOP,
     CROSSWALK,
     SUBWAY_ENTRANCE_LIFT,
     TRAFFIC_LIGHT,
+    TRANSPORT_SUPPORT_CENTER,
+    WALKING_LINK,
+    WALKING_NODE,
 )
 from app.core.public_data_sources import (
     NATIONWIDE_BUS_STOP,
     NATIONWIDE_CROSSWALK,
     NATIONWIDE_TRAFFIC_LIGHT,
     SEOUL_SUBWAY_ENTRANCE_LIFT,
+    SEOUL_WALKING_NETWORK,
+)
+from app.core.public_data_sources import (
+    TRANSPORT_SUPPORT_CENTER as TRANSPORT_SUPPORT_CENTER_SOURCE,
 )
 from app.db.models import PublicDataRecord
 from app.services.gis_feature_builder_service import (
     build_bus_stop_feature_values,
     build_crosswalk_feature_values,
+    build_gis_feature_value_list,
     build_subway_entrance_lift_feature_values,
+    build_traffic_light_feature_value_list,
     build_traffic_light_feature_values,
+    build_transport_support_center_feature_values,
+    build_walking_network_feature_value_list,
     is_valid_wkt,
 )
 
@@ -104,6 +116,28 @@ def test_build_traffic_light_feature_values():
     assert result["properties"]["sondSgngnrYn"] == "Y"
 
 
+def test_build_traffic_light_feature_value_list_adds_audible_signal():
+    record = PublicDataRecord(
+        id=31,
+        source_type=NATIONWIDE_TRAFFIC_LIGHT,
+        external_id="TL-LIST-001",
+        is_active=True,
+    )
+
+    field_map = {
+        "tfclghtManageNo": "TL-LIST-001",
+        "latitude": "37.5667",
+        "longitude": "126.9782",
+        "sondSgngnrYn": "Y",
+    }
+
+    result = build_traffic_light_feature_value_list(record, field_map)
+
+    assert len(result) == 2
+    assert result[0]["feature_type"] == TRAFFIC_LIGHT
+    assert result[1]["feature_type"] == AUDIBLE_SIGNAL
+
+
 def test_build_feature_values_returns_none_for_invalid_coordinate():
     record = PublicDataRecord(
         id=4,
@@ -189,3 +223,74 @@ def test_build_subway_entrance_lift_feature_values_returns_none_for_invalid_wkt(
     result = build_subway_entrance_lift_feature_values(record, field_map)
 
     assert result is None
+
+
+def test_build_transport_support_center_feature_values():
+    record = PublicDataRecord(
+        id=7,
+        source_type=TRANSPORT_SUPPORT_CENTER_SOURCE,
+        external_id="CENTER-001",
+        is_active=True,
+    )
+
+    field_map = {
+        "TFCWKER_MVMN_CNTER_NM": "중구이동지원센터",
+        "LATITUDE": "37.5665",
+        "LONGITUDE": "126.9780",
+        "TELNO": "02-1234-5678",
+        "RDNMADR": "서울특별시 중구 세종대로 110",
+    }
+
+    result = build_transport_support_center_feature_values(record, field_map)
+
+    assert result is not None
+    assert result["source_type"] == TRANSPORT_SUPPORT_CENTER_SOURCE
+    assert result["feature_type"] == TRANSPORT_SUPPORT_CENTER
+    assert result["name"] == "중구이동지원센터"
+    assert result["latitude"] == 37.5665
+    assert result["longitude"] == 126.9780
+
+
+def test_build_walking_network_feature_value_list_creates_node_and_link():
+    record = PublicDataRecord(
+        id=8,
+        source_type=SEOUL_WALKING_NETWORK,
+        external_id="WALK-001",
+        is_active=True,
+    )
+
+    field_map = {
+        "NODE_ID": "NODE-001",
+        "NODE_WKT": "POINT(126.9780 37.5665)",
+        "LINK_ID": "LINK-001",
+        "LNKG_WKT": "LINESTRING(126.9780 37.5665, 126.9790 37.5670)",
+    }
+
+    result = build_walking_network_feature_value_list(record, field_map)
+
+    assert len(result) == 2
+    assert result[0]["feature_type"] == WALKING_NODE
+    assert result[1]["feature_type"] == WALKING_LINK
+
+
+def test_build_gis_feature_value_list_supports_new_source_types():
+    traffic_record = PublicDataRecord(
+        id=9,
+        source_type=NATIONWIDE_TRAFFIC_LIGHT,
+        external_id="TL-MULTI",
+        is_active=True,
+    )
+    traffic_field_map = {
+        "tfclghtManageNo": "TL-MULTI",
+        "latitude": "37.5667",
+        "longitude": "126.9782",
+        "sondSgngnrYn": "Y",
+    }
+
+    traffic_result = build_gis_feature_value_list(traffic_record, traffic_field_map)
+
+    assert len(traffic_result) == 2
+    assert {item["feature_type"] for item in traffic_result} == {
+        TRAFFIC_LIGHT,
+        AUDIBLE_SIGNAL,
+    }

@@ -6,16 +6,24 @@ from sqlalchemy import text
 from sqlalchemy.orm import Session
 
 from app.core.gis_feature_types import (
+    AUDIBLE_SIGNAL,
     BUS_STOP,
     CROSSWALK,
     SUBWAY_ENTRANCE_LIFT,
     TRAFFIC_LIGHT,
+    TRANSPORT_SUPPORT_CENTER,
+    WALKING_LINK,
+    WALKING_NODE,
 )
 from app.core.public_data_sources import (
     NATIONWIDE_BUS_STOP,
     NATIONWIDE_CROSSWALK,
     NATIONWIDE_TRAFFIC_LIGHT,
     SEOUL_SUBWAY_ENTRANCE_LIFT,
+    SEOUL_WALKING_NETWORK,
+)
+from app.core.public_data_sources import (
+    TRANSPORT_SUPPORT_CENTER as TRANSPORT_SUPPORT_CENTER_SOURCE,
 )
 from app.db.models import PublicDataRecord
 from app.repositories.public_data_repository import get_record_field_value_map
@@ -89,6 +97,17 @@ def get_first_value(
             return field_map[candidate]
 
     return None
+
+
+def is_yes_like(value: Optional[str]) -> bool:
+    """
+    Y/YES/TRUE/1/유/있음 계열 값을 True로 해석합니다.
+    """
+    if value is None:
+        return False
+
+    normalized = value.strip().upper()
+    return normalized in {"Y", "YES", "TRUE", "1", "유", "있음", "설치", "예"}
 
 
 def build_bus_stop_feature_values(
@@ -211,6 +230,33 @@ def build_traffic_light_feature_values(
     }
 
 
+def build_traffic_light_feature_value_list(
+    record: PublicDataRecord,
+    field_map: dict[str, str],
+) -> list[dict]:
+    """
+    신호등 원본을 GIS feature 목록으로 변환합니다.
+
+    기본 TRAFFIC_LIGHT 1건은 항상 생성하고,
+    음향신호기 정보가 있으면 AUDIBLE_SIGNAL feature를 추가 생성합니다.
+    """
+    base_feature = build_traffic_light_feature_values(record, field_map)
+    if base_feature is None:
+        return []
+
+    features = [base_feature]
+
+    if is_yes_like(field_map.get("sondSgngnrYn")):
+        features.append(
+            {
+                **base_feature,
+                "feature_type": AUDIBLE_SIGNAL,
+            }
+        )
+
+    return features
+
+
 def build_subway_entrance_lift_feature_values(
     record: PublicDataRecord,
     field_map: dict[str, str],
@@ -257,6 +303,102 @@ def build_subway_entrance_lift_feature_values(
     }
 
 
+def build_transport_support_center_feature_values(
+    record: PublicDataRecord,
+    field_map: dict[str, str],
+) -> Optional[dict]:
+    """
+    TRANSPORT_SUPPORT_CENTER 원본 레코드를 GIS feature 값으로 변환합니다.
+    """
+    latitude = parse_float(get_first_value(field_map, ["LATITUDE", "latitude"]))
+    longitude = parse_float(get_first_value(field_map, ["LONGITUDE", "longitude"]))
+
+    if not is_valid_coordinate(latitude, longitude):
+        return None
+
+    return {
+        "public_data_record_id": record.id,
+        "source_type": TRANSPORT_SUPPORT_CENTER_SOURCE,
+        "feature_type": TRANSPORT_SUPPORT_CENTER,
+        "name": get_first_value(
+            field_map,
+            [
+                "TFCWKER_MVMN_CNTER_NM",
+                "cnterNm",
+                "centerName",
+            ],
+        ),
+        "address": get_first_value(
+            field_map,
+            [
+                "RDNMADR",
+                "LNMADR",
+                "ADDR",
+                "address",
+            ],
+        ),
+        "latitude": latitude,
+        "longitude": longitude,
+        "properties": {
+            "TFCWKER_MVMN_CNTER_NM": field_map.get("TFCWKER_MVMN_CNTER_NM"),
+            "TELNO": field_map.get("TELNO"),
+            "HMPG_ADDR": field_map.get("HMPG_ADDR"),
+        },
+    }
+
+
+def build_walking_network_feature_value_list(
+    record: PublicDataRecord,
+    field_map: dict[str, str],
+) -> list[dict]:
+    """
+    SEOUL_WALKING_NETWORK 원본을 WALKING_NODE/WALKING_LINK feature 목록으로 변환합니다.
+    """
+    features: list[dict] = []
+
+    node_wkt = field_map.get("NODE_WKT")
+    if is_valid_wkt(node_wkt):
+        features.append(
+            {
+                "public_data_record_id": record.id,
+                "source_type": SEOUL_WALKING_NETWORK,
+                "feature_type": WALKING_NODE,
+                "name": get_first_value(field_map, ["NODE_ID", "NODE_NAME"]),
+                "address": None,
+                "latitude": None,
+                "longitude": None,
+                "wkt": node_wkt,
+                "properties": {
+                    "NODE_ID": field_map.get("NODE_ID"),
+                    "NODE_TYPE": field_map.get("NODE_TYPE"),
+                    "NODE_TYPE_CD": field_map.get("NODE_TYPE_CD"),
+                },
+            }
+        )
+
+    link_wkt = get_first_value(field_map, ["LNKG_WKT", "LINK_WKT"])
+    if is_valid_wkt(link_wkt):
+        features.append(
+            {
+                "public_data_record_id": record.id,
+                "source_type": SEOUL_WALKING_NETWORK,
+                "feature_type": WALKING_LINK,
+                "name": get_first_value(field_map, ["LINK_ID", "LNKG_ID"]),
+                "address": None,
+                "latitude": None,
+                "longitude": None,
+                "wkt": link_wkt,
+                "properties": {
+                    "LINK_ID": field_map.get("LINK_ID") or field_map.get("LNKG_ID"),
+                    "WALK_TYPE": field_map.get("WALK_TYPE"),
+                    "WALK_TYPE_CD": field_map.get("WALK_TYPE_CD"),
+                },
+            }
+        )
+
+    return features
+
+
 def build_gis_feature_values(
     record: PublicDataRecord,
     field_map: dict[str, str],
@@ -278,6 +420,29 @@ def build_gis_feature_values(
         return build_subway_entrance_lift_feature_values(record, field_map)
 
     return None
+
+
+def build_gis_feature_value_list(
+    record: PublicDataRecord,
+    field_map: dict[str, str],
+) -> list[dict]:
+    """
+    source_type에 따라 GIS feature 값 목록을 반환합니다.
+
+    일부 source_type은 1개 이상의 feature row를 만들 수 있습니다.
+    """
+    if record.source_type == NATIONWIDE_TRAFFIC_LIGHT:
+        return build_traffic_light_feature_value_list(record, field_map)
+
+    if record.source_type == TRANSPORT_SUPPORT_CENTER_SOURCE:
+        values = build_transport_support_center_feature_values(record, field_map)
+        return [values] if values is not None else []
+
+    if record.source_type == SEOUL_WALKING_NETWORK:
+        return build_walking_network_feature_value_list(record, field_map)
+
+    values = build_gis_feature_values(record, field_map)
+    return [values] if values is not None else []
 
 
 def upsert_accessibility_gis_feature(
@@ -431,6 +596,9 @@ def build_accessibility_gis_features_by_source_type(
     - NATIONWIDE_BUS_STOP
     - NATIONWIDE_CROSSWALK
     - NATIONWIDE_TRAFFIC_LIGHT
+    - SEOUL_SUBWAY_ENTRANCE_LIFT
+    - TRANSPORT_SUPPORT_CENTER
+    - SEOUL_WALKING_NETWORK
     """
 
     records = (
@@ -451,20 +619,21 @@ def build_accessibility_gis_features_by_source_type(
             record_id=record.id,
         )
 
-        values = build_gis_feature_values(
+        value_list = build_gis_feature_value_list(
             record=record,
             field_map=field_map,
         )
 
-        if values is None:
+        if not value_list:
             skipped_count += 1
             continue
 
-        upsert_accessibility_gis_feature(
-            db=db,
-            values=values,
-        )
-        created_count += 1
+        for values in value_list:
+            upsert_accessibility_gis_feature(
+                db=db,
+                values=values,
+            )
+            created_count += 1
 
     db.commit()
 
