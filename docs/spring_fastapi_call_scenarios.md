@@ -8,6 +8,7 @@
 
 - `docs/fastapi_internal_api_contract.md`
 - `docs/spring_analysis_storage_cache_policy.md`
+- `docs/frontend_response_composition_examples.md`
 
 핵심 원칙:
 
