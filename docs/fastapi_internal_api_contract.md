@@ -264,6 +264,7 @@
 - `transport_preferences.prefer_direct_route`는 현재 점수 계산에서 직접 사용하지 않더라도 계약 필드로 유지한다.
 - `company_name`, `job_title`은 분석 결과 응답에 재반환하지 않는다. Spring이 원본 공고 후보와 결합해 사용한다.
 - 현재 구현 엔드포인트는 `analyze-one`이 아니라 `analyze-batch`다.
+- 현재 scoring rule 버전은 내부적으로 `v1.0`으로 고정되어 있으며, API 응답 본문에는 별도 필드로 노출하지 않는다.
 
 ---
 
@@ -368,5 +369,6 @@
 - `tags/normalize` 응답을 그대로 저장하거나 후속 분석 요청에 재사용 가능
 - `analyze-batch` 요청에는 정규화된 태그만 넣는다
 - `analyze-batch` 응답의 공고 제목/회사명은 Spring 원본 데이터와 조합해 사용한다
+- 분석 결과 저장/캐시 메타데이터에는 현재 `scoring_version=v1.0`을 함께 보관하는 것을 권장한다
 - 설명 캐시 키에는 `job_post_id`, `user_id`, `scoring_version`, `explanation_version`을 포함하는 것을 권장한다
 - README에 없는 데이터는 프론트 문구에서도 확정 표현을 피한다

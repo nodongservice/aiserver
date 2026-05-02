@@ -658,15 +658,26 @@ LLM 설명에서 반드시 유지해야 하는 표현 원칙:
 
 ### 17.1 scoring_version
 
-운영 단계에서는 scoring_version 추가를 권장한다.
+현재 scoring rule 버전은 `v1.0`으로 고정한다.
 
-예: `v1-rule-gis-basic`
+`v1.0`의 의미:
+
+- 총점 구조는 `transport_score + station_access_score + crosswalk_score + facility_score + work_environment_score + risk_penalty`
+- 각 가산 항목 상한은 `20점`
+- `risk_penalty` 하한은 `-20점`
+- 등급 기준은 `GOOD >= 80`, `CAUTION >= 60`, `RISK < 60`
+- README 기준 데이터 밖의 항목은 가점 근거가 아니라 `확인 필요` 또는 risk 요인으로 처리
 
 사용 목적:
 
-- 분석 결과 캐싱
+- 분석 결과 캐싱 키 고정
 - 점수 정책 변경 추적
 - 과거 분석 결과와 신규 분석 결과 구분
+
+주의:
+
+- 현재 API 응답 본문에는 `scoring_version` 필드를 추가하지 않는다.
+- Spring은 캐시/저장 메타데이터에서 `v1.0`을 함께 관리하는 것을 권장한다.
 
 ### 17.2 feature importance 설명
 

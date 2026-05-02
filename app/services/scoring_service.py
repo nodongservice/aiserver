@@ -21,6 +21,15 @@ from app.services.explanation_service import (
 )
 from app.services.gis_service import build_gis_evidence_items
 
+SCORING_VERSION = "v1.0"
+
+MAX_COMPONENT_SCORE = 20
+MIN_RISK_PENALTY = -20
+MAX_TOTAL_SCORE = 100
+
+GRADE_GOOD_MIN_SCORE = 80
+GRADE_CAUTION_MIN_SCORE = 60
+
 
 def analyze_accessibility_batch(
     request: AccessibilityAnalyzeRequest,
@@ -230,7 +239,7 @@ def calculate_transport_score(
     if user.transport_preferences.prefer_bus and gis_feature.nearby_bus_stop_count >= 1:
         score += 2
 
-    return clamp_score_by_range(score, 0, 20)
+    return clamp_score_by_range(score, 0, MAX_COMPONENT_SCORE)
 
 
 def calculate_station_access_score(
@@ -263,7 +272,7 @@ def calculate_station_access_score(
     if has_wheelchair_access_need(user) and gis_feature.has_wheelchair_lift:
         score += 3
 
-    return clamp_score_by_range(score, 0, 20)
+    return clamp_score_by_range(score, 0, MAX_COMPONENT_SCORE)
 
 
 def calculate_crosswalk_score(
@@ -313,7 +322,7 @@ def calculate_crosswalk_score(
     if has_visual_disability(user) and gis_feature.has_braille_block:
         score += 2
 
-    return clamp_score_by_range(score, 0, 20)
+    return clamp_score_by_range(score, 0, MAX_COMPONENT_SCORE)
 
 
 def calculate_facility_score(
@@ -347,7 +356,7 @@ def calculate_facility_score(
     if has_wheelchair_access_need(user) and gis_feature.has_step_free_access_nearby:
         score += 3
 
-    return clamp_score_by_range(score, 0, 20)
+    return clamp_score_by_range(score, 0, MAX_COMPONENT_SCORE)
 
 
 def calculate_work_environment_score(
@@ -417,7 +426,7 @@ def calculate_work_environment_score(
     if has_mobility_access_need(user) and "heavy_lifting" in job_tags:
         score -= 3
 
-    return clamp_score_by_range(score, 0, 20)
+    return clamp_score_by_range(score, 0, MAX_COMPONENT_SCORE)
 
 
 def calculate_risk_penalty(
@@ -487,7 +496,7 @@ def calculate_risk_penalty(
     if job.is_disability_friendly_post is None:
         penalty -= 2
 
-    return clamp_score_by_range(penalty, -20, 0)
+    return clamp_score_by_range(penalty, MIN_RISK_PENALTY, 0)
 
 
 def calculate_grade(score: int) -> str:
@@ -495,10 +504,10 @@ def calculate_grade(score: int) -> str:
     최종 점수를 접근성 등급으로 변환합니다.
     """
 
-    if score >= 80:
+    if score >= GRADE_GOOD_MIN_SCORE:
         return "GOOD"
 
-    if score >= 60:
+    if score >= GRADE_CAUTION_MIN_SCORE:
         return "CAUTION"
 
     return "RISK"
@@ -509,4 +518,4 @@ def clamp_score(score: int) -> int:
     점수를 0~100 범위로 제한합니다.
     """
 
-    return max(0, min(score, 100))
+    return max(0, min(score, MAX_TOTAL_SCORE))
