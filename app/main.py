@@ -103,6 +103,7 @@ def custom_openapi():
     if app.openapi_schema:
         return app.openapi_schema
 
+    root_path = get_root_path()
     openapi_schema = get_openapi(
         title=app.title,
         version=app.version,
@@ -112,6 +113,8 @@ def custom_openapi():
 
     paths = openapi_schema.get("paths", {})
     openapi_schema["paths"] = {to_public_openapi_path(path): value for path, value in paths.items()}
+    if root_path:
+        openapi_schema["servers"] = [{"url": root_path}]
     app.openapi_schema = openapi_schema
     return app.openapi_schema
 
