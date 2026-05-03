@@ -2,6 +2,7 @@ name: Aiserver CI/CD
 
 on:
   push:
+  pull_request:
     branches:
       - main
   workflow_dispatch:
@@ -10,7 +11,7 @@ permissions:
   contents: read
 
 jobs:
-  test-build-deploy:
+  ci:
     runs-on: ubuntu-latest
 
     services:
@@ -29,9 +30,6 @@ jobs:
           --health-retries 5
 
     env:
-      IMAGE_URI: bridgework-aiserver:${{ github.sha }}
-      IMAGE_ARCHIVE: bridgework-aiserver-${{ github.sha }}.tar.gz
-      REMOTE_APP_ROOT: ~/bridgework/aiserver
       DATABASE_URL: postgresql+psycopg2://postgres:postgres@127.0.0.1:5432/aiserver_test
       CORS_ALLOW_ORIGINS: http://localhost:3000
       EXPLANATION_PROVIDER: rule_fallback
@@ -55,6 +53,20 @@ jobs:
 
       - name: Run tests
         run: uv run pytest -q
+
+  deploy:
+    needs: ci
+    if: github.event_name == 'workflow_dispatch' || (github.event_name == 'push' && github.ref == 'refs/heads/main')
+    runs-on: ubuntu-latest
+
+    env:
+      IMAGE_URI: bridgework-aiserver:${{ github.sha }}
+      IMAGE_ARCHIVE: bridgework-aiserver-${{ github.sha }}.tar.gz
+      REMOTE_APP_ROOT: ~/bridgework/aiserver
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
 
       - name: Build Docker image
         run: docker build -t "$IMAGE_URI" .

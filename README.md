@@ -66,19 +66,21 @@ uv run pytest -v
 `backend/deploy/nginx/bridgework.conf` 기준으로 같은 인스턴스의 FastAPI upstream(`19000`, `19001`)만 교체하는 배포를 사용합니다.
 
 - 워크플로우: `.github/workflows/cicd-main-ec2.yml`
-- 트리거: `main` 브랜치 push, `workflow_dispatch`
+- CI 트리거: 모든 브랜치 `push`, `main` 대상 `pull_request`
+- 배포 트리거: `main` 브랜치 `push`, `workflow_dispatch`
 - 이미지 빌드: `Dockerfile`
 - 서버 배포 스크립트: `deploy/deploy.sh`
 - 라우팅 전제: 서버 Nginx에 `backend/deploy/nginx/fastapi-upstream.inc`가 이미 포함돼 있어야 함
 
 ### 배포 방식
 
-1. GitHub Actions에서 PostGIS 서비스 컨테이너를 띄운 뒤 `pytest`를 실행합니다.
-2. `aiserver` Docker 이미지를 빌드하고 tar.gz로 압축합니다.
-3. 압축 이미지, 운영 `.env`, 배포 스크립트를 EC2로 업로드합니다.
-4. EC2에서 비활성 슬롯(`19000` 또는 `19001`)에 새 컨테이너를 띄웁니다.
-5. `/health` 확인 후 Nginx `fastapi-upstream.inc`를 새 포트로 바꾸고 `nginx reload` 합니다.
-6. 이전 슬롯 컨테이너를 제거합니다.
+1. `push`/`pull_request`마다 PostGIS 서비스 컨테이너를 띄운 뒤 `pytest`를 실행합니다.
+2. `main` 브랜치 `push` 또는 수동 실행일 때만 배포 job이 이어집니다.
+3. 배포 job은 `aiserver` Docker 이미지를 빌드하고 tar.gz로 압축합니다.
+4. 압축 이미지, 운영 `.env`, 배포 스크립트를 EC2로 업로드합니다.
+5. EC2에서 비활성 슬롯(`19000` 또는 `19001`)에 새 컨테이너를 띄웁니다.
+6. `/health` 확인 후 Nginx `fastapi-upstream.inc`를 새 포트로 바꾸고 `nginx reload` 합니다.
+7. 이전 슬롯 컨테이너를 제거합니다.
 
 ### GitHub Secrets
 
