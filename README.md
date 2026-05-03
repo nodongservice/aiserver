@@ -16,7 +16,7 @@ uv sync --dev
 ### 2. 개발 서버 실행
 
 ```bash
-uv run python -m uvicorn main:app --reload
+uv run python -m uvicorn app.main:app --reload
 ```
 
 - 기본 주소: `http://127.0.0.1:8000`
