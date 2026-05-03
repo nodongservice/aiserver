@@ -29,6 +29,10 @@ setup_logging()
 logger = logging.getLogger(__name__)
 
 
+def get_root_path() -> str:
+    return os.getenv("ROOT_PATH", "/api/py").strip()
+
+
 def should_auto_create_db_schema() -> bool:
     return os.getenv("AUTO_CREATE_DB_SCHEMA", "false").lower() == "true"
 
@@ -61,6 +65,7 @@ def verify_required_postgis() -> None:
 app = FastAPI(
     title="BridgeWork AI Server",
     version="0.1.0",
+    root_path=get_root_path(),
 )
 
 verify_required_postgis()
