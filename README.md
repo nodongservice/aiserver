@@ -61,6 +61,51 @@ uv run pre-commit run --all-files
 uv run pytest -v
 ```
 
+## CI/CD
+
+`backend/deploy/nginx/bridgework.conf` 기준으로 같은 인스턴스의 FastAPI upstream(`19000`, `19001`)만 교체하는 배포를 사용합니다.
+
+- 워크플로우: `.github/workflows/cicd-main-ec2.yml`
+- 트리거: `main` 브랜치 push, `workflow_dispatch`
+- 이미지 빌드: `Dockerfile`
+- 서버 배포 스크립트: `deploy/deploy.sh`
+- 라우팅 전제: 서버 Nginx에 `backend/deploy/nginx/fastapi-upstream.inc`가 이미 포함돼 있어야 함
+
+### 배포 방식
+
+1. GitHub Actions에서 PostGIS 서비스 컨테이너를 띄운 뒤 `pytest`를 실행합니다.
+2. `aiserver` Docker 이미지를 빌드하고 tar.gz로 압축합니다.
+3. 압축 이미지, 운영 `.env`, 배포 스크립트를 EC2로 업로드합니다.
+4. EC2에서 비활성 슬롯(`19000` 또는 `19001`)에 새 컨테이너를 띄웁니다.
+5. `/health` 확인 후 Nginx `fastapi-upstream.inc`를 새 포트로 바꾸고 `nginx reload` 합니다.
+6. 이전 슬롯 컨테이너를 제거합니다.
+
+### GitHub Secrets
+
+- `EC2_HOST`
+- `EC2_PORT`
+- `EC2_USER`
+- `EC2_SSH_PRIVATE_KEY`
+- `DATABASE_URL`
+- `CORS_ALLOW_ORIGINS`
+- `EXPLANATION_PROVIDER`
+- `LLM_BASE_URL`
+- `LLM_API_KEY`
+- `OPENAI_BASE_URL`
+- `OPENAI_API_KEY`
+- `OPENAI_MODEL`
+- `OPENAI_TIMEOUT_SECONDS`
+- `LOG_LEVEL`
+
+비어도 되는 값은 빈 문자열로 넣어도 됩니다. 다만 `DATABASE_URL`은 필수입니다.
+
+### EC2 선행 작업
+
+1. Docker, Nginx, curl 설치
+2. 배포 계정에 Docker 실행 권한 부여
+3. 배포 계정에 `sudo nginx -t`, `sudo systemctl reload nginx`, `sudo cp` 권한 부여
+4. `backend/deploy/setup_nginx.sh` 기준 Nginx 설정이 이미 적용되어 있어야 함
+
 
 ### 폴더구조
 | **영역** | **역할** |

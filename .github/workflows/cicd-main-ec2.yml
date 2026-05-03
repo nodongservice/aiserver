@@ -1,0 +1,131 @@
+name: Aiserver CI/CD
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  test-build-deploy:
+    runs-on: ubuntu-latest
+
+    services:
+      postgis:
+        image: postgis/postgis:16-3.4
+        env:
+          POSTGRES_DB: aiserver_test
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d aiserver_test"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    env:
+      IMAGE_URI: bridgework-aiserver:${{ github.sha }}
+      IMAGE_ARCHIVE: bridgework-aiserver-${{ github.sha }}.tar.gz
+      REMOTE_APP_ROOT: ~/bridgework/aiserver
+      DATABASE_URL: postgresql+psycopg2://postgres:postgres@127.0.0.1:5432/aiserver_test
+      CORS_ALLOW_ORIGINS: http://localhost:3000
+      EXPLANATION_PROVIDER: rule_fallback
+      OPENAI_API_KEY: test-key
+      LOG_LEVEL: INFO
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install uv
+        run: pip install uv
+
+      - name: Install dependencies
+        run: uv sync --dev
+
+      - name: Run tests
+        run: uv run pytest -q
+
+      - name: Build Docker image
+        run: docker build -t "$IMAGE_URI" .
+
+      - name: Save Docker image
+        run: docker save "$IMAGE_URI" | gzip > "$IMAGE_ARCHIVE"
+
+      - name: Generate production env file
+        env:
+          PROD_CORS_ALLOW_ORIGINS: ${{ secrets.CORS_ALLOW_ORIGINS }}
+          PROD_EXPLANATION_PROVIDER: ${{ secrets.EXPLANATION_PROVIDER }}
+          PROD_LLM_BASE_URL: ${{ secrets.LLM_BASE_URL }}
+          PROD_LLM_API_KEY: ${{ secrets.LLM_API_KEY }}
+          PROD_OPENAI_BASE_URL: ${{ secrets.OPENAI_BASE_URL }}
+          PROD_OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          PROD_OPENAI_MODEL: ${{ secrets.OPENAI_MODEL }}
+          PROD_OPENAI_TIMEOUT_SECONDS: ${{ secrets.OPENAI_TIMEOUT_SECONDS }}
+          PROD_LOG_LEVEL: ${{ secrets.LOG_LEVEL }}
+        run: |
+          {
+            echo "DATABASE_URL=${{ secrets.DATABASE_URL }}"
+            echo "CORS_ALLOW_ORIGINS=${PROD_CORS_ALLOW_ORIGINS:-}"
+            echo "EXPLANATION_PROVIDER=${PROD_EXPLANATION_PROVIDER:-rule_fallback}"
+            echo "LLM_BASE_URL=${PROD_LLM_BASE_URL:-}"
+            echo "LLM_API_KEY=${PROD_LLM_API_KEY:-}"
+            echo "OPENAI_BASE_URL=${PROD_OPENAI_BASE_URL:-https://api.openai.com/v1}"
+            echo "OPENAI_API_KEY=${PROD_OPENAI_API_KEY:-}"
+            echo "OPENAI_MODEL=${PROD_OPENAI_MODEL:-gpt-5.4-nano}"
+            echo "OPENAI_TIMEOUT_SECONDS=${PROD_OPENAI_TIMEOUT_SECONDS:-8}"
+            echo "LOG_LEVEL=${PROD_LOG_LEVEL:-INFO}"
+          } > .env.cicd.prod
+
+      - name: Configure SSH
+        env:
+          EC2_HOST: ${{ secrets.EC2_HOST }}
+          EC2_PORT: ${{ secrets.EC2_PORT }}
+          EC2_SSH_PRIVATE_KEY: ${{ secrets.EC2_SSH_PRIVATE_KEY }}
+        run: |
+          mkdir -p ~/.ssh
+          printf '%s\n' "$EC2_SSH_PRIVATE_KEY" > ~/.ssh/id_ed25519
+          chmod 600 ~/.ssh/id_ed25519
+          ssh-keyscan -p "$EC2_PORT" "$EC2_HOST" >> ~/.ssh/known_hosts
+
+      - name: Prepare remote directories
+        env:
+          EC2_HOST: ${{ secrets.EC2_HOST }}
+          EC2_PORT: ${{ secrets.EC2_PORT }}
+          EC2_USER: ${{ secrets.EC2_USER }}
+        run: |
+          ssh -p "$EC2_PORT" "$EC2_USER@$EC2_HOST" \
+            "mkdir -p $REMOTE_APP_ROOT/deploy $REMOTE_APP_ROOT/releases $REMOTE_APP_ROOT/state"
+
+      - name: Upload deploy assets
+        env:
+          EC2_HOST: ${{ secrets.EC2_HOST }}
+          EC2_PORT: ${{ secrets.EC2_PORT }}
+          EC2_USER: ${{ secrets.EC2_USER }}
+        run: |
+          scp -P "$EC2_PORT" "$IMAGE_ARCHIVE" "$EC2_USER@$EC2_HOST:$REMOTE_APP_ROOT/releases/$IMAGE_ARCHIVE"
+          scp -P "$EC2_PORT" .env.cicd.prod "$EC2_USER@$EC2_HOST:$REMOTE_APP_ROOT/.env.prod"
+          scp -P "$EC2_PORT" deploy/deploy.sh "$EC2_USER@$EC2_HOST:$REMOTE_APP_ROOT/deploy/deploy.sh"
+
+      - name: Deploy on EC2
+        env:
+          EC2_HOST: ${{ secrets.EC2_HOST }}
+          EC2_PORT: ${{ secrets.EC2_PORT }}
+          EC2_USER: ${{ secrets.EC2_USER }}
+        run: |
+          ssh -p "$EC2_PORT" "$EC2_USER@$EC2_HOST" "
+            chmod +x $REMOTE_APP_ROOT/deploy/deploy.sh && \
+            gunzip -c $REMOTE_APP_ROOT/releases/$IMAGE_ARCHIVE | docker load && \
+            IMAGE_URI=$IMAGE_URI ENV_FILE=$REMOTE_APP_ROOT/.env.prod bash $REMOTE_APP_ROOT/deploy/deploy.sh && \
+            rm -f $REMOTE_APP_ROOT/releases/$IMAGE_ARCHIVE
+          "
