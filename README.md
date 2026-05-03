@@ -82,6 +82,8 @@ uv run pytest -v
 6. `/health` 확인 후 Nginx `fastapi-upstream.inc`를 새 포트로 바꾸고 `nginx reload` 합니다.
 7. 이전 슬롯 컨테이너를 제거합니다.
 
+EC2에는 Git 저장소를 clone하지 않습니다. GitHub hosted runner가 이미지를 빌드하고, EC2는 업로드된 이미지 아카이브와 배포 스크립트만 받아 배포합니다.
+
 ### GitHub Secrets
 
 - `EC2_HOST`
@@ -98,8 +100,11 @@ uv run pytest -v
 - `OPENAI_MODEL`
 - `OPENAI_TIMEOUT_SECONDS`
 - `LOG_LEVEL`
+- `AUTO_CREATE_DB_SCHEMA`
+- `REQUIRE_POSTGIS`
 
 비어도 되는 값은 빈 문자열로 넣어도 됩니다. 다만 `DATABASE_URL`은 필수입니다.
+운영에서는 `AUTO_CREATE_DB_SCHEMA=false`, `REQUIRE_POSTGIS=true`를 권장합니다.
 
 ### EC2 선행 작업
 

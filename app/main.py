@@ -9,6 +9,7 @@ from fastapi import Depends, FastAPI
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy import text
+from sqlalchemy.exc import DBAPIError
 from sqlalchemy.orm import Session
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
@@ -28,11 +29,48 @@ setup_logging()
 logger = logging.getLogger(__name__)
 
 
+def should_auto_create_db_schema() -> bool:
+    return os.getenv("AUTO_CREATE_DB_SCHEMA", "false").lower() == "true"
+
+
+def should_require_postgis() -> bool:
+    return os.getenv("REQUIRE_POSTGIS", "true").lower() == "true"
+
+
+def get_postgis_version(db: Session) -> str:
+    result = db.execute(text("SELECT PostGIS_Version()")).scalar()
+    return str(result)
+
+
+def verify_required_postgis() -> None:
+    if not should_require_postgis():
+        logger.info("REQUIRE_POSTGIS=false, PostGIS 필수 검사를 건너뜁니다.")
+        return
+
+    try:
+        with Session(bind=engine) as db:
+            version = get_postgis_version(db)
+        logger.info("PostGIS 확인 완료: %s", version)
+    except DBAPIError as exc:
+        logger.exception("REQUIRE_POSTGIS=true 이지만 PostGIS를 사용할 수 없습니다.")
+        raise RuntimeError(
+            "REQUIRE_POSTGIS=true 이지만 대상 DB에 PostGIS extension이 없거나 사용할 수 없습니다."
+        ) from exc
+
+
 app = FastAPI(
     title="BridgeWork AI Server",
     version="0.1.0",
 )
-Base.metadata.create_all(bind=engine)
+
+verify_required_postgis()
+
+if should_auto_create_db_schema():
+    logger.warning("AUTO_CREATE_DB_SCHEMA=true, SQLAlchemy metadata.create_all()을 수행합니다.")
+    Base.metadata.create_all(bind=engine)
+else:
+    logger.info("운영 기본값에 따라 DB 스키마 자동 생성은 비활성화합니다.")
+
 app.add_exception_handler(RequestValidationError, validation_exception_handler)
 app.add_exception_handler(StarletteHTTPException, http_exception_handler)
 app.add_exception_handler(Exception, unhandled_exception_handler)
@@ -85,12 +123,19 @@ def postgis_health(db: Session = Depends(get_db)) -> dict[str, str]:
 
     logger.info("PostGIS Health check requested")
 
-    result = db.execute(text("SELECT PostGIS_Version()")).scalar()
+    try:
+        version = get_postgis_version(db)
+    except DBAPIError as exc:
+        return {
+            "status": "unavailable",
+            "postgis": "disabled",
+            "reason": str(exc.__cause__ or exc).strip(),
+        }
 
     return {
         "status": "ok",
         "postgis": "enabled",
-        "version": str(result),
+        "version": version,
     }
 
 

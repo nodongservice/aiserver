@@ -85,6 +85,8 @@ jobs:
           PROD_OPENAI_MODEL: ${{ secrets.OPENAI_MODEL }}
           PROD_OPENAI_TIMEOUT_SECONDS: ${{ secrets.OPENAI_TIMEOUT_SECONDS }}
           PROD_LOG_LEVEL: ${{ secrets.LOG_LEVEL }}
+          PROD_AUTO_CREATE_DB_SCHEMA: ${{ secrets.AUTO_CREATE_DB_SCHEMA }}
+          PROD_REQUIRE_POSTGIS: ${{ secrets.REQUIRE_POSTGIS }}
         run: |
           {
             echo "DATABASE_URL=${{ secrets.DATABASE_URL }}"
@@ -97,6 +99,8 @@ jobs:
             echo "OPENAI_MODEL=${PROD_OPENAI_MODEL:-gpt-5.4-nano}"
             echo "OPENAI_TIMEOUT_SECONDS=${PROD_OPENAI_TIMEOUT_SECONDS:-8}"
             echo "LOG_LEVEL=${PROD_LOG_LEVEL:-INFO}"
+            echo "AUTO_CREATE_DB_SCHEMA=${PROD_AUTO_CREATE_DB_SCHEMA:-false}"
+            echo "REQUIRE_POSTGIS=${PROD_REQUIRE_POSTGIS:-true}"
           } > .env.cicd.prod
 
       - name: Configure SSH
