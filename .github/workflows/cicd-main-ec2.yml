@@ -136,6 +136,9 @@ jobs:
           EC2_USER: ${{ secrets.EC2_USER }}
         run: |
           ssh -p "$EC2_PORT" "$EC2_USER@$EC2_HOST" "
+            docker container prune -f >/dev/null 2>&1 || true && \
+            docker image prune -af >/dev/null 2>&1 || true && \
+            docker builder prune -af >/dev/null 2>&1 || true && \
             chmod +x $REMOTE_APP_ROOT/deploy/deploy.sh && \
             gunzip -c $REMOTE_APP_ROOT/releases/$IMAGE_ARCHIVE | docker load && \
             IMAGE_URI=$IMAGE_URI ENV_FILE=$REMOTE_APP_ROOT/.env.prod bash $REMOTE_APP_ROOT/deploy/deploy.sh && \
