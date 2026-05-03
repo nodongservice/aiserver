@@ -8,6 +8,7 @@ from dotenv import load_dotenv
 from fastapi import Depends, FastAPI
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.openapi.utils import get_openapi
 from sqlalchemy import text
 from sqlalchemy.exc import DBAPIError
 from sqlalchemy.orm import Session
@@ -31,6 +32,12 @@ logger = logging.getLogger(__name__)
 
 def get_root_path() -> str:
     return os.getenv("ROOT_PATH", "/api/py").strip()
+
+
+def to_public_openapi_path(path: str) -> str:
+    if path.startswith("/api/"):
+        return path[4:]
+    return path
 
 
 def should_auto_create_db_schema() -> bool:
@@ -90,6 +97,26 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+
+def custom_openapi():
+    if app.openapi_schema:
+        return app.openapi_schema
+
+    openapi_schema = get_openapi(
+        title=app.title,
+        version=app.version,
+        routes=app.routes,
+        description=app.description,
+    )
+
+    paths = openapi_schema.get("paths", {})
+    openapi_schema["paths"] = {to_public_openapi_path(path): value for path, value in paths.items()}
+    app.openapi_schema = openapi_schema
+    return app.openapi_schema
+
+
+app.openapi = custom_openapi
 
 
 @app.get("/")
