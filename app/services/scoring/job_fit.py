@@ -16,15 +16,13 @@ def calculate_job_fit_score(profile: ScoreProfile, posting: JobPosting) -> int:
             ]
         )
     )
-    desired_job_text = normalize_text(" ".join(profile.desired_jobs))
-    skill_text = normalize_text(" ".join(profile.skills))
 
-    if desired_job_text and token_overlap_count(desired_job_text, job_text) > 0:
+    if list_token_overlap_count(profile.desired_jobs, job_text) > 0:
         score += 28
     elif profile.desired_jobs:
         score += 8
 
-    if skill_text and token_overlap_count(skill_text, job_text) > 0:
+    if list_token_overlap_count(profile.skills, job_text) > 0:
         score += 18
 
     if profile.education and posting.required_education:
@@ -44,7 +42,14 @@ def calculate_job_fit_score(profile: ScoreProfile, posting: JobPosting) -> int:
         overlap = token_overlap_count(" ".join(profile.licenses), posting.required_licenses)
         score += min(8, overlap * 4)
 
+    if profile.job_fit_statement and token_overlap_count(profile.job_fit_statement, job_text) > 0:
+        score += 4
+
     return clamp_score(score)
+
+
+def list_token_overlap_count(values: list[str], target: str) -> int:
+    return sum(token_overlap_count(value, target) for value in values)
 
 
 def is_education_compatible(profile_education: str, required_education: str) -> bool:

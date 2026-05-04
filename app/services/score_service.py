@@ -1,5 +1,6 @@
 from typing import Optional
 
+from fastapi import HTTPException
 from sqlalchemy.orm import Session
 
 from app.core.public_data_sources import KEPAD_RECRUITMENT, KEPAD_STANDARD_WORKPLACE, get_source_name
@@ -7,8 +8,10 @@ from app.repositories.scoring_repository import (
     AccessibilityEvidence,
     StandardWorkplaceMatch,
     find_accessibility_evidence,
+    find_all_recruitments_for_scoring,
     find_latest_recruitments,
     find_standard_workplace_match,
+    find_standard_workplace_matches,
     to_job_posting,
 )
 from app.schemas.score import (
@@ -32,6 +35,7 @@ from app.services.scoring.work_environment import calculate_work_environment_sco
 
 
 def score_quick_jobs(request: ScoreRequest, db: Optional[Session] = None) -> QuickScoreResponse:
+    validate_score_request(request, mode="quick")
     postings = get_latest_job_postings(db=db, limit=request.limit, offset=request.offset)
     results: list[QuickScoreResult] = []
 
@@ -55,17 +59,18 @@ def score_quick_jobs(request: ScoreRequest, db: Optional[Session] = None) -> Qui
             )
         )
 
-    results.sort(key=lambda result: result.job_fit_score, reverse=True)
     return QuickScoreResponse(results=results)
 
 
 def score_map_jobs(request: ScoreRequest, db: Optional[Session] = None) -> MapScoreResponse:
-    postings = get_latest_job_postings(db=db, limit=request.limit, offset=request.offset)
+    validate_score_request(request, mode="map")
+    postings = get_map_candidate_job_postings(db=db)
+    standard_workplaces = get_standard_workplaces(postings, db)
     results: list[MapScoreResult] = []
 
     for posting in postings:
-        standard_workplace = get_standard_workplace(posting, db)
-        accessibility = get_accessibility(posting, db)
+        standard_workplace = standard_workplaces.get(posting.job_post_id, StandardWorkplaceMatch(is_match=False))
+        accessibility = get_accessibility(request.profile, posting, db)
         score_detail = MapScoreDetail(
             job_fit_score=calculate_job_fit_score(request.profile, posting),
             work_condition_score=calculate_work_condition_score(request.profile, posting),
@@ -87,41 +92,111 @@ def score_map_jobs(request: ScoreRequest, db: Optional[Session] = None) -> MapSc
                 score_detail=score_detail,
                 total_score=total_score,
                 reasons=build_map_reasons(score_detail, standard_workplace, accessibility),
-                risk_factors=build_map_risks(posting, standard_workplace, accessibility),
+                risk_factors=build_map_risks(request.profile, posting, standard_workplace, accessibility),
                 evidence_items=evidence_items,
             )
         )
 
     results.sort(key=lambda result: result.total_score, reverse=True)
-    return MapScoreResponse(results=results)
+    return MapScoreResponse(results=results[request.offset : request.offset + request.limit])
 
 
 def get_latest_job_postings(db: Optional[Session], limit: int, offset: int = 0) -> list[JobPosting]:
-    if db is None or not hasattr(db, "query"):
+    if db is None:
         return []
-    try:
-        rows = find_latest_recruitments(db, limit=limit, offset=offset)
-    except Exception:
+    if not hasattr(db, "query"):
+        raise RuntimeError("스코어링 공고 조회에는 SQLAlchemy Session이 필요합니다.")
+    rows = find_latest_recruitments(db, limit=limit, offset=offset)
+    return [posting for row in rows if (posting := to_job_posting(row)) is not None]
+
+
+def get_all_job_postings(db: Optional[Session]) -> list[JobPosting]:
+    if db is None:
         return []
+    if not hasattr(db, "query"):
+        raise RuntimeError("스코어링 공고 조회에는 SQLAlchemy Session이 필요합니다.")
+    rows = find_all_recruitments_for_scoring(db)
+    return [posting for row in rows if (posting := to_job_posting(row)) is not None]
+
+
+def get_map_candidate_job_postings(db: Optional[Session]) -> list[JobPosting]:
+    if db is None:
+        return []
+    if not hasattr(db, "query"):
+        raise RuntimeError("스코어링 공고 조회에는 SQLAlchemy Session이 필요합니다.")
+    rows = find_all_recruitments_for_scoring(db)
     return [posting for row in rows if (posting := to_job_posting(row)) is not None]
 
 
 def get_standard_workplace(posting: JobPosting, db: Optional[Session]) -> StandardWorkplaceMatch:
-    if db is None or not hasattr(db, "query"):
+    if db is None:
         return StandardWorkplaceMatch(is_match=False)
-    try:
-        return find_standard_workplace_match(db, posting.company_name, posting.work_address)
-    except Exception:
-        return StandardWorkplaceMatch(is_match=False)
+    if not hasattr(db, "query"):
+        raise RuntimeError("표준사업장 조회에는 SQLAlchemy Session이 필요합니다.")
+    return find_standard_workplace_match(db, posting.company_name, posting.work_address)
 
 
-def get_accessibility(posting: JobPosting, db: Optional[Session]) -> AccessibilityEvidence:
-    if db is None or not hasattr(db, "query"):
+def get_standard_workplaces(
+    postings: list[JobPosting],
+    db: Optional[Session],
+) -> dict[int, StandardWorkplaceMatch]:
+    if db is None:
+        return {}
+    if not hasattr(db, "query"):
+        raise RuntimeError("표준사업장 조회에는 SQLAlchemy Session이 필요합니다.")
+    return find_standard_workplace_matches(db, postings)
+
+
+def get_accessibility(profile: ScoreProfile, posting: JobPosting, db: Optional[Session]) -> AccessibilityEvidence:
+    if db is None:
         return AccessibilityEvidence(0, 0, 0, 0, 0, 0, [])
-    try:
-        return find_accessibility_evidence(db, lat=posting.work_lat, lng=posting.work_lng)
-    except Exception:
-        return AccessibilityEvidence(0, 0, 0, 0, 0, 0, [])
+    if not hasattr(db, "query"):
+        raise RuntimeError("접근성 공공데이터 조회에는 SQLAlchemy Session이 필요합니다.")
+    radius_meters = 700
+    if profile.mobility_range_km is not None:
+        radius_meters = max(300, min(2000, profile.mobility_range_km * 1000))
+    return find_accessibility_evidence(db, lat=posting.work_lat, lng=posting.work_lng, radius_meters=radius_meters)
+
+
+def validate_score_request(request: ScoreRequest, *, mode: str) -> None:
+    profile = request.profile
+    required_fields = [
+        ("profile.desired_jobs", bool(profile.desired_jobs), "지원 직무는 필수입니다."),
+        ("profile.skills", bool(profile.skills), "보유 기술/역량은 필수입니다."),
+        ("profile.education", bool(profile.education), "최종 학력은 필수입니다."),
+        ("profile.career", bool(profile.career), "주요 경력은 필수입니다."),
+    ]
+
+    if mode == "map":
+        required_fields.extend(
+            [
+                ("profile.address", bool(profile.address), "거주지 상세 주소는 필수입니다."),
+                (
+                    "profile.available_employment_types",
+                    bool(profile.available_employment_types),
+                    "가능한 고용형태는 필수입니다.",
+                ),
+                ("profile.disability_types", bool(profile.disability_types), "장애 유형은 필수입니다."),
+                ("profile.disability_severity", bool(profile.disability_severity), "장애 정도는 필수입니다."),
+                (
+                    "profile.is_registered_disabled",
+                    profile.is_registered_disabled is not None,
+                    "장애인 등록 여부는 필수입니다.",
+                ),
+            ]
+        )
+
+    errors = [
+        {
+            "loc": field_path.split("."),
+            "msg": message,
+            "type": "value_error.missing",
+        }
+        for field_path, is_valid, message in required_fields
+        if not is_valid
+    ]
+    if errors:
+        raise HTTPException(status_code=422, detail=errors)
 
 
 def build_score_evidence_items(
@@ -148,6 +223,9 @@ def build_score_evidence_items(
                 description="장애인 표준사업장 데이터와 매칭됩니다.",
                 fields={
                     "company_name": standard_workplace.company_name,
+                    "business_no": standard_workplace.business_no,
+                    "registration_no": standard_workplace.registration_no,
+                    "cert_type": standard_workplace.cert_type,
                     "cert_status": standard_workplace.cert_status,
                     "auth_date": standard_workplace.auth_date,
                     "cancel_date": standard_workplace.cancel_date,
@@ -215,11 +293,14 @@ def build_common_job_risks(posting: JobPosting) -> list[str]:
 
 
 def build_map_risks(
+    profile: ScoreProfile,
     posting: JobPosting,
     standard_workplace: StandardWorkplaceMatch,
     accessibility: AccessibilityEvidence,
 ) -> list[str]:
     risks = build_common_job_risks(posting)
+    if profile.home_lat is None or profile.home_lng is None:
+        risks.append("거주지 좌표가 없어 거주지-근무지 거리 평가는 제외되었습니다.")
     if not standard_workplace.is_match:
         risks.append("장애인 표준사업장 여부는 현재 데이터에서 확인되지 않습니다.")
     if not accessibility.evidence_items:

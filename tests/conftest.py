@@ -14,7 +14,7 @@ def client():
 @pytest.fixture
 def override_get_db():
     def _override():
-        yield object()
+        yield None
 
     app.dependency_overrides[get_db] = _override
     try:

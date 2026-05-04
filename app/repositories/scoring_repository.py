@@ -1,19 +1,30 @@
-from dataclasses import dataclass
+import re
+from dataclasses import dataclass, field
+from datetime import datetime
 from typing import Optional
 
 from sqlalchemy import func
+from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
 
 from app.core.public_data_sources import (
+    KORAIL_WEEK_PERSON_FACILITIES,
     NATIONWIDE_BUS_STOP,
     NATIONWIDE_CROSSWALK,
     NATIONWIDE_TRAFFIC_LIGHT,
+    RAIL_WHEELCHAIR_LIFT,
+    RAIL_WHEELCHAIR_LIFT_MOVEMENT,
+    SEOUL_LOW_FLOOR_BUS_ROUTE_RETENTION,
     SEOUL_SUBWAY_ENTRANCE_LIFT,
+    SEOUL_TRANSPORT_WEAK_WHEELCHAIR_LIFT,
     SEOUL_WALKING_NETWORK,
+    SEOUL_WHEELCHAIR_LIFT,
+    SEOUL_WHEELCHAIR_RAMP_STATUS,
     TRANSPORT_SUPPORT_CENTER,
     get_source_name,
 )
 from app.db.models import (
+    AccessibilityGisFeature,
     PdKepadRecruitment,
     PdKepadStandardWorkplace,
     PdNationwideBusStop,
@@ -26,12 +37,40 @@ from app.db.models import (
 from app.schemas.score import JobPosting, ScoreEvidenceItem
 from app.utils.geo import calculate_haversine_distance_meters
 
+SPEC_ACCESSIBILITY_SOURCE_TYPES = [
+    TRANSPORT_SUPPORT_CENTER,
+    RAIL_WHEELCHAIR_LIFT,
+    RAIL_WHEELCHAIR_LIFT_MOVEMENT,
+    SEOUL_WHEELCHAIR_LIFT,
+    SEOUL_TRANSPORT_WEAK_WHEELCHAIR_LIFT,
+    SEOUL_SUBWAY_ENTRANCE_LIFT,
+    SEOUL_WALKING_NETWORK,
+    NATIONWIDE_BUS_STOP,
+    NATIONWIDE_TRAFFIC_LIGHT,
+    NATIONWIDE_CROSSWALK,
+    KORAIL_WEEK_PERSON_FACILITIES,
+    SEOUL_WHEELCHAIR_RAMP_STATUS,
+    SEOUL_LOW_FLOOR_BUS_ROUTE_RETENTION,
+]
+
+NORMALIZED_ACCESSIBILITY_SOURCE_TYPES = {
+    TRANSPORT_SUPPORT_CENTER,
+    SEOUL_SUBWAY_ENTRANCE_LIFT,
+    SEOUL_WALKING_NETWORK,
+    NATIONWIDE_BUS_STOP,
+    NATIONWIDE_TRAFFIC_LIGHT,
+    NATIONWIDE_CROSSWALK,
+}
+
 
 @dataclass(frozen=True)
 class StandardWorkplaceMatch:
     is_match: bool
     record_id: Optional[int] = None
     company_name: Optional[str] = None
+    business_no: Optional[str] = None
+    registration_no: Optional[str] = None
+    cert_type: Optional[str] = None
     cert_status: Optional[str] = None
     auth_date: Optional[str] = None
     cancel_date: Optional[str] = None
@@ -46,21 +85,26 @@ class AccessibilityEvidence:
     subway_entrance_lift_count: int
     walking_network_count: int
     evidence_items: list[ScoreEvidenceItem]
+    source_counts: dict[str, int] = field(default_factory=dict)
+    transport_support_vehicle_count: int = 0
+    transport_support_inside_area_count: int = 0
+    traffic_light_accessible_signal_count: int = 0
+    crosswalk_accessible_feature_count: int = 0
+    walking_network_crosswalk_count: int = 0
+    walking_network_barrier_count: int = 0
+    generic_accessibility_quality_score: int = 0
 
 
 def find_latest_recruitments(db: Session, limit: int, offset: int = 0) -> list[PdKepadRecruitment]:
-    return (
-        db.query(PdKepadRecruitment)
-        .order_by(
-            PdKepadRecruitment.offerreg_dt.desc().nullslast(),
-            PdKepadRecruitment.reg_dt.desc().nullslast(),
-            PdKepadRecruitment.raw_fetched_at.desc().nullslast(),
-            PdKepadRecruitment.id.desc(),
-        )
-        .offset(offset)
-        .limit(limit)
-        .all()
-    )
+    rows = db.query(PdKepadRecruitment).all()
+    return sort_recruitments_by_latest(rows)[offset : offset + limit]
+
+
+def find_all_recruitments_for_scoring(db: Session, limit: Optional[int] = None) -> list[PdKepadRecruitment]:
+    rows = sort_recruitments_by_latest(db.query(PdKepadRecruitment).all())
+    if limit is not None:
+        return rows[:limit]
+    return rows
 
 
 def to_job_posting(row: PdKepadRecruitment) -> Optional[JobPosting]:
@@ -104,34 +148,105 @@ def find_standard_workplace_match(
     address: Optional[str] = None,
 ) -> StandardWorkplaceMatch:
     normalized_name = normalize_company_text(company_name)
-    query = db.query(PdKepadStandardWorkplace)
-    candidates = query.limit(10000).all()
+    if not normalized_name:
+        return StandardWorkplaceMatch(is_match=False)
 
+    candidates = (
+        db.query(PdKepadStandardWorkplace).filter(PdKepadStandardWorkplace.comp_name.isnot(None)).limit(10000).all()
+    )
+    exact_matches = []
+    partial_matches = []
     for row in candidates:
-        if not row.comp_name:
+        if not row.comp_name or not is_active_standard_workplace(row):
             continue
         row_name = normalize_company_text(row.comp_name)
-        if row_name == normalized_name or row_name in normalized_name or normalized_name in row_name:
-            return StandardWorkplaceMatch(
-                is_match=True,
-                record_id=row.id,
-                company_name=row.comp_name,
-                cert_status=row.comp_cert,
-                auth_date=row.auth_date,
-                cancel_date=row.cancel_date,
-            )
+        if row_name == normalized_name:
+            exact_matches.append(row)
+        elif (
+            len(row_name) >= 4
+            and len(normalized_name) >= 4
+            and (row_name in normalized_name or normalized_name in row_name)
+        ):
+            partial_matches.append(row)
 
-    if address:
+    if exact_matches:
+        return to_standard_workplace_match(sorted(exact_matches, key=_standard_workplace_priority_key, reverse=True)[0])
+
+    if partial_matches:
+        return to_standard_workplace_match(sorted(partial_matches, key=_standard_workplace_priority_key, reverse=True)[0])
+
+    if address and len(address.strip()) >= 12:
         short_address = address[:12]
-        row = db.query(PdKepadStandardWorkplace).filter(PdKepadStandardWorkplace.address.contains(short_address)).first()
-        if row:
-            return StandardWorkplaceMatch(
-                is_match=True,
-                record_id=row.id,
-                company_name=row.comp_name,
-                cert_status=row.comp_cert,
-                auth_date=row.auth_date,
-                cancel_date=row.cancel_date,
+        row = (
+            db.query(PdKepadStandardWorkplace)
+            .filter(PdKepadStandardWorkplace.comp_name.isnot(None))
+            .filter(PdKepadStandardWorkplace.address.contains(short_address))
+            .filter(PdKepadStandardWorkplace.comp_name.contains(company_name[:2]))
+            .first()
+        )
+        if row and is_active_standard_workplace(row):
+            return to_standard_workplace_match(row)
+
+    return StandardWorkplaceMatch(is_match=False)
+
+
+def find_standard_workplace_matches(
+    db: Session,
+    postings: list[JobPosting],
+) -> dict[int, StandardWorkplaceMatch]:
+    if not postings:
+        return {}
+
+    candidates = (
+        db.query(PdKepadStandardWorkplace).filter(PdKepadStandardWorkplace.comp_name.isnot(None)).limit(10000).all()
+    )
+    return {posting.job_post_id: match_standard_workplace_from_candidates(posting, candidates) for posting in postings}
+
+
+def match_standard_workplace_from_candidates(
+    posting: JobPosting,
+    candidates: list[PdKepadStandardWorkplace],
+) -> StandardWorkplaceMatch:
+    normalized_name = normalize_company_text(posting.company_name)
+    if not normalized_name:
+        return StandardWorkplaceMatch(is_match=False)
+
+    exact_matches = []
+    partial_matches = []
+    for row in candidates:
+        if not row.comp_name or not is_active_standard_workplace(row):
+            continue
+        row_name = normalize_company_text(row.comp_name)
+        if row_name == normalized_name:
+            exact_matches.append(row)
+        elif (
+            len(row_name) >= 4
+            and len(normalized_name) >= 4
+            and (row_name in normalized_name or normalized_name in row_name)
+        ):
+            partial_matches.append(row)
+
+    if exact_matches:
+        return to_standard_workplace_match(sorted(exact_matches, key=_standard_workplace_priority_key, reverse=True)[0])
+
+    if partial_matches:
+        return to_standard_workplace_match(sorted(partial_matches, key=_standard_workplace_priority_key, reverse=True)[0])
+
+    address = posting.work_address
+    if address and len(address.strip()) >= 12:
+        short_address = address[:12]
+        address_matches = [
+            row
+            for row in candidates
+            if row.address
+            and row.comp_name
+            and is_active_standard_workplace(row)
+            and short_address in row.address
+            and posting.company_name[:2] in row.comp_name
+        ]
+        if address_matches:
+            return to_standard_workplace_match(
+                sorted(address_matches, key=_standard_workplace_priority_key, reverse=True)[0]
             )
 
     return StandardWorkplaceMatch(is_match=False)
@@ -197,6 +312,13 @@ def find_accessibility_evidence(
         radius_meters=radius_meters,
         limit=5,
     )
+    generic_gis_features = _nearby_accessibility_gis_features(
+        db,
+        lat=lat,
+        lng=lng,
+        radius_meters=radius_meters,
+        limit_per_source=5,
+    )
 
     evidence_items: list[ScoreEvidenceItem] = []
     evidence_items.extend(
@@ -205,6 +327,7 @@ def find_accessibility_evidence(
             "pd_nationwide_bus_stop",
             bus_stops,
             name_attr="stop_name",
+            field_attrs=["city_name", "latitude", "longitude"],
             description_prefix="근무지 주변 버스정류장",
         )
     )
@@ -214,6 +337,7 @@ def find_accessibility_evidence(
             "pd_nationwide_crosswalk",
             crosswalks,
             name_attr="crslk_manage_no",
+            field_attrs=["ftpth_lower_yn", "brll_blck_yn", "sond_sgngnr_yn", "tfclght_yn"],
             description_prefix="근무지 주변 횡단보도",
         )
     )
@@ -223,6 +347,7 @@ def find_accessibility_evidence(
             "pd_nationwide_traffic_light",
             traffic_lights,
             name_attr="tfclght_manage_no",
+            field_attrs=["fnctng_sgngnr_yn", "sond_sgngnr_yn", "remndr_idct_yn"],
             description_prefix="근무지 주변 신호등",
         )
     )
@@ -232,6 +357,7 @@ def find_accessibility_evidence(
             "pd_transport_support_center",
             centers,
             name_attr="tfcwker_mvmn_cnter_nm",
+            field_attrs=["lift_vhcle_co", "slope_vhcle_co", "inside_oprat_area"],
             description_prefix="교통약자 이동지원센터",
         )
     )
@@ -251,6 +377,39 @@ def find_accessibility_evidence(
             description_prefix="서울 보행 네트워크",
         )
     )
+    evidence_items.extend(_gis_feature_evidence_items(generic_gis_features))
+
+    source_counts = {source_type: 0 for source_type in SPEC_ACCESSIBILITY_SOURCE_TYPES}
+    source_counts[NATIONWIDE_BUS_STOP] = len(bus_stops)
+    source_counts[NATIONWIDE_CROSSWALK] = len(crosswalks)
+    source_counts[NATIONWIDE_TRAFFIC_LIGHT] = len(traffic_lights)
+    source_counts[TRANSPORT_SUPPORT_CENTER] = len(centers)
+    source_counts[SEOUL_SUBWAY_ENTRANCE_LIFT] = len(entrance_lifts)
+    source_counts[SEOUL_WALKING_NETWORK] = len(walking_links)
+
+    for source_type, rows in generic_gis_features.items():
+        source_counts[source_type] = source_counts.get(source_type, 0) + len(rows)
+
+    transport_support_vehicle_count = sum((row.lift_vhcle_co or 0) + (row.slope_vhcle_co or 0) for row, _ in centers)
+    transport_support_inside_area_count = sum(1 for row, _ in centers if row.inside_oprat_area)
+    traffic_light_accessible_signal_count = sum(
+        int(is_yes_like(row.fnctng_sgngnr_yn))
+        + int(is_yes_like(row.sond_sgngnr_yn))
+        + int(is_yes_like(row.remndr_idct_yn))
+        for row, _ in traffic_lights
+    )
+    crosswalk_accessible_feature_count = sum(
+        int(is_yes_like(row.ftpth_lower_yn))
+        + int(is_yes_like(row.brll_blck_yn))
+        + int(is_yes_like(row.sond_sgngnr_yn))
+        + int(is_yes_like(row.tfclght_yn))
+        for row, _ in crosswalks
+    )
+    walking_network_crosswalk_count = sum(1 for row, _ in walking_links if is_yes_like(row.crswk))
+    walking_network_barrier_count = sum(
+        int(is_yes_like(row.ovrp)) + int(is_yes_like(row.tnl)) + int(is_yes_like(row.brg)) for row, _ in walking_links
+    )
+    generic_quality_score = calculate_generic_accessibility_quality_score(generic_gis_features)
 
     return AccessibilityEvidence(
         bus_stop_count=len(bus_stops),
@@ -260,7 +419,43 @@ def find_accessibility_evidence(
         subway_entrance_lift_count=len(entrance_lifts),
         walking_network_count=len(walking_links),
         evidence_items=evidence_items,
+        source_counts=source_counts,
+        transport_support_vehicle_count=transport_support_vehicle_count,
+        transport_support_inside_area_count=transport_support_inside_area_count,
+        traffic_light_accessible_signal_count=traffic_light_accessible_signal_count,
+        crosswalk_accessible_feature_count=crosswalk_accessible_feature_count,
+        walking_network_crosswalk_count=walking_network_crosswalk_count,
+        walking_network_barrier_count=walking_network_barrier_count,
+        generic_accessibility_quality_score=generic_quality_score,
     )
+
+
+def to_standard_workplace_match(row: PdKepadStandardWorkplace) -> StandardWorkplaceMatch:
+    is_match = is_active_standard_workplace(row)
+    return StandardWorkplaceMatch(
+        is_match=is_match,
+        record_id=row.id,
+        company_name=row.comp_name,
+        business_no=row.comp_biz_no,
+        registration_no=row.comp_reg_no,
+        cert_type=row.comp_type_nm,
+        cert_status=row.comp_cert,
+        auth_date=row.auth_date,
+        cancel_date=row.cancel_date,
+    )
+
+
+def _standard_workplace_priority_key(row: PdKepadStandardWorkplace) -> tuple[int, int, str]:
+    active_score = 1 if is_active_standard_workplace(row) else 0
+    certified_score = 1 if row.comp_cert else 0
+    return active_score, certified_score, row.auth_date or ""
+
+
+def is_active_standard_workplace(row: PdKepadStandardWorkplace) -> bool:
+    if row.cancel_date:
+        return False
+    cert_status = row.comp_cert or ""
+    return "취소" not in cert_status and "만료" not in cert_status
 
 
 def normalize_company_text(value: str) -> str:
@@ -269,6 +464,90 @@ def normalize_company_text(value: str) -> str:
     for token in removable:
         normalized = normalized.replace(token, "")
     return normalized
+
+
+def sort_recruitments_by_latest(rows: list[PdKepadRecruitment]) -> list[PdKepadRecruitment]:
+    return sorted(rows, key=_recruitment_latest_sort_key, reverse=True)
+
+
+def _recruitment_latest_sort_key(row: PdKepadRecruitment) -> tuple[datetime, datetime, datetime, int]:
+    return (
+        parse_public_date(row.offerreg_dt),
+        parse_public_date(row.reg_dt),
+        row.raw_fetched_at or datetime.min,
+        row.id or 0,
+    )
+
+
+def parse_public_date(value: Optional[str]) -> datetime:
+    if not value:
+        return datetime.min
+    parts = [int(part) for part in re.findall(r"\d+", value)]
+    if len(parts) >= 3 and parts[0] >= 1900:
+        try:
+            return datetime(parts[0], parts[1], parts[2])
+        except ValueError:
+            pass
+    digits = re.sub(r"[^0-9]", "", value)
+    candidates = []
+    if len(digits) >= 8:
+        candidates.append((digits[:8], "%Y%m%d"))
+    if len(digits) >= 6:
+        candidates.append((digits[:6], "%Y%m"))
+    if len(digits) >= 4:
+        candidates.append((digits[:4], "%Y"))
+    for candidate, fmt in candidates:
+        try:
+            return datetime.strptime(candidate, fmt)
+        except ValueError:
+            continue
+    return datetime.min
+
+
+def is_yes_like(value: Optional[str]) -> bool:
+    if value is None:
+        return False
+    normalized = str(value).strip().lower()
+    yes_values = {"y", "yes", "true", "1", "유", "있음", "운영", "정상", "가능", "설치"}
+    return normalized in yes_values or normalized.startswith("y")
+
+
+def calculate_generic_accessibility_quality_score(
+    grouped_rows: dict[str, list[tuple[AccessibilityGisFeature, float]]],
+) -> int:
+    score = 0
+    for source_type, rows in grouped_rows.items():
+        for row, _ in rows:
+            properties = row.properties or {}
+            if source_type in {RAIL_WHEELCHAIR_LIFT, SEOUL_WHEELCHAIR_LIFT, SEOUL_TRANSPORT_WEAK_WHEELCHAIR_LIFT}:
+                score += _score_yes_properties(properties, ["oprtngSitu", "pwdbs_slwy_estnc"])
+                score += _score_numeric_properties(properties, ["whlch_liftt_cnt", "liftCount"], max_points=4)
+            elif source_type == RAIL_WHEELCHAIR_LIFT_MOVEMENT:
+                score += 2 if properties.get("mvDst") else 0
+            elif source_type == KORAIL_WEEK_PERSON_FACILITIES:
+                score += _score_yes_properties(properties, ["pwdbs_slwy_estnc", "pwdbs_tolt_estnc"])
+                score += _score_numeric_properties(properties, ["whlch_liftt_cnt"], max_points=4)
+            elif source_type == SEOUL_WHEELCHAIR_RAMP_STATUS:
+                score += 3
+            elif source_type == SEOUL_LOW_FLOOR_BUS_ROUTE_RETENTION:
+                score += _score_numeric_properties(properties, ["저상보유율", "lowFloorBusRate"], max_points=5)
+    return score
+
+
+def _score_yes_properties(properties: dict, keys: list[str]) -> int:
+    return sum(3 for key in keys if is_yes_like(properties.get(key)))
+
+
+def _score_numeric_properties(properties: dict, keys: list[str], *, max_points: int) -> int:
+    total = 0
+    for key in keys:
+        value = properties.get(key)
+        if value is None:
+            continue
+        match = re.search(r"\d+(?:\.\d+)?", str(value))
+        if match:
+            total += min(max_points, round(float(match.group(0)) / 10) or 1)
+    return total
 
 
 def _nearby_point_rows(query, model, *, lat: float, lng: float, radius_meters: float, limit: int):
@@ -292,7 +571,9 @@ def _nearby_point_rows(query, model, *, lat: float, lng: float, radius_meters: f
 
 def _nearby_wkt_rows(db: Session, model, wkt_attr: str, *, lat: float, lng: float, radius_meters: float, limit: int):
     column = getattr(model, wkt_attr)
-    rows = db.query(model).filter(column.isnot(None)).limit(500).all()
+    rows = _postgis_nearby_wkt_rows(db, model, column, lat=lat, lng=lng, radius_meters=radius_meters)
+    if rows is None:
+        rows = db.query(model).filter(column.isnot(None)).all()
     with_distance = []
     for row in rows:
         point = extract_first_wkt_point(getattr(row, wkt_attr))
@@ -306,6 +587,67 @@ def _nearby_wkt_rows(db: Session, model, wkt_attr: str, *, lat: float, lng: floa
             with_distance.append((row, distance))
     with_distance.sort(key=lambda item: item[1])
     return with_distance[:limit]
+
+
+def _postgis_nearby_wkt_rows(db: Session, model, column, *, lat: float, lng: float, radius_meters: float):
+    bind = db.get_bind()
+    if bind is None or bind.dialect.name != "postgresql":
+        return None
+
+    point = func.ST_SetSRID(func.ST_MakePoint(lng, lat), 4326)
+    row_geom = func.ST_SetSRID(func.ST_GeomFromText(column), 4326)
+    try:
+        return (
+            db.query(model)
+            .filter(column.isnot(None))
+            .filter(func.ST_DWithin(func.Geography(row_geom), func.Geography(point), radius_meters))
+            .order_by(func.ST_Distance(func.Geography(row_geom), func.Geography(point)))
+            .limit(200)
+            .all()
+        )
+    except SQLAlchemyError:
+        return None
+
+
+def _nearby_accessibility_gis_features(
+    db: Session,
+    *,
+    lat: float,
+    lng: float,
+    radius_meters: float,
+    limit_per_source: int,
+) -> dict[str, list[tuple[AccessibilityGisFeature, float]]]:
+    source_types = [
+        source_type
+        for source_type in SPEC_ACCESSIBILITY_SOURCE_TYPES
+        if source_type not in NORMALIZED_ACCESSIBILITY_SOURCE_TYPES
+    ]
+    if not source_types:
+        return {}
+
+    rows = (
+        db.query(AccessibilityGisFeature)
+        .filter(AccessibilityGisFeature.source_type.in_(source_types))
+        .filter(AccessibilityGisFeature.is_active.is_(True))
+        .filter(AccessibilityGisFeature.latitude.isnot(None))
+        .filter(AccessibilityGisFeature.longitude.isnot(None))
+        .order_by(func.abs(AccessibilityGisFeature.latitude - lat) + func.abs(AccessibilityGisFeature.longitude - lng))
+        .limit(2000)
+        .all()
+    )
+
+    grouped: dict[str, list[tuple[AccessibilityGisFeature, float]]] = {}
+    for row in rows:
+        distance = calculate_haversine_distance_meters(lat, lng, row.latitude, row.longitude)
+        if distance is None or distance > radius_meters:
+            continue
+        grouped.setdefault(row.source_type, []).append((row, distance))
+
+    for source_type, items in grouped.items():
+        items.sort(key=lambda item: item[1])
+        grouped[source_type] = items[:limit_per_source]
+
+    return grouped
 
 
 def extract_first_wkt_point(wkt: Optional[str]) -> Optional[tuple[float, float]]:
@@ -327,10 +669,21 @@ def extract_first_wkt_point(wkt: Optional[str]) -> Optional[tuple[float, float]]
         return None
 
 
-def _point_evidence_items(source_type: str, source_table: str, rows, *, name_attr: str, description_prefix: str):
+def _point_evidence_items(
+    source_type: str,
+    source_table: str,
+    rows,
+    *,
+    name_attr: str,
+    description_prefix: str,
+    field_attrs: Optional[list[str]] = None,
+):
     items: list[ScoreEvidenceItem] = []
     for row, distance in rows:
         name = getattr(row, name_attr, None)
+        fields = {"name": name} if name else {}
+        for attr in field_attrs or []:
+            fields[attr] = getattr(row, attr, None)
         items.append(
             ScoreEvidenceItem(
                 source_type=source_type,
@@ -339,7 +692,7 @@ def _point_evidence_items(source_type: str, source_table: str, rows, *, name_att
                 record_id=row.id,
                 distance_meters=round(distance, 1),
                 description=f"{description_prefix} 정보가 확인됩니다.",
-                fields={"name": name} if name else {},
+                fields=fields,
             )
         )
     return items
@@ -359,7 +712,36 @@ def _wkt_evidence_items(source_type: str, source_table: str, rows, *, descriptio
                 fields={
                     "station_name": getattr(row, "sbwy_stn_nm", None),
                     "district": getattr(row, "sgg_nm", None),
+                    "lnkg_len": getattr(row, "lnkg_len", None),
+                    "crswk": getattr(row, "crswk", None),
+                    "ovrp": getattr(row, "ovrp", None),
+                    "tnl": getattr(row, "tnl", None),
+                    "brg": getattr(row, "brg", None),
+                    "bldg": getattr(row, "bldg", None),
                 },
             )
         )
+    return items
+
+
+def _gis_feature_evidence_items(grouped_rows: dict[str, list[tuple[AccessibilityGisFeature, float]]]):
+    items: list[ScoreEvidenceItem] = []
+    for source_type, rows in grouped_rows.items():
+        for row, distance in rows:
+            items.append(
+                ScoreEvidenceItem(
+                    source_type=source_type,
+                    source_name=get_source_name(source_type),
+                    source_table="public_accessibility_gis_feature",
+                    record_id=row.public_data_record_id,
+                    distance_meters=round(distance, 1),
+                    description=f"{get_source_name(source_type)} 근접 정보가 확인됩니다.",
+                    fields={
+                        "feature_id": row.id,
+                        "feature_type": row.feature_type,
+                        "name": row.name,
+                        **(row.properties or {}),
+                    },
+                )
+            )
     return items
