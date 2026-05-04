@@ -124,6 +124,43 @@ EC2에는 Git 저장소를 clone하지 않습니다. GitHub hosted runner가 이
 | `db` | DB 연결 |
 | `core` | 환경변수, 로깅 |
 
+## FastAPI 내부 API
+
+Spring Backend가 호출하는 scoring v2 API는 다음과 같습니다.
+
+| API | 역할 |
+| --- | --- |
+| `POST /ai/v1/score/quick` | 기능 2. 최신 공고를 조회하고 직무 적합도만 계산 |
+| `POST /ai/v1/score/map` | 기능 3. 공고/공공데이터를 조회하고 6개 항목 동일비중 종합 점수 계산 |
+| `POST /ai/v1/explain/recommendation` | 이미 계산된 점수/근거를 추천 사유, 주의사항, 체크리스트로 변환 |
+
+구조 원칙:
+
+- 프론트엔드는 FastAPI를 직접 호출하지 않습니다.
+- Spring은 선택된 프로필 1개만 FastAPI에 전달합니다.
+- FastAPI는 Spring DB의 `pd_*` 정규화 테이블을 직접 조회합니다.
+- 점수는 룰 기반이며 LLM은 점수를 직접 결정하지 않습니다.
+- 데이터가 부족한 항목은 확정하지 않고 `추가 확인 필요`로 응답합니다.
+
+## 스코어링 DB 조회 기준
+
+주요 조회 테이블:
+
+| 테이블 | 용도 |
+| --- | --- |
+| `pd_kepad_recruitment` | 공고 조회, quick/map scoring의 기본 공고 소스 |
+| `pd_kepad_standard_workplace` | 장애인 표준사업장 매칭 |
+| `pd_transport_support_center` | 접근성 요약 점수 근거 |
+| `pd_nationwide_bus_stop` | 접근성 요약 점수 근거 |
+| `pd_nationwide_crosswalk` | 접근성 요약 점수 근거 |
+| `pd_nationwide_traffic_light` | 접근성 요약 점수 근거 |
+| `pd_seoul_subway_entrance_lift` | 접근성 요약 점수 근거 |
+| `pd_seoul_walking_network` | 접근성 요약 점수 근거 |
+| `pd_kepad_support_agency` | 근로지원인 수행기관 지도 레이어용, 점수 미반영 |
+
+`pd_kepad_recruitment`의 근무지 좌표는 `geo_latitude`, `geo_longitude`를 사용합니다.
+`pd_kepad_support_agency`의 위치도 `geo_latitude`, `geo_longitude`를 사용하지만 기능정의서 기준 점수에는 반영하지 않습니다.
+
 ## 사용데이터 목록 
 | SourceType | 데이터명 | 안내 링크 | 실제 호출 Endpoint | 인증키 | 주요 파라미터 |
 |---|---|---|---|---|---|
@@ -140,6 +177,8 @@ EC2에는 Git 저장소를 clone하지 않습니다. GitHub hosted runner가 이
 | `SEOUL_SUBWAY_ENTRANCE_LIFT` | 서울시 지하철 출입구 리프트 위치정보 | [OA-21211](https://data.seoul.go.kr/dataList/OA-21211/S/1/datasetView.do) | `http://openapi.seoul.go.kr:8088/{API_KEY}/json/tbTraficEntrcLft/{start}/{end}` | data.seoul.go.kr 키 | `start/end(페이지 범위)`, `max rows=1000` |
 | `SEOUL_WALKING_NETWORK` | 서울특별시_자치구별 도보 네트워크 공간정보 | [OA-21208](https://data.seoul.go.kr/dataList/OA-21208/S/1/datasetView.do) | `http://openapi.seoul.go.kr:8088/{API_KEY}/json/TbTraficWlkNet/{start}/{end}` | data.seoul.go.kr 키 | `start/end(페이지 범위)`, `max rows=1000` |
 | `NATIONWIDE_BUS_STOP` | 국토교통부_전국 버스정류장 위치정보 | [15067528](https://www.data.go.kr/data/15067528/fileData.do#tab-layer-openapi) | `https://api.odcloud.kr/api/{publicDataPk}/v1/{publicDataDetailPk}` (fileData 페이지에서 식별자 추출 후 호출) | data.go.kr 서비스키 | `serviceKey`, `page`, `perPage(max=10000)`, `returnType=JSON` |
+| `SEOUL_WHEELCHAIR_RAMP_STATUS` | 서울교통공사_휠체어경사로 설치 현황 | [OA-13116](https://data.seoul.go.kr/dataList/OA-13116/S/1/datasetView.do) | `https://datafile.seoul.go.kr/bigfile/iot/inf/nio_download.do` | 없음 | 파일목록 최신 수정일 1건 |
+| `SEOUL_LOW_FLOOR_BUS_ROUTE_RETENTION` | 서울시 저상버스 도입 노선 및 노선별 보유율 | [OA-22229](https://data.seoul.go.kr/dataList/OA-22229/F/1/datasetView.do) | `https://datafile.seoul.go.kr/bigfile/iot/inf/nio_download.do` | 없음 | 파일목록 최신 수정일 1건 |
 | `NATIONWIDE_TRAFFIC_LIGHT` | 전국신호등표준데이터 | [15028198](https://www.data.go.kr/data/15028198/standard.do#) | `https://api.data.go.kr/openapi/tn_pubr_public_traffic_light_api` | data.go.kr 서비스키 | `serviceKey`, `pageNo`, `numOfRows(max=1000)`, `type=xml` |
 | `NATIONWIDE_CROSSWALK` | 전국횡단보도표준데이터 | [15028201](https://www.data.go.kr/data/15028201/standard.do) | `https://api.data.go.kr/openapi/tn_pubr_public_crosswalk_api` | data.go.kr 서비스키 | `serviceKey`, `pageNo`, `numOfRows(max=1000)`, `type=json` |
 | `VOCATIONAL_TRAINING` | 한국고용정보원_직업훈련_국민내일배움카드 훈련과정 | [work24 000004](https://www.work24.go.kr/cm/e/a/0110/selectOpenApiSvcInfo.do?apiSvcId=&upprApiSvcId=&fullApiSvcId=000000000000000000000000000004) | `https://www.work24.go.kr/cm/openApi/call/hr/callOpenApiSvcInfo310L01.do` | Work24 인증키 | `authKey`, `returnType=XML`, `pageNum`, `pageSize(max=100)` |

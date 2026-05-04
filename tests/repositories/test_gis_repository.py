@@ -12,7 +12,7 @@ def test_get_accessibility_gis_feature_returns_dummy_without_db():
     """
     db 세션 없이 호출하면 기존 더미 GIS feature를 반환해야 한다.
 
-    이 테스트는 scoring_service.py의 기존 동작이 깨지지 않는지 확인한다.
+    이 테스트는 GIS fallback 동작이 깨지지 않는지 확인한다.
     """
     job = JobCandidate(
         job_post_id=101,

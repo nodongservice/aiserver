@@ -5,13 +5,10 @@ def test_validation_error_response_format(client):
     Spring 연동용 공통 에러 포맷으로 반환되는지 확인한다.
     """
     response = client.post(
-        "/api/v1/explanations/accessibility",
+        "/ai/v1/score/quick",
         json={
-            # job_post_id, company_name, job_title,
-            # accessibility_score, accessibility_grade,
-            # score_detail 등이 누락된 잘못된 요청
-            "positive_factors": [],
-            "risk_factors": [],
+            # profile 필드가 누락된 잘못된 요청
+            "limit": 10,
         },
         headers={
             "X-Request-Id": "test-request-id-001",

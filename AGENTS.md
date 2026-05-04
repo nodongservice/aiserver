@@ -10,7 +10,7 @@ BridgeWork FastAPI AI/GIS Service는 장애인 구직자의 조건을 접근성 
 
 전체 서비스 흐름은 다음과 같다.
 
-Next.js Frontend → Spring Backend → FastAPI AI/GIS Service → PostgreSQL/PostGIS + LLM Server
+React Frontend → Spring Backend → FastAPI AI/GIS Service → PostgreSQL/PostGIS + LLM Server
 
 FastAPI는 프론트에서 직접 호출하지 않고, Spring Backend의 내부 API 호출을 받아 분석 결과를 반환하는 것을 기본으로 한다.
 

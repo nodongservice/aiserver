@@ -53,7 +53,6 @@ class UserAccessibilityCondition(BaseModel):
     commute_limit_minutes: int
 
     # 표준 장애 유형 태그
-    # Phase 2의 /api/v1/tags/normalize 결과를 그대로 넣는 것을 권장합니다.
     # 예: ["wheelchair"], ["low_vision"], ["blind"], ["hearing"], ["unknown"]
     disability_types: List[str] = Field(default_factory=list)
 
@@ -119,21 +118,6 @@ class JobCandidate(BaseModel):
     support_tags: List[str] = Field(default_factory=list)
 
 
-class AccessibilityAnalyzeRequest(BaseModel):
-    """
-    접근성 분석 요청 전체 구조입니다.
-
-    Spring이 공고 후보를 조회한 뒤,
-    사용자 조건과 공고 목록을 묶어서 FastAPI에 전달합니다.
-    """
-
-    # 분석 대상 사용자 조건
-    user: UserAccessibilityCondition
-
-    # 분석 대상 공고 후보 목록
-    jobs: List[JobCandidate]
-
-
 class ScoreDetail(BaseModel):
     """
     접근성 점수의 세부 항목입니다.
@@ -194,51 +178,3 @@ class EvidenceItem(BaseModel):
     # 원본 레코드 ID
     # Spring의 public_data_record.id 또는 FastAPI/GIS 테이블 ID를 넣을 수 있습니다.
     record_id: Optional[int] = None
-
-
-class AccessibilityAnalyzeResult(BaseModel):
-    """
-    공고 1개에 대한 접근성 분석 결과입니다.
-    """
-
-    # 분석 대상 공고 ID
-    job_post_id: int
-
-    # 분석 대상 기업 ID
-    company_id: int
-
-    # 최종 접근성 점수
-    # 0~100 범위 사용을 권장합니다.
-    accessibility_score: int
-
-    # 접근성 등급
-    # GOOD: 접근성 양호
-    # CAUTION: 일부 확인 필요
-    # RISK: 접근성 제약 가능성 높음
-    accessibility_grade: str
-
-    # 점수 상세
-    score_detail: ScoreDetail
-
-    # 긍정 요인 목록
-    # 예: "반경 500m 이내 지하철역이 있습니다."
-    positive_factors: List[str]
-
-    # 위험 요인 목록
-    # 예: "사업장 내부 장애인 화장실 정보는 확인되지 않았습니다."
-    risk_factors: List[str]
-
-    # 점수 계산 근거 데이터 목록
-    evidence_items: List[EvidenceItem] = Field(default_factory=list)
-
-    # 사용자에게 보여줄 한 줄 요약
-    summary: str
-
-
-class AccessibilityAnalyzeResponse(BaseModel):
-    """
-    접근성 분석 응답 전체 구조입니다.
-    """
-
-    # 공고별 분석 결과 목록
-    results: List[AccessibilityAnalyzeResult]
