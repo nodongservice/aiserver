@@ -120,16 +120,58 @@ jobs:
           EC2_USER: ${{ secrets.EC2_USER }}
           EC2_SSH_PRIVATE_KEY: ${{ secrets.EC2_SSH_PRIVATE_KEY }}
         run: |
+          EC2_HOST_TRIMMED="$(printf '%s' "$EC2_HOST" | tr -d '\r\n[:space:]')"
+          EC2_PORT_TRIMMED="$(printf '%s' "${EC2_PORT:-22}" | tr -d '\r\n[:space:]')"
+
+          if [ -z "$EC2_HOST_TRIMMED" ]; then
+            echo "EC2_HOST is empty after trimming whitespace."
+            exit 1
+          fi
+
+          if ! [[ "$EC2_PORT_TRIMMED" =~ ^[0-9]+$ ]]; then
+            echo "EC2_PORT must be numeric."
+            exit 1
+          fi
+
           mkdir -p ~/.ssh
           printf '%s\n' "$EC2_SSH_PRIVATE_KEY" > ~/.ssh/id_ed25519
           chmod 600 ~/.ssh/id_ed25519
-          echo "Scanning SSH host key for configured EC2 host on port ${EC2_PORT}"
-          ssh-keyscan -T 10 -p "$EC2_PORT" "$EC2_HOST" >> ~/.ssh/known_hosts
+          ssh-keygen -y -f ~/.ssh/id_ed25519 > /dev/null
+
+          export EC2_HOST_TRIMMED EC2_PORT_TRIMMED
+          python - <<'PY'
+          import os
+          import socket
+          import sys
+
+          host = os.environ["EC2_HOST_TRIMMED"]
+          port = int(os.environ["EC2_PORT_TRIMMED"])
+
+          print("Resolving configured EC2 host...")
+          try:
+              socket.getaddrinfo(host, port, type=socket.SOCK_STREAM)
+          except OSError as exc:
+              print(f"DNS resolution failed: {exc.__class__.__name__}: {exc}")
+              sys.exit(1)
+          print("DNS resolution ok")
+
+          print("Checking TCP reachability to configured SSH port...")
+          try:
+              with socket.create_connection((host, port), timeout=10):
+                  pass
+          except OSError as exc:
+              print(f"TCP connection failed: {exc.__class__.__name__}: {exc}")
+              sys.exit(1)
+          print("TCP connection ok")
+          PY
+
+          echo "Scanning SSH host key for configured EC2 host."
+          ssh-keyscan -T 10 -p "$EC2_PORT_TRIMMED" "$EC2_HOST_TRIMMED" > ~/.ssh/known_hosts
           ssh -i ~/.ssh/id_ed25519 \
-            -p "$EC2_PORT" \
+            -p "$EC2_PORT_TRIMMED" \
             -o BatchMode=yes \
             -o StrictHostKeyChecking=yes \
-            "$EC2_USER@$EC2_HOST" \
+            "$EC2_USER@$EC2_HOST_TRIMMED" \
             "echo ssh-ok"
 
       - name: Prepare remote directories
