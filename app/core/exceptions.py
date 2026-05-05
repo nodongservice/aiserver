@@ -98,6 +98,9 @@ async def http_exception_handler(
     elif status_code == 403:
         error_code = "FORBIDDEN_INTERNAL_REQUEST"
         message = "내부 API 접근 권한이 없습니다."
+    elif status_code == 422:
+        error_code = "VALIDATION_ERROR"
+        message = "요청 값 검증에 실패했습니다."
     else:
         error_code = "HTTP_ERROR"
         message = "HTTP 요청 처리 중 오류가 발생했습니다."

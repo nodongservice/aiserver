@@ -157,3 +157,178 @@ class AccessibilityGisFeature(Base):
     created_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
 
     updated_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
+
+
+class PublicDataNormalizedMixin:
+    """
+    Spring Backend의 pd_* 정규화 테이블 공통 컬럼입니다.
+
+    FastAPI scoring v2는 원본 payload 테이블보다 pd_* 테이블을 우선 조회합니다.
+    """
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
+    external_id: Mapped[Optional[str]] = mapped_column(String(255), nullable=True, index=True)
+    payload_hash: Mapped[Optional[str]] = mapped_column(String(128), nullable=True)
+    raw_fetched_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
+    created_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
+    updated_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
+
+
+class PdKepadRecruitment(PublicDataNormalizedMixin, Base):
+    __tablename__ = "pd_kepad_recruitment"
+
+    buspla_name: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
+    cntct_no: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
+    comp_addr: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    emp_type: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
+    enter_type: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
+    env_both_hands: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
+    env_eyesight: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
+    env_lstn_talk: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
+    job_nm: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
+    offerreg_dt: Mapped[Optional[str]] = mapped_column(String(50), nullable=True)
+    reg_dt: Mapped[Optional[str]] = mapped_column(String(50), nullable=True)
+    regagn_name: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
+    req_career: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
+    req_educ: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
+    rno: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
+    rnum: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
+    salary: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
+    salary_type: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
+    term_date: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
+    env_hand_work: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
+    env_lift_power: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
+    env_stnd_walk: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
+    req_major: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
+    req_licens: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    geo_original_address: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    geo_matched_address: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    geo_latitude: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
+    geo_longitude: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
+
+
+class PdKepadStandardWorkplace(PublicDataNormalizedMixin, Base):
+    __tablename__ = "pd_kepad_standard_workplace"
+
+    address: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    auth_date: Mapped[Optional[str]] = mapped_column(String(50), nullable=True)
+    comp_auth_id: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
+    comp_biz_no: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
+    comp_name: Mapped[Optional[str]] = mapped_column(String(255), nullable=True, index=True)
+    comp_reg_no: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
+    comp_tel: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
+    comp_type_nm: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
+    president_name: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
+    product: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    rnum: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
+    comp_mgr_no: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
+    cancel_date: Mapped[Optional[str]] = mapped_column(String(50), nullable=True)
+    comp_cert: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
+
+
+class PdKepadSupportAgency(PublicDataNormalizedMixin, Base):
+    __tablename__ = "pd_kepad_support_agency"
+
+    exc_instn: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
+    exc_instn_addr: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    exc_instn_fxno: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
+    exc_instn_nm: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
+    exc_instn_telno: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
+    rnum: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
+    geo_original_address: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    geo_matched_address: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    geo_latitude: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
+    geo_longitude: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
+
+
+class PdTransportSupportCenter(PublicDataNormalizedMixin, Base):
+    __tablename__ = "pd_transport_support_center"
+
+    tfcwker_mvmn_cnter_nm: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
+    rdnmadr: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    lnmadr: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    latitude: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
+    longitude: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
+    slope_vhcle_co: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    lift_vhcle_co: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    inside_oprat_area: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+
+
+class PdNationwideBusStop(PublicDataNormalizedMixin, Base):
+    __tablename__ = "pd_nationwide_bus_stop"
+
+    longitude: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
+    admin_city_name: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
+    city_name: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
+    city_code: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
+    mobile_short_no: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
+    latitude: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
+    stop_name: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
+    stop_id: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
+    collected_at: Mapped[Optional[str]] = mapped_column(String(50), nullable=True)
+
+
+class PdNationwideTrafficLight(PublicDataNormalizedMixin, Base):
+    __tablename__ = "pd_nationwide_traffic_light"
+
+    ctprvn_nm: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
+    signgu_nm: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
+    rdnmadr: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    lnmadr: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    latitude: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
+    longitude: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
+    tfclght_manage_no: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
+    fnctng_sgngnr_yn: Mapped[Optional[str]] = mapped_column(String(20), nullable=True)
+    remndr_idct_yn: Mapped[Optional[str]] = mapped_column(String(20), nullable=True)
+    sond_sgngnr_yn: Mapped[Optional[str]] = mapped_column(String(20), nullable=True)
+
+
+class PdNationwideCrosswalk(PublicDataNormalizedMixin, Base):
+    __tablename__ = "pd_nationwide_crosswalk"
+
+    ctprvn_nm: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
+    signgu_nm: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
+    road_nm: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
+    rdnmadr: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    lnmadr: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    crslk_manage_no: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
+    latitude: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
+    longitude: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
+    tfclght_yn: Mapped[Optional[str]] = mapped_column(String(20), nullable=True)
+    fnctng_sgngnr_yn: Mapped[Optional[str]] = mapped_column(String(20), nullable=True)
+    sond_sgngnr_yn: Mapped[Optional[str]] = mapped_column(String(20), nullable=True)
+    ftpth_lower_yn: Mapped[Optional[str]] = mapped_column(String(20), nullable=True)
+    brll_blck_yn: Mapped[Optional[str]] = mapped_column(String(20), nullable=True)
+
+
+class PdSeoulSubwayEntranceLift(PublicDataNormalizedMixin, Base):
+    __tablename__ = "pd_seoul_subway_entrance_lift"
+
+    node_type: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
+    node_wkt: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    node_id: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
+    node_type_cd: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
+    sgg_cd: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
+    sgg_nm: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
+    emd_cd: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
+    emd_nm: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
+    sbwy_stn_cd: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
+    sbwy_stn_nm: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
+
+
+class PdSeoulWalkingNetwork(PublicDataNormalizedMixin, Base):
+    __tablename__ = "pd_seoul_walking_network"
+
+    node_type: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
+    node_wkt: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    node_id: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
+    lnkg_wkt: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    lnkg_id: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
+    lnkg_len: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
+    sgg_nm: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
+    emd_nm: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
+    brg: Mapped[Optional[str]] = mapped_column(String(20), nullable=True)
+    tnl: Mapped[Optional[str]] = mapped_column(String(20), nullable=True)
+    ovrp: Mapped[Optional[str]] = mapped_column(String(20), nullable=True)
+    crswk: Mapped[Optional[str]] = mapped_column(String(20), nullable=True)
+    bldg: Mapped[Optional[str]] = mapped_column(String(20), nullable=True)

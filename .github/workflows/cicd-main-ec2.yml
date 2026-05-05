@@ -90,10 +90,18 @@ jobs:
           PROD_AUTO_CREATE_DB_SCHEMA: ${{ secrets.AUTO_CREATE_DB_SCHEMA }}
           PROD_REQUIRE_POSTGIS: ${{ secrets.REQUIRE_POSTGIS }}
         run: |
+          if [ -n "$PROD_EXPLANATION_PROVIDER" ]; then
+            RESOLVED_EXPLANATION_PROVIDER="$PROD_EXPLANATION_PROVIDER"
+          elif [ -n "$PROD_OPENAI_API_KEY" ]; then
+            RESOLVED_EXPLANATION_PROVIDER="openai"
+          else
+            RESOLVED_EXPLANATION_PROVIDER="rule_fallback"
+          fi
+
           {
             echo "DATABASE_URL=${{ secrets.DATABASE_URL }}"
             echo "CORS_ALLOW_ORIGINS=${PROD_CORS_ALLOW_ORIGINS:-}"
-            echo "EXPLANATION_PROVIDER=${PROD_EXPLANATION_PROVIDER:-rule_fallback}"
+            echo "EXPLANATION_PROVIDER=${RESOLVED_EXPLANATION_PROVIDER}"
             echo "LLM_BASE_URL=${PROD_LLM_BASE_URL:-}"
             echo "LLM_API_KEY=${PROD_LLM_API_KEY:-}"
             echo "OPENAI_BASE_URL=${PROD_OPENAI_BASE_URL:-https://api.openai.com/v1}"

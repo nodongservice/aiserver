@@ -210,7 +210,7 @@ def build_positive_factors(
     사용자에게 보여줄 긍정 요인을 생성합니다.
 
     이 함수는 점수를 직접 계산하지 않습니다.
-    점수 계산은 scoring_service.py가 담당하고,
+    점수 계산은 scoring v2 서비스가 담당하고,
     이 파일은 설명 문구 생성만 담당합니다.
 
     주의:
