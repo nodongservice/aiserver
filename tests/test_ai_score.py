@@ -12,8 +12,9 @@ from app.repositories.scoring_repository import (
     to_job_posting,
     to_standard_workplace_match,
 )
-from app.schemas.score import JobPosting, ScoreProfile, ScoreRequest
-from app.services import score_service
+from app.schemas.explanation import ExplanationGenerateResponse
+from app.schemas.score import JobPosting, RecommendationExplainRequest, ScoreProfile, ScoreRequest
+from app.services import recommendation_explanation_service, score_service
 from app.services.scoring.accessibility_summary import calculate_accessibility_score
 from app.services.scoring.job_fit import calculate_job_fit_score
 from app.services.scoring.work_condition import normalize_annual_salary
@@ -126,6 +127,50 @@ def test_ai_explain_recommendation_contract(client):
     assert data["recommendation_reasons"]
     assert data["caution_points"]
     assert data["checklist"]
+
+
+def test_recommendation_explanation_uses_configured_provider(monkeypatch):
+    captured = {}
+
+    def fake_generate(request, provider_name=None):
+        captured["request"] = request
+        captured["provider_name"] = provider_name
+        return ExplanationGenerateResponse(
+            explanation_version="v2-openai-sanitized",
+            short_summary="LLM 요약",
+            detail_explanation="LLM 상세 설명",
+            check_points=["LLM 체크포인트"],
+            used_llm=True,
+        )
+
+    monkeypatch.setattr(
+        recommendation_explanation_service,
+        "generate_explanation_with_provider",
+        fake_generate,
+    )
+
+    response = recommendation_explanation_service.explain_recommendation(
+        RecommendationExplainRequest(
+            profile=ScoreProfile(user_id=1, desired_jobs=["사무보조"]),
+            job=JobPosting(
+                job_post_id=1,
+                company_name="ABC복지센터",
+                job_title="사무보조",
+            ),
+            job_fit_score=82,
+            reasons=["희망 직무와 모집 직종이 겹칩니다."],
+            risk_factors=["지원 전 접근성 확인이 필요합니다."],
+        )
+    )
+
+    assert captured["provider_name"] is None
+    assert captured["request"].job_post_id == 1
+    assert captured["request"].accessibility_score == 82
+    assert response.used_llm is True
+    assert response.short_summary == "ABC복지센터: LLM 요약"
+    assert response.recommendation_reasons == ["LLM 상세 설명"]
+    assert response.caution_points == ["지원 전 접근성 확인이 필요합니다."]
+    assert response.checklist == ["LLM 체크포인트"]
 
 
 def test_to_job_posting_from_pd_kepad_recruitment_row():
