@@ -64,14 +64,21 @@ jobs:
     env:
       IMAGE_URI: bridgework-aiserver:${{ github.sha }}
       IMAGE_ARCHIVE: bridgework-aiserver-${{ github.sha }}.tar.gz
+      IMAGE_PLATFORM: linux/arm64
       REMOTE_APP_ROOT: ~/bridgework/aiserver
 
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v3
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
       - name: Build Docker image
-        run: docker build -t "$IMAGE_URI" .
+        run: docker buildx build --platform "$IMAGE_PLATFORM" --load -t "$IMAGE_URI" .
 
       - name: Save Docker image
         run: docker save "$IMAGE_URI" | gzip > "$IMAGE_ARCHIVE"
