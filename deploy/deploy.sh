@@ -38,6 +38,8 @@ HEALTH_REQUEST_TIMEOUT_SECONDS="${HEALTH_REQUEST_TIMEOUT_SECONDS:-3}"
 IMAGE_URI="${IMAGE_URI:-}"
 IMAGE_RETENTION_COUNT="${IMAGE_RETENTION_COUNT:-5}"
 PULL_IMAGE="${PULL_IMAGE:-false}"
+CLEANUP_ONLY="${CLEANUP_ONLY:-false}"
+ASYNC_IMAGE_CLEANUP="${ASYNC_IMAGE_CLEANUP:-true}"
 if [[ -z "$IMAGE_URI" ]]; then
   log "IMAGE_URI 환경변수는 필수입니다."
   exit 1
@@ -110,6 +112,11 @@ cleanup_old_app_images() {
   log "이미지 정리 완료: repository=$repository deleted=$deleted keep=$keep_count"
 }
 
+if [[ "$CLEANUP_ONLY" == "true" ]]; then
+  cleanup_old_app_images "$IMAGE_URI" "$IMAGE_RETENTION_COUNT"
+  exit 0
+fi
+
 NGINX_UPSTREAM_CONF="$(resolve_upstream_conf_path)"
 mkdir -p "$STATE_DIR"
 
@@ -180,10 +187,13 @@ log "대상 슬롯: $TARGET_SLOT (container=$TARGET_CONTAINER, hostPort=$TARGET_
 docker rm -f "$TARGET_CONTAINER" >/dev/null 2>&1 || true
 
 if [[ "$PULL_IMAGE" == "true" ]]; then
+  pull_started_at="$(date +%s)"
   log "이미지 pull: $IMAGE_URI"
   docker pull "$IMAGE_URI"
+  log "이미지 pull 완료: $(( $(date +%s) - pull_started_at ))s"
 fi
 
+run_started_at="$(date +%s)"
 log "새 컨테이너 실행: $TARGET_CONTAINER"
 docker run -d \
   --name "$TARGET_CONTAINER" \
@@ -192,6 +202,7 @@ docker run -d \
   -e TZ="${TZ:-Asia/Seoul}" \
   -p "${TARGET_PORT}:${CONTAINER_PORT}" \
   "$IMAGE_URI" >/dev/null
+log "새 컨테이너 실행 완료: $(( $(date +%s) - run_started_at ))s"
 
 wait_for_health() {
   local url="$1"
@@ -220,6 +231,7 @@ wait_for_health() {
 }
 
 HEALTH_URL="http://127.0.0.1:${TARGET_PORT}${HEALTH_ENDPOINT}"
+health_started_at="$(date +%s)"
 log "헬스체크 대기: $HEALTH_URL"
 if ! wait_for_health "$HEALTH_URL" "$HEALTH_TIMEOUT_SECONDS" "$HEALTH_INTERVAL_SECONDS" "$TARGET_CONTAINER"; then
   log "헬스체크 실패. 새 컨테이너를 제거하고 배포를 중단합니다."
@@ -228,6 +240,7 @@ if ! wait_for_health "$HEALTH_URL" "$HEALTH_TIMEOUT_SECONDS" "$HEALTH_INTERVAL_S
   docker rm -f "$TARGET_CONTAINER" >/dev/null 2>&1 || true
   exit 1
 fi
+log "헬스체크 성공: $(( $(date +%s) - health_started_at ))s"
 
 TMP_UPSTREAM_FILE="$(mktemp)"
 cat > "$TMP_UPSTREAM_FILE" <<UPSTREAM
@@ -272,4 +285,13 @@ if [[ -n "$PREV_UPSTREAM_FILE" ]]; then
 fi
 
 log "배포 완료: active_slot=$TARGET_SLOT"
-cleanup_old_app_images "$IMAGE_URI" "$IMAGE_RETENTION_COUNT"
+if [[ "$ASYNC_IMAGE_CLEANUP" == "true" ]]; then
+  log "이미지 정리 예약: repository=${IMAGE_URI%%:*} keep=$IMAGE_RETENTION_COUNT"
+  nohup env \
+    IMAGE_URI="$IMAGE_URI" \
+    IMAGE_RETENTION_COUNT="$IMAGE_RETENTION_COUNT" \
+    CLEANUP_ONLY=true \
+    bash "$0" >> "$STATE_DIR/image-cleanup.log" 2>&1 &
+else
+  cleanup_old_app_images "$IMAGE_URI" "$IMAGE_RETENTION_COUNT"
+fi
