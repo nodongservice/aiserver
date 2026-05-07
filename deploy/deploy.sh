@@ -37,6 +37,7 @@ HEALTH_REQUEST_TIMEOUT_SECONDS="${HEALTH_REQUEST_TIMEOUT_SECONDS:-3}"
 
 IMAGE_URI="${IMAGE_URI:-}"
 IMAGE_RETENTION_COUNT="${IMAGE_RETENTION_COUNT:-5}"
+PULL_IMAGE="${PULL_IMAGE:-false}"
 if [[ -z "$IMAGE_URI" ]]; then
   log "IMAGE_URI 환경변수는 필수입니다."
   exit 1
@@ -177,6 +178,11 @@ log "현재 슬롯: $CURRENT_SLOT"
 log "대상 슬롯: $TARGET_SLOT (container=$TARGET_CONTAINER, hostPort=$TARGET_PORT)"
 
 docker rm -f "$TARGET_CONTAINER" >/dev/null 2>&1 || true
+
+if [[ "$PULL_IMAGE" == "true" ]]; then
+  log "이미지 pull: $IMAGE_URI"
+  docker pull "$IMAGE_URI"
+fi
 
 log "새 컨테이너 실행: $TARGET_CONTAINER"
 docker run -d \

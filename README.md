@@ -68,7 +68,7 @@ uv run pytest -v
 - 워크플로우: `.github/workflows/cicd-main-ec2.yml`
 - CI 트리거: 모든 브랜치 `push`, `main` 대상 `pull_request`
 - 배포 트리거: `main` 브랜치 `push`, `workflow_dispatch`
-- 이미지 빌드: `Dockerfile`
+- 이미지 빌드/게시: `Dockerfile` 기반 GHCR multi-arch 이미지(`linux/amd64`, `linux/arm64`)
 - 서버 배포 스크립트: `deploy/deploy.sh`
 - 라우팅 전제: 서버 Nginx에 `backend/deploy/nginx/fastapi-upstream.inc`가 이미 포함돼 있어야 함
 
@@ -76,13 +76,13 @@ uv run pytest -v
 
 1. `push`/`pull_request`마다 PostGIS 서비스 컨테이너를 띄운 뒤 `pytest`를 실행합니다.
 2. `main` 브랜치 `push` 또는 수동 실행일 때만 배포 job이 이어집니다.
-3. 배포 job은 `aiserver` Docker 이미지를 빌드하고 tar.gz로 압축합니다.
-4. 압축 이미지, 운영 `.env`, 배포 스크립트를 EC2로 업로드합니다.
-5. EC2에서 비활성 슬롯(`19000` 또는 `19001`)에 새 컨테이너를 띄웁니다.
+3. 배포 job은 GHCR에 `ghcr.io/<owner>/bridgework-aiserver:<commit-sha>` multi-arch 이미지를 push합니다.
+4. 운영 `.env`, 배포 스크립트를 EC2로 업로드합니다.
+5. EC2에서 GHCR에 로그인하고 이미지를 pull한 뒤 비활성 슬롯(`19000` 또는 `19001`)에 새 컨테이너를 띄웁니다.
 6. `/health` 확인 후 Nginx `fastapi-upstream.inc`를 새 포트로 바꾸고 `nginx reload` 합니다.
 7. 이전 슬롯 컨테이너를 제거합니다.
 
-EC2에는 Git 저장소를 clone하지 않습니다. GitHub hosted runner가 이미지를 빌드하고, EC2는 업로드된 이미지 아카이브와 배포 스크립트만 받아 배포합니다.
+EC2에는 Git 저장소를 clone하지 않습니다. GitHub hosted runner가 이미지를 빌드해 GHCR에 게시하고, EC2는 GHCR 이미지와 배포 스크립트만 사용해 배포합니다.
 
 ### GitHub Secrets
 
@@ -90,6 +90,8 @@ EC2에는 Git 저장소를 clone하지 않습니다. GitHub hosted runner가 이
 - `EC2_PORT`
 - `EC2_USER`
 - `EC2_SSH_PRIVATE_KEY`
+- `GHCR_USERNAME`
+- `GHCR_READ_TOKEN`
 - `DATABASE_URL`
 - `CORS_ALLOW_ORIGINS`
 - `EXPLANATION_PROVIDER`
@@ -104,6 +106,7 @@ EC2에는 Git 저장소를 clone하지 않습니다. GitHub hosted runner가 이
 - `REQUIRE_POSTGIS`
 
 비어도 되는 값은 빈 문자열로 넣어도 됩니다. 다만 `DATABASE_URL`은 필수입니다.
+`GHCR_READ_TOKEN`은 EC2에서 private GHCR 이미지를 pull할 수 있도록 `read:packages` 권한이 필요합니다.
 운영에서는 `AUTO_CREATE_DB_SCHEMA=false`, `REQUIRE_POSTGIS=true`를 권장합니다.
 
 ### EC2 선행 작업
