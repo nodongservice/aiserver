@@ -85,6 +85,7 @@ jobs:
 
       - name: Generate production env file
         env:
+          PROD_DATABASE_URL: ${{ secrets.DATABASE_URL }}
           PROD_CORS_ALLOW_ORIGINS: ${{ secrets.CORS_ALLOW_ORIGINS }}
           PROD_EXPLANATION_PROVIDER: ${{ secrets.EXPLANATION_PROVIDER }}
           PROD_LLM_BASE_URL: ${{ secrets.LLM_BASE_URL }}
@@ -105,8 +106,27 @@ jobs:
             RESOLVED_EXPLANATION_PROVIDER="rule_fallback"
           fi
 
+          python - <<'PY'
+          import os
+          import sys
+          from urllib.parse import urlsplit
+
+          database_url = os.environ.get("PROD_DATABASE_URL", "").strip()
+          if not database_url:
+              print("DATABASE_URL secret is empty.")
+              sys.exit(1)
+          if "\n" in database_url or "\r" in database_url:
+              print("DATABASE_URL secret must be a single line.")
+              sys.exit(1)
+
+          parsed = urlsplit(database_url)
+          if parsed.scheme not in {"postgresql", "postgresql+psycopg2"} or not parsed.netloc:
+              print("DATABASE_URL secret must look like postgresql+psycopg2://user:password@host:5432/dbname.")
+              sys.exit(1)
+          PY
+
           {
-            echo "DATABASE_URL=${{ secrets.DATABASE_URL }}"
+            echo "DATABASE_URL=${PROD_DATABASE_URL}"
             echo "CORS_ALLOW_ORIGINS=${PROD_CORS_ALLOW_ORIGINS:-}"
             echo "EXPLANATION_PROVIDER=${RESOLVED_EXPLANATION_PROVIDER}"
             echo "LLM_BASE_URL=${PROD_LLM_BASE_URL:-}"
