@@ -81,8 +81,10 @@ uv run pytest -v
 5. EC2에서 GHCR에 로그인하고 이미지를 pull한 뒤 비활성 슬롯(`19000` 또는 `19001`)에 새 컨테이너를 띄웁니다.
 6. `/health` 확인 후 Nginx `fastapi-upstream.inc`를 새 포트로 바꾸고 `nginx reload` 합니다.
 7. 이전 슬롯 컨테이너를 제거합니다.
+8. 배포 성공 후 현재 서비스 이미지 저장소의 최근 이미지 5개만 남기고 이전 이미지를 정리합니다.
 
 EC2에는 Git 저장소를 clone하지 않습니다. GitHub hosted runner가 이미지를 빌드해 GHCR에 게시하고, EC2는 GHCR 이미지와 배포 스크립트만 사용해 배포합니다.
+EC2 Docker builder cache는 배포 시점마다 7일이 지난 항목만 정리합니다.
 
 ### GitHub Secrets
 

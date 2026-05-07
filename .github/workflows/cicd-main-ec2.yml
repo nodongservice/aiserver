@@ -64,6 +64,7 @@ jobs:
 
     env:
       IMAGE_PLATFORMS: linux/amd64,linux/arm64
+      DOCKER_CACHE_RETENTION_HOURS: 168
       REMOTE_APP_ROOT: ~/bridgework/aiserver
 
     steps:
@@ -249,8 +250,7 @@ jobs:
 
           ssh -p "$EC2_PORT" "$EC2_USER@$EC2_HOST" "
             docker container prune -f >/dev/null 2>&1 || true && \
-            docker image prune -af >/dev/null 2>&1 || true && \
-            docker builder prune -af >/dev/null 2>&1 || true && \
+            docker builder prune -af --filter until=${DOCKER_CACHE_RETENTION_HOURS}h >/dev/null 2>&1 || true && \
             chmod +x $REMOTE_APP_ROOT/deploy/deploy.sh && \
             IMAGE_URI=$IMAGE_URI PULL_IMAGE=true ENV_FILE=$REMOTE_APP_ROOT/.env.prod bash $REMOTE_APP_ROOT/deploy/deploy.sh
           "
