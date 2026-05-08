@@ -9,10 +9,13 @@ def test_health_check_returns_ok(client):
     assert data == {"status": "ok"}
 
 
-def test_openapi_server_url_is_root(client):
+def test_openapi_server_url_is_root(client, monkeypatch):
     """
     Swagger UI의 Servers 선택 값은 reverse proxy prefix가 아닌 루트로 노출한다.
     """
+    monkeypatch.delenv("OPENAPI_SERVER_URL", raising=False)
+    client.app.openapi_schema = None
+
     response = client.get("/openapi.json")
 
     assert response.status_code == 200
