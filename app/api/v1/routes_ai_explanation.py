@@ -4,7 +4,7 @@ from app.schemas.score import RecommendationExplainRequest, RecommendationExplai
 from app.services.recommendation_explanation_service import explain_recommendation
 
 router = APIRouter(
-    prefix="/v1/ai/explain",
+    prefix="/api/v1/explain",
     tags=["AI Explanations"],
 )
 

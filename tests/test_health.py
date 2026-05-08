@@ -9,9 +9,9 @@ def test_health_check_returns_ok(client):
     assert data == {"status": "ok"}
 
 
-def test_openapi_server_url_is_root(client, monkeypatch):
+def test_openapi_server_url_matches_nginx_namespace(client, monkeypatch):
     """
-    Swagger UI의 Servers 선택 값은 reverse proxy prefix가 아닌 루트로 노출한다.
+    Swagger UI의 Servers 선택 값은 Nginx의 FastAPI 네임스페이스와 일치한다.
     """
     monkeypatch.delenv("OPENAPI_SERVER_URL", raising=False)
     client.app.openapi_schema = None
@@ -19,7 +19,7 @@ def test_openapi_server_url_is_root(client, monkeypatch):
     response = client.get("/openapi.json")
 
     assert response.status_code == 200
-    assert response.json()["servers"] == [{"url": "/"}]
+    assert response.json()["servers"] == [{"url": "/api/py"}]
 
 
 def test_db_health_check_returns_ok(client):

@@ -4,11 +4,11 @@
 
 현재 기능정의서 기준 FastAPI 노출 API:
 
-- `POST /v1/ai/score/quick`
-- `POST /v1/ai/score/map`
-- `POST /v1/ai/explain/recommendation`
+- `POST /api/v1/score/quick`
+- `POST /api/v1/score/map`
+- `POST /api/v1/explain/recommendation`
 
-## `POST /v1/ai/score/quick`
+## `POST /api/v1/score/quick`
 
 ### Request
 
@@ -103,7 +103,7 @@
 }
 ```
 
-## `POST /v1/ai/score/map`
+## `POST /api/v1/score/map`
 
 ### Request
 
@@ -234,7 +234,7 @@
 }
 ```
 
-## `POST /v1/ai/explain/recommendation`
+## `POST /api/v1/explain/recommendation`
 
 ### Request
 

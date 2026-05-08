@@ -35,13 +35,7 @@ def get_root_path() -> str:
 
 
 def get_openapi_server_url() -> str:
-    return os.getenv("OPENAPI_SERVER_URL", "/").strip() or "/"
-
-
-def to_public_openapi_path(path: str) -> str:
-    if path.startswith("/api/"):
-        return path[4:]
-    return path
+    return os.getenv("OPENAPI_SERVER_URL", "/api/py").strip() or "/api/py"
 
 
 def should_auto_create_db_schema() -> bool:
@@ -77,6 +71,7 @@ app = FastAPI(
     title="BridgeWork AI Server",
     version="0.1.0",
     root_path=get_root_path(),
+    root_path_in_servers=False,
 )
 
 verify_required_postgis()
@@ -114,8 +109,6 @@ def custom_openapi():
         description=app.description,
     )
 
-    paths = openapi_schema.get("paths", {})
-    openapi_schema["paths"] = {to_public_openapi_path(path): value for path, value in paths.items()}
     openapi_schema["servers"] = [{"url": get_openapi_server_url()}]
     app.openapi_schema = openapi_schema
     return app.openapi_schema
