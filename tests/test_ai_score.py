@@ -42,14 +42,14 @@ def build_score_payload(**profile_overrides):
 
 
 def test_ai_score_quick_contract_accepts_selected_profile(client, override_get_db):
-    response = client.post("/ai/v1/score/quick", json=build_score_payload())
+    response = client.post("/v1/ai/score/quick", json=build_score_payload())
 
     assert response.status_code == 200, response.json()
     assert response.json() == {"results": []}
 
 
 def test_ai_score_map_contract_accepts_selected_profile(client, override_get_db):
-    response = client.post("/ai/v1/score/map", json=build_score_payload())
+    response = client.post("/v1/ai/score/map", json=build_score_payload())
 
     assert response.status_code == 200, response.json()
     assert response.json() == {"results": []}
@@ -57,7 +57,7 @@ def test_ai_score_map_contract_accepts_selected_profile(client, override_get_db)
 
 def test_quick_score_rejects_missing_required_profile_fields(client, override_get_db):
     response = client.post(
-        "/ai/v1/score/quick",
+        "/v1/ai/score/quick",
         json={
             "profile": {
                 "desired_jobs": [],
@@ -79,7 +79,7 @@ def test_quick_score_rejects_missing_required_profile_fields(client, override_ge
 
 def test_map_score_rejects_missing_map_required_profile_fields(client, override_get_db):
     response = client.post(
-        "/ai/v1/score/map",
+        "/v1/ai/score/map",
         json={
             "profile": {
                 "desired_jobs": ["사무보조"],
@@ -118,7 +118,7 @@ def test_ai_explain_recommendation_contract(client):
         "evidence_items": [],
     }
 
-    response = client.post("/ai/v1/explain/recommendation", json=payload)
+    response = client.post("/v1/ai/explain/recommendation", json=payload)
 
     assert response.status_code == 200, response.json()
     data = response.json()

@@ -135,9 +135,9 @@ Spring Backend가 호출하는 scoring v2 API는 다음과 같습니다.
 
 | API | 역할 |
 | --- | --- |
-| `POST /ai/v1/score/quick` | 기능 2. 최신 공고를 조회하고 직무 적합도만 계산 |
-| `POST /ai/v1/score/map` | 기능 3. 공고/공공데이터를 조회하고 6개 항목 동일비중 종합 점수 계산 |
-| `POST /ai/v1/explain/recommendation` | 이미 계산된 점수/근거를 추천 사유, 주의사항, 체크리스트로 변환 |
+| `POST /v1/ai/score/quick` | 기능 2. 최신 공고를 조회하고 직무 적합도만 계산 |
+| `POST /v1/ai/score/map` | 기능 3. 공고/공공데이터를 조회하고 6개 항목 동일비중 종합 점수 계산 |
+| `POST /v1/ai/explain/recommendation` | 이미 계산된 점수/근거를 추천 사유, 주의사항, 체크리스트로 변환 |
 
 구조 원칙:
 

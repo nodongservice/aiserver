@@ -6,7 +6,7 @@ from app.schemas.score import MapScoreResponse, QuickScoreResponse, ScoreRequest
 from app.services.score_service import score_map_jobs, score_quick_jobs
 
 router = APIRouter(
-    prefix="/ai/v1/score",
+    prefix="/v1/ai/score",
     tags=["AI Scoring"],
 )
 

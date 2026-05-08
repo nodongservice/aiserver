@@ -5,7 +5,7 @@ def test_validation_error_response_format(client):
     Spring 연동용 공통 에러 포맷으로 반환되는지 확인한다.
     """
     response = client.post(
-        "/ai/v1/score/quick",
+        "/v1/ai/score/quick",
         json={
             # profile 필드가 누락된 잘못된 요청
             "limit": 10,

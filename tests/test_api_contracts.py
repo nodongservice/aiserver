@@ -19,7 +19,7 @@ def test_score_quick_contract_returns_stable_keys(client, override_get_db):
         "offset": 0,
     }
 
-    response = client.post("/ai/v1/score/quick", json=payload)
+    response = client.post("/v1/ai/score/quick", json=payload)
 
     assert response.status_code == 200, response.json()
     assert set(response.json().keys()) == {"results"}
@@ -46,7 +46,7 @@ def test_score_map_contract_returns_stable_keys(client, override_get_db):
         "offset": 0,
     }
 
-    response = client.post("/ai/v1/score/map", json=payload)
+    response = client.post("/v1/ai/score/map", json=payload)
 
     assert response.status_code == 200, response.json()
     assert set(response.json().keys()) == {"results"}
@@ -68,7 +68,7 @@ def test_recommendation_explanation_contract_response_keys_are_stable(client):
         "risk_factors": ["일부 접근성 정보는 추가 확인이 필요합니다."],
     }
 
-    response = client.post("/ai/v1/explain/recommendation", json=payload)
+    response = client.post("/v1/ai/explain/recommendation", json=payload)
 
     assert response.status_code == 200, response.json()
 
@@ -84,7 +84,7 @@ def test_recommendation_explanation_contract_response_keys_are_stable(client):
 
 def test_score_quick_validation_error_contract_includes_request_id(client):
     response = client.post(
-        "/ai/v1/score/quick",
+        "/v1/ai/score/quick",
         json={
             "limit": 10,
         },
