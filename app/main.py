@@ -34,6 +34,10 @@ def get_root_path() -> str:
     return os.getenv("ROOT_PATH", "/api/py").strip()
 
 
+def get_openapi_server_url() -> str:
+    return os.getenv("OPENAPI_SERVER_URL", "/").strip() or "/"
+
+
 def to_public_openapi_path(path: str) -> str:
     if path.startswith("/api/"):
         return path[4:]
@@ -103,7 +107,6 @@ def custom_openapi():
     if app.openapi_schema:
         return app.openapi_schema
 
-    root_path = get_root_path()
     openapi_schema = get_openapi(
         title=app.title,
         version=app.version,
@@ -113,8 +116,7 @@ def custom_openapi():
 
     paths = openapi_schema.get("paths", {})
     openapi_schema["paths"] = {to_public_openapi_path(path): value for path, value in paths.items()}
-    if root_path:
-        openapi_schema["servers"] = [{"url": root_path}]
+    openapi_schema["servers"] = [{"url": get_openapi_server_url()}]
     app.openapi_schema = openapi_schema
     return app.openapi_schema
 

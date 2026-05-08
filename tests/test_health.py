@@ -9,6 +9,16 @@ def test_health_check_returns_ok(client):
     assert data == {"status": "ok"}
 
 
+def test_openapi_server_url_is_root(client):
+    """
+    Swagger UI의 Servers 선택 값은 reverse proxy prefix가 아닌 루트로 노출한다.
+    """
+    response = client.get("/openapi.json")
+
+    assert response.status_code == 200
+    assert response.json()["servers"] == [{"url": "/"}]
+
+
 def test_db_health_check_returns_ok(client):
     """
     /db health API가 정상적으로 응답하는지 확인한다.
