@@ -4,6 +4,7 @@ from typing import Any, Optional
 from fastapi import Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
+from sqlalchemy.exc import SQLAlchemyError
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
 
@@ -34,19 +35,24 @@ def build_error_response(
     모든 에러 응답은 아래 구조를 따릅니다.
 
     {
-        "error_code": "...",
+        "errorCode": "...",
         "message": "...",
-        "detail": ...,
-        "request_id": "..."
+        "result": {
+            "detail": ...,
+            "requestId": "..."
+        }
     }
     """
+    result = {
+        "detail": detail,
+        "requestId": request_id,
+    }
     return JSONResponse(
         status_code=status_code,
         content={
-            "error_code": error_code,
+            "errorCode": error_code,
             "message": message,
-            "detail": detail,
-            "request_id": request_id,
+            "result": result,
         },
     )
 
@@ -102,7 +108,7 @@ async def http_exception_handler(
         error_code = "VALIDATION_ERROR"
         message = "요청 값 검증에 실패했습니다."
     else:
-        error_code = "HTTP_ERROR"
+        error_code = f"HTTP_{status_code}"
         message = "HTTP 요청 처리 중 오류가 발생했습니다."
 
     return build_error_response(
@@ -110,6 +116,54 @@ async def http_exception_handler(
         error_code=error_code,
         message=message,
         detail=exc.detail,
+        request_id=get_request_id(request),
+    )
+
+
+async def value_error_handler(
+    request: Request,
+    exc: ValueError,
+) -> JSONResponse:
+    """
+    서비스 계층의 잘못된 값 오류를 처리합니다.
+    """
+    return build_error_response(
+        status_code=400,
+        error_code="BAD_REQUEST",
+        message="요청 값을 처리할 수 없습니다.",
+        detail={"exception_type": exc.__class__.__name__, "reason": str(exc)},
+        request_id=get_request_id(request),
+    )
+
+
+async def database_exception_handler(
+    request: Request,
+    exc: SQLAlchemyError,
+) -> JSONResponse:
+    """
+    DB 조회/연결 오류를 처리합니다.
+    """
+    return build_error_response(
+        status_code=503,
+        error_code="DATABASE_ERROR",
+        message="데이터베이스 처리 중 오류가 발생했습니다.",
+        detail={"exception_type": exc.__class__.__name__},
+        request_id=get_request_id(request),
+    )
+
+
+async def runtime_exception_handler(
+    request: Request,
+    exc: RuntimeError,
+) -> JSONResponse:
+    """
+    실행 환경 또는 내부 서비스 상태 오류를 처리합니다.
+    """
+    return build_error_response(
+        status_code=500,
+        error_code="AI_SERVICE_RUNTIME_ERROR",
+        message="FastAPI AI/GIS 서비스 실행 중 오류가 발생했습니다.",
+        detail={"exception_type": exc.__class__.__name__, "reason": str(exc)},
         request_id=get_request_id(request),
     )
 

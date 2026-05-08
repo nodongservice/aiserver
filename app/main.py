@@ -10,19 +10,31 @@ from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.openapi.utils import get_openapi
 from sqlalchemy import text
-from sqlalchemy.exc import DBAPIError
+from sqlalchemy.exc import DBAPIError, SQLAlchemyError
 from sqlalchemy.orm import Session
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from app.api.v1.routers import api_router
 from app.core.exceptions import (
+    database_exception_handler,
     http_exception_handler,
+    runtime_exception_handler,
     unhandled_exception_handler,
     validation_exception_handler,
+    value_error_handler,
 )
 from app.core.logging import setup_logging
+from app.core.responses import success_response
 from app.db import models  # noqa: F401
 from app.db.session import Base, engine, get_db
+from app.schemas.common import (
+    COMMON_ERROR_RESPONSES,
+    ApiResponse,
+    DbHealthResult,
+    HealthResult,
+    PostgisHealthResult,
+    RootResult,
+)
 
 load_dotenv(".env.local")
 setup_logging()
@@ -84,6 +96,9 @@ else:
 
 app.add_exception_handler(RequestValidationError, validation_exception_handler)
 app.add_exception_handler(StarletteHTTPException, http_exception_handler)
+app.add_exception_handler(SQLAlchemyError, database_exception_handler)
+app.add_exception_handler(ValueError, value_error_handler)
+app.add_exception_handler(RuntimeError, runtime_exception_handler)
 app.add_exception_handler(Exception, unhandled_exception_handler)
 
 cors_origins = os.getenv("CORS_ALLOW_ORIGINS", "")
@@ -117,26 +132,42 @@ def custom_openapi():
 app.openapi = custom_openapi
 
 
-@app.get("/")
-async def read_root() -> dict[str, str]:
-    return {"message": "FastAPI server is running"}
+@app.get(
+    "/",
+    response_model=ApiResponse[RootResult],
+    responses=COMMON_ERROR_RESPONSES,
+)
+async def read_root() -> dict[str, object]:
+    return success_response({"message": "FastAPI server is running"})
 
 
-@app.get("/health")
-async def health_check() -> dict[str, str]:
+@app.get(
+    "/health",
+    response_model=ApiResponse[HealthResult],
+    responses=COMMON_ERROR_RESPONSES,
+)
+async def health_check() -> dict[str, object]:
     logger.info("Health check requested")
-    return {"status": "ok"}
+    return success_response({"status": "ok"})
 
 
-@app.get("/db-health")
-def db_health(db: Session = Depends(get_db)) -> dict[str, str]:
+@app.get(
+    "/db-health",
+    response_model=ApiResponse[DbHealthResult],
+    responses=COMMON_ERROR_RESPONSES,
+)
+def db_health(db: Session = Depends(get_db)) -> dict[str, object]:
     logger.info("DB Health check requested")
     db.execute(text("SELECT 1"))
-    return {"status": "ok", "database": "connected"}
+    return success_response({"status": "ok", "database": "connected"})
 
 
-@app.get("/postgis-health")
-def postgis_health(db: Session = Depends(get_db)) -> dict[str, str]:
+@app.get(
+    "/postgis-health",
+    response_model=ApiResponse[PostgisHealthResult],
+    responses=COMMON_ERROR_RESPONSES,
+)
+def postgis_health(db: Session = Depends(get_db)) -> dict[str, object]:
     """
     PostgreSQL에 PostGIS extension이 설치되어 있는지 확인합니다.
 
@@ -156,17 +187,21 @@ def postgis_health(db: Session = Depends(get_db)) -> dict[str, str]:
     try:
         version = get_postgis_version(db)
     except DBAPIError as exc:
-        return {
-            "status": "unavailable",
-            "postgis": "disabled",
-            "reason": str(exc.__cause__ or exc).strip(),
-        }
+        return success_response(
+            {
+                "status": "unavailable",
+                "postgis": "disabled",
+                "reason": str(exc.__cause__ or exc).strip(),
+            }
+        )
 
-    return {
-        "status": "ok",
-        "postgis": "enabled",
-        "version": version,
-    }
+    return success_response(
+        {
+            "status": "ok",
+            "postgis": "enabled",
+            "version": version,
+        }
+    )
 
 
 app.include_router(api_router)

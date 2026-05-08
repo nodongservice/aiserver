@@ -1,3 +1,6 @@
+from sqlalchemy.exc import SQLAlchemyError
+
+
 def test_validation_error_response_format(client):
     """
     필수 필드가 누락된 요청을 보냈을 때,
@@ -19,11 +22,11 @@ def test_validation_error_response_format(client):
 
     data = response.json()
 
-    assert data["error_code"] == "VALIDATION_ERROR"
+    assert data["errorCode"] == "VALIDATION_ERROR"
     assert data["message"] == "요청 값 검증에 실패했습니다."
-    assert data["request_id"] == "test-request-id-001"
-    assert "detail" in data
-    assert isinstance(data["detail"], list)
+    assert data["result"]["requestId"] == "test-request-id-001"
+    assert "detail" in data["result"]
+    assert isinstance(data["result"]["detail"], list)
 
 
 def test_not_found_error_response_format(client):
@@ -42,7 +45,64 @@ def test_not_found_error_response_format(client):
 
     data = response.json()
 
-    assert data["error_code"] == "NOT_FOUND"
+    assert data["errorCode"] == "NOT_FOUND"
     assert data["message"] == "요청한 API 또는 리소스를 찾을 수 없습니다."
-    assert data["request_id"] == "test-request-id-002"
-    assert "detail" in data
+    assert data["result"]["requestId"] == "test-request-id-002"
+    assert "detail" in data["result"]
+
+
+def test_value_error_response_format(client):
+    @client.app.get("/test/errors/value-error")
+    def raise_value_error():
+        raise ValueError("invalid test value")
+
+    response = client.get(
+        "/test/errors/value-error",
+        headers={"X-Request-Id": "test-request-id-003"},
+    )
+
+    assert response.status_code == 400
+
+    data = response.json()
+    assert data["errorCode"] == "BAD_REQUEST"
+    assert data["message"] == "요청 값을 처리할 수 없습니다."
+    assert data["result"]["requestId"] == "test-request-id-003"
+    assert data["result"]["detail"]["exception_type"] == "ValueError"
+
+
+def test_database_error_response_format(client):
+    @client.app.get("/test/errors/database-error")
+    def raise_database_error():
+        raise SQLAlchemyError("database unavailable")
+
+    response = client.get(
+        "/test/errors/database-error",
+        headers={"X-Request-Id": "test-request-id-004"},
+    )
+
+    assert response.status_code == 503
+
+    data = response.json()
+    assert data["errorCode"] == "DATABASE_ERROR"
+    assert data["message"] == "데이터베이스 처리 중 오류가 발생했습니다."
+    assert data["result"]["requestId"] == "test-request-id-004"
+    assert data["result"]["detail"]["exception_type"] == "SQLAlchemyError"
+
+
+def test_runtime_error_response_format(client):
+    @client.app.get("/test/errors/runtime-error")
+    def raise_runtime_error():
+        raise RuntimeError("runtime unavailable")
+
+    response = client.get(
+        "/test/errors/runtime-error",
+        headers={"X-Request-Id": "test-request-id-005"},
+    )
+
+    assert response.status_code == 500
+
+    data = response.json()
+    assert data["errorCode"] == "AI_SERVICE_RUNTIME_ERROR"
+    assert data["message"] == "FastAPI AI/GIS 서비스 실행 중 오류가 발생했습니다."
+    assert data["result"]["requestId"] == "test-request-id-005"
+    assert data["result"]["detail"]["exception_type"] == "RuntimeError"

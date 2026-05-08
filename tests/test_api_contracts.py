@@ -22,7 +22,11 @@ def test_score_quick_contract_returns_stable_keys(client, override_get_db):
     response = client.post("/api/v1/score/quick", json=payload)
 
     assert response.status_code == 200, response.json()
-    assert set(response.json().keys()) == {"results"}
+    data = response.json()
+    assert set(data.keys()) == {"errorCode", "message", "result"}
+    assert data["errorCode"] == "SUCCESS"
+    assert data["message"] == "성공"
+    assert set(data["result"].keys()) == {"results"}
 
 
 def test_score_map_contract_returns_stable_keys(client, override_get_db):
@@ -49,7 +53,11 @@ def test_score_map_contract_returns_stable_keys(client, override_get_db):
     response = client.post("/api/v1/score/map", json=payload)
 
     assert response.status_code == 200, response.json()
-    assert set(response.json().keys()) == {"results"}
+    data = response.json()
+    assert set(data.keys()) == {"errorCode", "message", "result"}
+    assert data["errorCode"] == "SUCCESS"
+    assert data["message"] == "성공"
+    assert set(data["result"].keys()) == {"results"}
 
 
 def test_recommendation_explanation_contract_response_keys_are_stable(client):
@@ -73,7 +81,10 @@ def test_recommendation_explanation_contract_response_keys_are_stable(client):
     assert response.status_code == 200, response.json()
 
     data = response.json()
-    assert set(data.keys()) == {
+    assert set(data.keys()) == {"errorCode", "message", "result"}
+    assert data["errorCode"] == "SUCCESS"
+    assert data["message"] == "성공"
+    assert set(data["result"].keys()) == {
         "short_summary",
         "recommendation_reasons",
         "caution_points",
@@ -94,7 +105,32 @@ def test_score_quick_validation_error_contract_includes_request_id(client):
     assert response.status_code == 422
 
     data = response.json()
-    assert set(data.keys()) == {"error_code", "message", "detail", "request_id"}
-    assert data["error_code"] == "VALIDATION_ERROR"
-    assert data["request_id"] == "score-v2-contract-test"
-    assert isinstance(data["detail"], list)
+    assert set(data.keys()) == {"errorCode", "message", "result"}
+    assert data["errorCode"] == "VALIDATION_ERROR"
+    assert data["result"]["requestId"] == "score-v2-contract-test"
+    assert isinstance(data["result"]["detail"], list)
+
+
+def test_openapi_documents_common_api_response_contract(client):
+    response = client.get("/openapi.json")
+
+    assert response.status_code == 200
+
+    schema = response.json()
+    assert "ErrorResponse" in schema["components"]["schemas"]
+
+    score_quick_responses = schema["paths"]["/api/v1/score/quick"]["post"]["responses"]
+    assert score_quick_responses["200"]["content"]["application/json"]["schema"]["$ref"] == (
+        "#/components/schemas/ApiResponse_QuickScoreResponse_"
+    )
+    assert score_quick_responses["422"]["content"]["application/json"]["schema"]["$ref"] == (
+        "#/components/schemas/ErrorResponse"
+    )
+    assert score_quick_responses["500"]["content"]["application/json"]["schema"]["$ref"] == (
+        "#/components/schemas/ErrorResponse"
+    )
+
+    health_responses = schema["paths"]["/health"]["get"]["responses"]
+    assert health_responses["200"]["content"]["application/json"]["schema"]["$ref"] == (
+        "#/components/schemas/ApiResponse_HealthResult_"
+    )
