@@ -6,7 +6,7 @@ def test_health_check_returns_ok(client):
     response = client.get("/health")
     assert response.status_code == 200
     data = response.json()
-    assert data == {"errorCode": "SUCCESS", "message": "성공", "result": {"status": "ok"}}
+    assert data == {"code": "SUCCESS", "message": "성공", "result": {"status": "ok"}}
 
 
 def test_openapi_server_url_matches_nginx_namespace(client, monkeypatch):
@@ -30,7 +30,7 @@ def test_db_health_check_returns_ok(client):
     response = client.get("/db-health")
     assert response.status_code == 200
     data = response.json()
-    assert data == {"errorCode": "SUCCESS", "message": "성공", "result": {"status": "ok", "database": "connected"}}
+    assert data == {"code": "SUCCESS", "message": "성공", "result": {"status": "ok", "database": "connected"}}
 
 
 def test_postgis_health_returns_valid_status(client):
@@ -47,7 +47,7 @@ def test_postgis_health_returns_valid_status(client):
     data = response.json()
 
     result = data["result"]
-    assert data["errorCode"] == "SUCCESS"
+    assert data["code"] == "SUCCESS"
     assert result["status"] in ["ok", "unavailable"]
     assert result["postgis"] in ["enabled", "disabled"]
 

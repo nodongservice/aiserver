@@ -6,7 +6,7 @@ T = TypeVar("T")
 
 
 class ApiResponse(BaseModel, Generic[T]):
-    errorCode: str
+    code: str
     message: str
     result: Optional[T] = None
 
@@ -17,7 +17,7 @@ class ErrorResult(BaseModel):
 
 
 class ErrorResponse(BaseModel):
-    errorCode: str
+    code: str
     message: str
     result: ErrorResult
 

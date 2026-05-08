@@ -45,14 +45,14 @@ def test_ai_score_quick_contract_accepts_selected_profile(client, override_get_d
     response = client.post("/api/v1/score/quick", json=build_score_payload())
 
     assert response.status_code == 200, response.json()
-    assert response.json() == {"errorCode": "SUCCESS", "message": "성공", "result": {"results": []}}
+    assert response.json() == {"code": "SUCCESS", "message": "성공", "result": {"results": []}}
 
 
 def test_ai_score_map_contract_accepts_selected_profile(client, override_get_db):
     response = client.post("/api/v1/score/map", json=build_score_payload())
 
     assert response.status_code == 200, response.json()
-    assert response.json() == {"errorCode": "SUCCESS", "message": "성공", "result": {"results": []}}
+    assert response.json() == {"code": "SUCCESS", "message": "성공", "result": {"results": []}}
 
 
 def test_quick_score_rejects_missing_required_profile_fields(client, override_get_db):
@@ -68,7 +68,7 @@ def test_quick_score_rejects_missing_required_profile_fields(client, override_ge
 
     assert response.status_code == 422
     data = response.json()
-    assert data["errorCode"] == "VALIDATION_ERROR"
+    assert data["code"] == "VALIDATION_ERROR"
     assert {tuple(item["loc"]) for item in data["result"]["detail"]} >= {
         ("profile", "desired_jobs"),
         ("profile", "skills"),
@@ -92,7 +92,7 @@ def test_map_score_rejects_missing_map_required_profile_fields(client, override_
 
     assert response.status_code == 422
     data = response.json()
-    assert data["errorCode"] == "VALIDATION_ERROR"
+    assert data["code"] == "VALIDATION_ERROR"
     assert {tuple(item["loc"]) for item in data["result"]["detail"]} >= {
         ("profile", "address"),
         ("profile", "available_employment_types"),
@@ -123,7 +123,7 @@ def test_ai_explain_recommendation_contract(client):
     assert response.status_code == 200, response.json()
     data = response.json()
     result = data["result"]
-    assert data["errorCode"] == "SUCCESS"
+    assert data["code"] == "SUCCESS"
     assert result["used_llm"] is False
     assert "ABC복지센터" in result["short_summary"]
     assert result["recommendation_reasons"]

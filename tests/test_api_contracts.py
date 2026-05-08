@@ -23,8 +23,8 @@ def test_score_quick_contract_returns_stable_keys(client, override_get_db):
 
     assert response.status_code == 200, response.json()
     data = response.json()
-    assert set(data.keys()) == {"errorCode", "message", "result"}
-    assert data["errorCode"] == "SUCCESS"
+    assert set(data.keys()) == {"code", "message", "result"}
+    assert data["code"] == "SUCCESS"
     assert data["message"] == "성공"
     assert set(data["result"].keys()) == {"results"}
 
@@ -54,8 +54,8 @@ def test_score_map_contract_returns_stable_keys(client, override_get_db):
 
     assert response.status_code == 200, response.json()
     data = response.json()
-    assert set(data.keys()) == {"errorCode", "message", "result"}
-    assert data["errorCode"] == "SUCCESS"
+    assert set(data.keys()) == {"code", "message", "result"}
+    assert data["code"] == "SUCCESS"
     assert data["message"] == "성공"
     assert set(data["result"].keys()) == {"results"}
 
@@ -81,8 +81,8 @@ def test_recommendation_explanation_contract_response_keys_are_stable(client):
     assert response.status_code == 200, response.json()
 
     data = response.json()
-    assert set(data.keys()) == {"errorCode", "message", "result"}
-    assert data["errorCode"] == "SUCCESS"
+    assert set(data.keys()) == {"code", "message", "result"}
+    assert data["code"] == "SUCCESS"
     assert data["message"] == "성공"
     assert set(data["result"].keys()) == {
         "short_summary",
@@ -105,8 +105,8 @@ def test_score_quick_validation_error_contract_includes_request_id(client):
     assert response.status_code == 422
 
     data = response.json()
-    assert set(data.keys()) == {"errorCode", "message", "result"}
-    assert data["errorCode"] == "VALIDATION_ERROR"
+    assert set(data.keys()) == {"code", "message", "result"}
+    assert data["code"] == "VALIDATION_ERROR"
     assert data["result"]["requestId"] == "score-v2-contract-test"
     assert isinstance(data["result"]["detail"], list)
 
@@ -118,6 +118,9 @@ def test_openapi_documents_common_api_response_contract(client):
 
     schema = response.json()
     assert "ErrorResponse" in schema["components"]["schemas"]
+    error_response_properties = schema["components"]["schemas"]["ErrorResponse"]["properties"]
+    assert set(error_response_properties.keys()) == {"code", "message", "result"}
+    assert "errorCode" not in error_response_properties
 
     score_quick_responses = schema["paths"]["/api/v1/score/quick"]["post"]["responses"]
     assert score_quick_responses["200"]["content"]["application/json"]["schema"]["$ref"] == (

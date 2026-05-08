@@ -22,7 +22,7 @@ def test_validation_error_response_format(client):
 
     data = response.json()
 
-    assert data["errorCode"] == "VALIDATION_ERROR"
+    assert data["code"] == "VALIDATION_ERROR"
     assert data["message"] == "요청 값 검증에 실패했습니다."
     assert data["result"]["requestId"] == "test-request-id-001"
     assert "detail" in data["result"]
@@ -45,7 +45,7 @@ def test_not_found_error_response_format(client):
 
     data = response.json()
 
-    assert data["errorCode"] == "NOT_FOUND"
+    assert data["code"] == "NOT_FOUND"
     assert data["message"] == "요청한 API 또는 리소스를 찾을 수 없습니다."
     assert data["result"]["requestId"] == "test-request-id-002"
     assert "detail" in data["result"]
@@ -64,7 +64,7 @@ def test_value_error_response_format(client):
     assert response.status_code == 400
 
     data = response.json()
-    assert data["errorCode"] == "BAD_REQUEST"
+    assert data["code"] == "BAD_REQUEST"
     assert data["message"] == "요청 값을 처리할 수 없습니다."
     assert data["result"]["requestId"] == "test-request-id-003"
     assert data["result"]["detail"]["exception_type"] == "ValueError"
@@ -83,7 +83,7 @@ def test_database_error_response_format(client):
     assert response.status_code == 503
 
     data = response.json()
-    assert data["errorCode"] == "DATABASE_ERROR"
+    assert data["code"] == "DATABASE_ERROR"
     assert data["message"] == "데이터베이스 처리 중 오류가 발생했습니다."
     assert data["result"]["requestId"] == "test-request-id-004"
     assert data["result"]["detail"]["exception_type"] == "SQLAlchemyError"
@@ -102,7 +102,7 @@ def test_runtime_error_response_format(client):
     assert response.status_code == 500
 
     data = response.json()
-    assert data["errorCode"] == "AI_SERVICE_RUNTIME_ERROR"
+    assert data["code"] == "AI_SERVICE_RUNTIME_ERROR"
     assert data["message"] == "FastAPI AI/GIS 서비스 실행 중 오류가 발생했습니다."
     assert data["result"]["requestId"] == "test-request-id-005"
     assert data["result"]["detail"]["exception_type"] == "RuntimeError"

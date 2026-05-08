@@ -20,7 +20,7 @@ def to_plain_data(value: Any) -> Any:
 
 def success_response(result: Any, message: str = SUCCESS_MESSAGE) -> dict[str, Any]:
     return {
-        "errorCode": SUCCESS_CODE,
+        "code": SUCCESS_CODE,
         "message": message,
         "result": to_plain_data(result),
     }

@@ -35,7 +35,7 @@ def build_error_response(
     모든 에러 응답은 아래 구조를 따릅니다.
 
     {
-        "errorCode": "...",
+        "code": "...",
         "message": "...",
         "result": {
             "detail": ...,
@@ -50,7 +50,7 @@ def build_error_response(
     return JSONResponse(
         status_code=status_code,
         content={
-            "errorCode": error_code,
+            "code": error_code,
             "message": message,
             "result": result,
         },
