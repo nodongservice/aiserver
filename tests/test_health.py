@@ -56,3 +56,14 @@ def test_postgis_health_returns_valid_status(client):
 
     if result["postgis"] == "disabled":
         assert "reason" in result
+
+
+def test_metrics_endpoint_is_exposed(client):
+    """
+    /metrics가 Prometheus 포맷 텍스트를 반환하는지 확인한다.
+    """
+    response = client.get("/metrics")
+
+    assert response.status_code == 200
+    assert response.headers["content-type"].startswith("text/plain")
+    assert "http_requests_total" in response.text

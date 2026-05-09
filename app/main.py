@@ -9,6 +9,7 @@ from fastapi import Depends, FastAPI
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.openapi.utils import get_openapi
+from prometheus_fastapi_instrumentator import Instrumentator
 from sqlalchemy import text
 from sqlalchemy.exc import DBAPIError, SQLAlchemyError
 from sqlalchemy.orm import Session
@@ -85,6 +86,9 @@ app = FastAPI(
     root_path=get_root_path(),
     root_path_in_servers=False,
 )
+
+# 운영 관측 표준에 맞춰 FastAPI HTTP 메트릭을 /metrics로 노출한다.
+Instrumentator(excluded_handlers=["/metrics"]).instrument(app).expose(app)
 
 verify_required_postgis()
 
