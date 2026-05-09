@@ -249,5 +249,5 @@ jobs:
 
           ssh -p "$EC2_PORT" "$EC2_USER@$EC2_HOST" "
             chmod +x $REMOTE_APP_ROOT/deploy/deploy.sh && \
-            IMAGE_URI=$IMAGE_URI PULL_IMAGE=true ENV_FILE=$REMOTE_APP_ROOT/.env.prod bash $REMOTE_APP_ROOT/deploy/deploy.sh
+            IMAGE_URI=$IMAGE_URI PULL_IMAGE=true ENV_FILE=$REMOTE_APP_ROOT/.env.prod UPSTREAM_SWITCH_SCRIPT=\$HOME/bridgework-infra/deploy/fastapi_blue_green_switch.sh bash $REMOTE_APP_ROOT/deploy/deploy.sh
           "

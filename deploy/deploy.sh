@@ -23,7 +23,7 @@ APP_ROOT="${APP_ROOT:-$HOME/bridgework/aiserver}"
 STATE_DIR="${STATE_DIR:-$APP_ROOT/state}"
 ACTIVE_SLOT_FILE="${ACTIVE_SLOT_FILE:-$STATE_DIR/fastapi_active_slot}"
 ENV_FILE="${ENV_FILE:-$APP_ROOT/.env.prod}"
-NGINX_UPSTREAM_CONF="${NGINX_UPSTREAM_CONF:-}"
+UPSTREAM_SWITCH_SCRIPT="${UPSTREAM_SWITCH_SCRIPT:-$HOME/bridgework-infra/deploy/fastapi_blue_green_switch.sh}"
 
 BLUE_PORT="${BLUE_PORT:-19000}"
 GREEN_PORT="${GREEN_PORT:-19001}"
@@ -52,26 +52,6 @@ fi
 
 require_command docker
 require_command curl
-require_command nginx
-
-resolve_upstream_conf_path() {
-  if [[ -n "$NGINX_UPSTREAM_CONF" ]]; then
-    echo "$NGINX_UPSTREAM_CONF"
-    return
-  fi
-
-  if [[ -f "/etc/nginx/conf.d/fastapi-upstream.inc" || -d "/etc/nginx/conf.d" ]]; then
-    echo "/etc/nginx/conf.d/fastapi-upstream.inc"
-    return
-  fi
-
-  if [[ -f "/etc/nginx/sites-enabled/fastapi-upstream.inc" || -d "/etc/nginx/sites-enabled" ]]; then
-    echo "/etc/nginx/sites-enabled/fastapi-upstream.inc"
-    return
-  fi
-
-  echo "/etc/nginx/conf.d/fastapi-upstream.inc"
-}
 
 cleanup_old_app_images() {
   local image_ref="$1"
@@ -117,7 +97,6 @@ if [[ "$CLEANUP_ONLY" == "true" ]]; then
   exit 0
 fi
 
-NGINX_UPSTREAM_CONF="$(resolve_upstream_conf_path)"
 mkdir -p "$STATE_DIR"
 
 BLUE_CONTAINER="${APP_NAME}-blue"
@@ -129,18 +108,6 @@ resolve_current_slot() {
     slot="$(tr -d '[:space:]' < "$ACTIVE_SLOT_FILE")"
     if [[ "$slot" == "blue" || "$slot" == "green" ]]; then
       echo "$slot"
-      return
-    fi
-  fi
-
-  if [[ -f "$NGINX_UPSTREAM_CONF" ]]; then
-    if grep -Eq "server[[:space:]]+127\\.0\\.0\\.1:${BLUE_PORT};" "$NGINX_UPSTREAM_CONF"; then
-      echo "blue"
-      return
-    fi
-
-    if grep -Eq "server[[:space:]]+127\\.0\\.0\\.1:${GREEN_PORT};" "$NGINX_UPSTREAM_CONF"; then
-      echo "green"
       return
     fi
   fi
@@ -242,35 +209,18 @@ if ! wait_for_health "$HEALTH_URL" "$HEALTH_TIMEOUT_SECONDS" "$HEALTH_INTERVAL_S
 fi
 log "헬스체크 성공: $(( $(date +%s) - health_started_at ))s"
 
-TMP_UPSTREAM_FILE="$(mktemp)"
-cat > "$TMP_UPSTREAM_FILE" <<UPSTREAM
-upstream bridgework_fastapi_backend {
-    server 127.0.0.1:${TARGET_PORT};
-    keepalive 64;
-}
-UPSTREAM
-
-PREV_UPSTREAM_FILE=""
-if sudo test -f "$NGINX_UPSTREAM_CONF"; then
-  PREV_UPSTREAM_FILE="$(mktemp)"
-  sudo cp "$NGINX_UPSTREAM_CONF" "$PREV_UPSTREAM_FILE"
-fi
-
-log "nginx upstream 전환: $NGINX_UPSTREAM_CONF"
-sudo cp "$TMP_UPSTREAM_FILE" "$NGINX_UPSTREAM_CONF"
-rm -f "$TMP_UPSTREAM_FILE"
-
-if ! sudo nginx -t >/dev/null 2>&1; then
-  log "nginx 설정 검증 실패. 이전 설정으로 롤백합니다."
-  if [[ -n "$PREV_UPSTREAM_FILE" ]]; then
-    sudo cp "$PREV_UPSTREAM_FILE" "$NGINX_UPSTREAM_CONF"
-  fi
+if [[ ! -f "$UPSTREAM_SWITCH_SCRIPT" ]]; then
+  log "공통 인프라 전환 스크립트가 없습니다: $UPSTREAM_SWITCH_SCRIPT"
   docker rm -f "$TARGET_CONTAINER" >/dev/null 2>&1 || true
   exit 1
 fi
 
-sudo systemctl reload nginx
-log "nginx 리로드 완료"
+log "공통 인프라 전환 스크립트 실행: ${UPSTREAM_SWITCH_SCRIPT} ${TARGET_SLOT}"
+if ! FASTAPI_STATE_DIR="$STATE_DIR" bash "$UPSTREAM_SWITCH_SCRIPT" "$TARGET_SLOT"; then
+  log "공통 인프라 전환 스크립트 실행 실패"
+  docker rm -f "$TARGET_CONTAINER" >/dev/null 2>&1 || true
+  exit 1
+fi
 
 echo "$TARGET_SLOT" > "$ACTIVE_SLOT_FILE"
 docker update --restart unless-stopped "$TARGET_CONTAINER" >/dev/null
@@ -278,10 +228,6 @@ docker update --restart unless-stopped "$TARGET_CONTAINER" >/dev/null
 if docker ps -a --format '{{.Names}}' | grep -q "^${OLD_CONTAINER}$"; then
   log "이전 슬롯 컨테이너 정리: $OLD_CONTAINER"
   docker rm -f "$OLD_CONTAINER" >/dev/null 2>&1 || true
-fi
-
-if [[ -n "$PREV_UPSTREAM_FILE" ]]; then
-  rm -f "$PREV_UPSTREAM_FILE"
 fi
 
 log "배포 완료: active_slot=$TARGET_SLOT"
