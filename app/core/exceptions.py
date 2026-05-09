@@ -1,4 +1,5 @@
 # 파일: app/core/exceptions.py
+import logging
 from typing import Any, Optional
 
 from fastapi import Request
@@ -6,6 +7,8 @@ from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 from sqlalchemy.exc import SQLAlchemyError
 from starlette.exceptions import HTTPException as StarletteHTTPException
+
+logger = logging.getLogger(__name__)
 
 
 def get_request_id(request: Request) -> Optional[str]:
@@ -19,6 +22,66 @@ def get_request_id(request: Request) -> Optional[str]:
     이 함수만 확장하면 됩니다.
     """
     return request.headers.get("X-Request-Id")
+
+
+def get_request_log_context(request: Request) -> str:
+    """
+    터미널 로그에서 요청을 추적하기 위한 공통 문맥입니다.
+    """
+    client = request.client.host if request.client else "-"
+    return f"method={request.method} path={request.url.path} client={client} request_id={get_request_id(request) or '-'}"
+
+
+def log_handled_exception(
+    *,
+    request: Request,
+    exc: Exception,
+    status_code: int,
+    error_code: str,
+    message: str,
+    include_traceback: bool = True,
+) -> None:
+    """
+    클라이언트 응답은 공통 포맷으로 유지하고, 서버 로그에는 원인 파악용
+    요청 문맥과 traceback을 남깁니다.
+    """
+    log_message = "%s status_code=%s error_code=%s exception_type=%s reason=%r %s" % (
+        message,
+        status_code,
+        error_code,
+        exc.__class__.__name__,
+        str(exc),
+        get_request_log_context(request),
+    )
+    if include_traceback:
+        logger.error(log_message, exc_info=(type(exc), exc, exc.__traceback__))
+    else:
+        logger.warning(log_message)
+
+
+def log_database_exception(request: Request, exc: SQLAlchemyError) -> None:
+    """
+    SQLAlchemy 예외는 기본 traceback만으로 SQL/파라미터가 잘리지 않도록
+    statement, params, DBAPI 원본 예외를 별도 로그 필드로 남깁니다.
+    """
+    statement = getattr(exc, "statement", None)
+    params = getattr(exc, "params", None)
+    orig = getattr(exc, "orig", None)
+
+    logger.error(
+        (
+            "데이터베이스 처리 중 오류가 발생했습니다. status_code=503 error_code=DATABASE_ERROR "
+            "exception_type=%s reason=%r dbapi_exception_type=%s dbapi_reason=%r statement=%r params=%r %s"
+        ),
+        exc.__class__.__name__,
+        str(exc),
+        orig.__class__.__name__ if orig is not None else "-",
+        str(orig) if orig is not None else "-",
+        statement,
+        params,
+        get_request_log_context(request),
+        exc_info=(type(exc), exc, exc.__traceback__),
+    )
 
 
 def build_error_response(
@@ -72,6 +135,11 @@ async def validation_exception_handler(
     기존 FastAPI 기본 422 응답 대신,
     Spring 연동용 공통 포맷으로 반환합니다.
     """
+    logger.warning(
+        "요청 값 검증에 실패했습니다. status_code=422 error_code=VALIDATION_ERROR errors=%s %s",
+        exc.errors(),
+        get_request_log_context(request),
+    )
     return build_error_response(
         status_code=422,
         error_code="VALIDATION_ERROR",
@@ -111,6 +179,14 @@ async def http_exception_handler(
         error_code = f"HTTP_{status_code}"
         message = "HTTP 요청 처리 중 오류가 발생했습니다."
 
+    logger.warning(
+        "%s status_code=%s error_code=%s detail=%r %s",
+        message,
+        status_code,
+        error_code,
+        exc.detail,
+        get_request_log_context(request),
+    )
     return build_error_response(
         status_code=status_code,
         error_code=error_code,
@@ -127,6 +203,13 @@ async def value_error_handler(
     """
     서비스 계층의 잘못된 값 오류를 처리합니다.
     """
+    log_handled_exception(
+        request=request,
+        exc=exc,
+        status_code=400,
+        error_code="BAD_REQUEST",
+        message="요청 값을 처리할 수 없습니다.",
+    )
     return build_error_response(
         status_code=400,
         error_code="BAD_REQUEST",
@@ -143,6 +226,7 @@ async def database_exception_handler(
     """
     DB 조회/연결 오류를 처리합니다.
     """
+    log_database_exception(request, exc)
     return build_error_response(
         status_code=503,
         error_code="DATABASE_ERROR",
@@ -159,6 +243,13 @@ async def runtime_exception_handler(
     """
     실행 환경 또는 내부 서비스 상태 오류를 처리합니다.
     """
+    log_handled_exception(
+        request=request,
+        exc=exc,
+        status_code=500,
+        error_code="AI_SERVICE_RUNTIME_ERROR",
+        message="FastAPI AI/GIS 서비스 실행 중 오류가 발생했습니다.",
+    )
     return build_error_response(
         status_code=500,
         error_code="AI_SERVICE_RUNTIME_ERROR",
@@ -178,6 +269,13 @@ async def unhandled_exception_handler(
     운영 환경에서는 detail에 내부 예외 메시지를 그대로 노출하지 않는 것이 좋습니다.
     지금은 Spring 연동 테스트를 위해 예외 타입만 간단히 내려줍니다.
     """
+    log_handled_exception(
+        request=request,
+        exc=exc,
+        status_code=500,
+        error_code="AI_SERVICE_INTERNAL_ERROR",
+        message="FastAPI AI/GIS 서비스 내부 오류가 발생했습니다.",
+    )
     return build_error_response(
         status_code=500,
         error_code="AI_SERVICE_INTERNAL_ERROR",

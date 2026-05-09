@@ -1,3 +1,4 @@
+import logging
 import re
 from dataclasses import dataclass, field
 from datetime import datetime
@@ -37,6 +38,8 @@ from app.db.models import (
 from app.schemas.score import JobPosting, ScoreEvidenceItem
 from app.utils.geo import calculate_haversine_distance_meters
 
+logger = logging.getLogger(__name__)
+
 SPEC_ACCESSIBILITY_SOURCE_TYPES = [
     TRANSPORT_SUPPORT_CENTER,
     RAIL_WHEELCHAIR_LIFT,
@@ -61,6 +64,8 @@ NORMALIZED_ACCESSIBILITY_SOURCE_TYPES = {
     NATIONWIDE_TRAFFIC_LIGHT,
     NATIONWIDE_CROSSWALK,
 }
+
+WKT_FALLBACK_SCAN_LIMIT = 5000
 
 
 @dataclass(frozen=True)
@@ -573,7 +578,7 @@ def _nearby_wkt_rows(db: Session, model, wkt_attr: str, *, lat: float, lng: floa
     column = getattr(model, wkt_attr)
     rows = _postgis_nearby_wkt_rows(db, model, column, lat=lat, lng=lng, radius_meters=radius_meters)
     if rows is None:
-        rows = db.query(model).filter(column.isnot(None)).all()
+        rows = db.query(model).filter(column.isnot(None)).limit(WKT_FALLBACK_SCAN_LIMIT).all()
     with_distance = []
     for row in rows:
         point = extract_first_wkt_point(getattr(row, wkt_attr))
@@ -606,6 +611,8 @@ def _postgis_nearby_wkt_rows(db: Session, model, column, *, lat: float, lng: flo
             .all()
         )
     except SQLAlchemyError:
+        db.rollback()
+        logger.exception("PostGIS nearby WKT query failed for %s.%s", model.__tablename__, column.key)
         return None
 
 

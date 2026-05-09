@@ -1,11 +1,13 @@
 from types import SimpleNamespace
 
 import pytest
+from sqlalchemy.exc import SQLAlchemyError
 
 from app.repositories.scoring_repository import (
     AccessibilityEvidence,
     StandardWorkplaceMatch,
     _nearby_wkt_rows,
+    _postgis_nearby_wkt_rows,
     match_standard_workplace_from_candidates,
     parse_public_date,
     sort_recruitments_by_latest,
@@ -733,6 +735,9 @@ def test_nearby_wkt_rows_does_not_drop_rows_after_first_500():
         def filter(self, *args, **kwargs):
             return self
 
+        def limit(self, *args, **kwargs):
+            return self
+
         def all(self):
             return rows
 
@@ -761,3 +766,59 @@ def test_nearby_wkt_rows_does_not_drop_rows_after_first_500():
     )
 
     assert [row.id for row, _ in result] == [501]
+
+
+def test_postgis_wkt_query_rolls_back_before_fallback():
+    class FakeDialect:
+        name = "postgresql"
+
+    class FakeBind:
+        dialect = FakeDialect()
+
+    class FailingQuery:
+        def filter(self, *args, **kwargs):
+            return self
+
+        def order_by(self, *args, **kwargs):
+            return self
+
+        def limit(self, *args, **kwargs):
+            return self
+
+        def all(self):
+            raise SQLAlchemyError("invalid geometry")
+
+    class FakeDb:
+        rolled_back = False
+
+        def get_bind(self):
+            return FakeBind()
+
+        def query(self, model):
+            return FailingQuery()
+
+        def rollback(self):
+            self.rolled_back = True
+
+    class FakeColumn:
+        key = "lnkg_wkt"
+
+        def isnot(self, value):
+            return True
+
+    class FakeModel:
+        __tablename__ = "pd_seoul_walking_network"
+
+    db = FakeDb()
+
+    result = _postgis_nearby_wkt_rows(
+        db,
+        FakeModel,
+        FakeColumn(),
+        lat=37.5701,
+        lng=126.9823,
+        radius_meters=100,
+    )
+
+    assert result is None
+    assert db.rolled_back is True
