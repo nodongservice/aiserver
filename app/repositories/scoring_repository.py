@@ -1,4 +1,5 @@
 import logging
+import math
 import re
 from dataclasses import dataclass, field
 from datetime import datetime
@@ -66,6 +67,10 @@ NORMALIZED_ACCESSIBILITY_SOURCE_TYPES = {
 }
 
 WKT_FALLBACK_SCAN_LIMIT = 5000
+SEOUL_LAT_MIN = 37.40
+SEOUL_LAT_MAX = 37.72
+SEOUL_LNG_MIN = 126.73
+SEOUL_LNG_MAX = 127.27
 
 
 @dataclass(frozen=True)
@@ -556,9 +561,14 @@ def _score_numeric_properties(properties: dict, keys: list[str], *, max_points: 
 
 
 def _nearby_point_rows(query, model, *, lat: float, lng: float, radius_meters: float, limit: int):
+    min_lat, max_lat, min_lng, max_lng = _coordinate_bounds(lat, lng, radius_meters)
     rows = (
         query.filter(model.latitude.isnot(None))
         .filter(model.longitude.isnot(None))
+        .filter(model.latitude >= min_lat)
+        .filter(model.latitude <= max_lat)
+        .filter(model.longitude >= min_lng)
+        .filter(model.longitude <= max_lng)
         .order_by(func.abs(model.latitude - lat) + func.abs(model.longitude - lng))
         .limit(200)
         .all()
@@ -575,6 +585,13 @@ def _nearby_point_rows(query, model, *, lat: float, lng: float, radius_meters: f
 
 
 def _nearby_wkt_rows(db: Session, model, wkt_attr: str, *, lat: float, lng: float, radius_meters: float, limit: int):
+    if model in {PdSeoulSubwayEntranceLift, PdSeoulWalkingNetwork} and not _intersects_seoul_bounds(
+        lat,
+        lng,
+        radius_meters,
+    ):
+        return []
+
     column = getattr(model, wkt_attr)
     rows = _postgis_nearby_wkt_rows(db, model, column, lat=lat, lng=lng, radius_meters=radius_meters)
     if rows is None:
@@ -632,12 +649,35 @@ def _nearby_accessibility_gis_features(
     if not source_types:
         return {}
 
+    postgis_rows = _postgis_nearby_accessibility_gis_features(
+        db,
+        source_types=source_types,
+        lat=lat,
+        lng=lng,
+        radius_meters=radius_meters,
+        row_limit=max(2000, len(source_types) * limit_per_source * 20),
+    )
+    if postgis_rows is not None:
+        grouped: dict[str, list[tuple[AccessibilityGisFeature, float]]] = {}
+        for row, distance in postgis_rows:
+            grouped.setdefault(row.source_type, []).append((row, distance))
+
+        for source_type, items in grouped.items():
+            grouped[source_type] = items[:limit_per_source]
+
+        return grouped
+
+    min_lat, max_lat, min_lng, max_lng = _coordinate_bounds(lat, lng, radius_meters)
     rows = (
         db.query(AccessibilityGisFeature)
         .filter(AccessibilityGisFeature.source_type.in_(source_types))
         .filter(AccessibilityGisFeature.is_active.is_(True))
         .filter(AccessibilityGisFeature.latitude.isnot(None))
         .filter(AccessibilityGisFeature.longitude.isnot(None))
+        .filter(AccessibilityGisFeature.latitude >= min_lat)
+        .filter(AccessibilityGisFeature.latitude <= max_lat)
+        .filter(AccessibilityGisFeature.longitude >= min_lng)
+        .filter(AccessibilityGisFeature.longitude <= max_lng)
         .order_by(func.abs(AccessibilityGisFeature.latitude - lat) + func.abs(AccessibilityGisFeature.longitude - lng))
         .limit(2000)
         .all()
@@ -655,6 +695,52 @@ def _nearby_accessibility_gis_features(
         grouped[source_type] = items[:limit_per_source]
 
     return grouped
+
+
+def _postgis_nearby_accessibility_gis_features(
+    db: Session,
+    *,
+    source_types: list[str],
+    lat: float,
+    lng: float,
+    radius_meters: float,
+    row_limit: int,
+) -> Optional[list[tuple[AccessibilityGisFeature, float]]]:
+    bind = db.get_bind()
+    if bind is None or bind.dialect.name != "postgresql":
+        return None
+
+    point = func.Geography(func.ST_SetSRID(func.ST_MakePoint(lng, lat), 4326))
+    distance = func.ST_Distance(AccessibilityGisFeature.geog, point)
+    try:
+        rows = (
+            db.query(AccessibilityGisFeature, distance.label("distance_meters"))
+            .filter(AccessibilityGisFeature.source_type.in_(source_types))
+            .filter(AccessibilityGisFeature.is_active.is_(True))
+            .filter(AccessibilityGisFeature.geog.isnot(None))
+            .filter(func.ST_DWithin(AccessibilityGisFeature.geog, point, radius_meters))
+            .order_by(distance)
+            .limit(row_limit)
+            .all()
+        )
+    except SQLAlchemyError:
+        db.rollback()
+        logger.exception("PostGIS nearby GIS feature query failed")
+        return None
+
+    return [(row, float(distance_meters)) for row, distance_meters in rows if distance_meters is not None]
+
+
+def _coordinate_bounds(lat: float, lng: float, radius_meters: float) -> tuple[float, float, float, float]:
+    lat_delta = radius_meters / 111_320
+    lng_scale = max(math.cos(math.radians(lat)), 0.01)
+    lng_delta = radius_meters / (111_320 * lng_scale)
+    return lat - lat_delta, lat + lat_delta, lng - lng_delta, lng + lng_delta
+
+
+def _intersects_seoul_bounds(lat: float, lng: float, radius_meters: float) -> bool:
+    min_lat, max_lat, min_lng, max_lng = _coordinate_bounds(lat, lng, radius_meters)
+    return min_lat <= SEOUL_LAT_MAX and max_lat >= SEOUL_LAT_MIN and min_lng <= SEOUL_LNG_MAX and max_lng >= SEOUL_LNG_MIN
 
 
 def extract_first_wkt_point(wkt: Optional[str]) -> Optional[tuple[float, float]]:
