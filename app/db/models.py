@@ -324,7 +324,7 @@ class PdSeoulWalkingNetwork(PublicDataNormalizedMixin, Base):
     node_id: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
     lnkg_wkt: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     lnkg_id: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
-    lnkg_len: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
+    lnkg_len: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     sgg_nm: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
     emd_nm: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
     brg: Mapped[Optional[str]] = mapped_column(String(20), nullable=True)
