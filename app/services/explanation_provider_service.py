@@ -1,3 +1,4 @@
+import logging
 from typing import Optional
 
 from app.core.config import settings
@@ -13,6 +14,7 @@ from app.services.rule_fallback_explanation_provider import (
 
 RULE_FALLBACK_PROVIDER_NAME = "rule_fallback"
 OPENAI_PROVIDER_NAME = "openai"
+logger = logging.getLogger(__name__)
 
 
 def get_explanation_provider(
@@ -50,6 +52,12 @@ def generate_explanation_with_provider(
 
     try:
         return provider.generate(request)
-    except Exception:
+    except Exception as exc:
+        logger.warning(
+            "Explanation provider failed; falling back to rule provider. provider=%s error=%s",
+            resolved_provider_name,
+            exc,
+            exc_info=True,
+        )
         fallback_provider = RuleFallbackExplanationProvider()
         return fallback_provider.generate(request)

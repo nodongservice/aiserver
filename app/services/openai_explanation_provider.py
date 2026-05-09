@@ -1,5 +1,5 @@
 import json
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Optional
 
 import httpx
 
@@ -52,11 +52,44 @@ class OpenAIExplanationProvider(ExplanationProvider):
             response.raise_for_status()
             response_json = response.json()
 
-        output_text = response_json.get("output_text")
+        output_text = self._extract_output_text(response_json)
         if not isinstance(output_text, str) or not output_text.strip():
             raise ValueError("OpenAI response did not include output_text")
 
         return json.loads(output_text)
+
+    @staticmethod
+    def _extract_output_text(response_json: Dict[str, Any]) -> Optional[str]:
+        output_text = response_json.get("output_text")
+        if isinstance(output_text, str):
+            return output_text
+
+        output = response_json.get("output")
+        if not isinstance(output, list):
+            return None
+
+        text_parts: list[str] = []
+        for item in output:
+            if not isinstance(item, dict):
+                continue
+
+            content = item.get("content")
+            if not isinstance(content, list):
+                continue
+
+            for content_item in content:
+                if not isinstance(content_item, dict):
+                    continue
+                if content_item.get("type") == "output_text" and isinstance(
+                    content_item.get("text"),
+                    str,
+                ):
+                    text_parts.append(content_item["text"])
+
+        if not text_parts:
+            return None
+
+        return "".join(text_parts)
 
     def _build_openai_request_body(
         self,

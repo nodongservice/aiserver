@@ -62,3 +62,23 @@ def test_openai_explanation_provider_sanitizes_llm_output(monkeypatch):
     assert response.used_llm is True
     assert "접근성이 없습니다" not in response.short_summary
     assert "지원하면 안 됩니다" not in response.detail_explanation
+
+
+def test_extract_output_text_from_responses_output_content():
+    response_json = {
+        "output": [
+            {
+                "type": "message",
+                "content": [
+                    {
+                        "type": "output_text",
+                        "text": ('{"short_summary":"요약","detail_explanation":"상세","check_points":["확인"]}'),
+                    }
+                ],
+            }
+        ]
+    }
+
+    output_text = OpenAIExplanationProvider._extract_output_text(response_json)
+
+    assert output_text == ('{"short_summary":"요약","detail_explanation":"상세","check_points":["확인"]}')
