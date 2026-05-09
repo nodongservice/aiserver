@@ -43,11 +43,11 @@ logger = logging.getLogger(__name__)
 
 
 def get_root_path() -> str:
-    return os.getenv("ROOT_PATH", "/api/py").strip()
+    return os.getenv("ROOT_PATH", "").strip()
 
 
 def get_openapi_server_url() -> str:
-    return os.getenv("OPENAPI_SERVER_URL", "/api/py").strip() or "/api/py"
+    return os.getenv("OPENAPI_SERVER_URL", "/").strip() or "/"
 
 
 def should_auto_create_db_schema() -> bool:

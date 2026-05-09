@@ -63,14 +63,15 @@ uv run pytest -v
 
 ## CI/CD
 
-`backend/deploy/nginx/bridgework.conf` 기준으로 같은 인스턴스의 FastAPI upstream(`19000`, `19001`)만 교체하는 배포를 사용합니다.
+같은 EC2 인스턴스에서 FastAPI 컨테이너를 Blue/Green(`19000`, `19001`)으로 배포합니다.
+Nginx 라우팅/업스트림 전환은 `backend-infra` 레포에서 관리합니다.
 
 - 워크플로우: `.github/workflows/cicd-main-ec2.yml`
 - CI 트리거: 모든 브랜치 `push`, `main` 대상 `pull_request`
 - 배포 트리거: `main` 브랜치 `push`, `workflow_dispatch`
 - 이미지 빌드/게시: `Dockerfile` 기반 GHCR multi-arch 이미지(`linux/amd64`, `linux/arm64`)
 - 서버 배포 스크립트: `deploy/deploy.sh`
-- 라우팅 전제: 서버 Nginx에 `backend/deploy/nginx/fastapi-upstream.inc`가 이미 포함돼 있어야 함
+- 트래픽 전환 스크립트: `~/bridgework-infra/deploy/fastapi_blue_green_switch.sh`
 
 ### 배포 방식
 
@@ -79,7 +80,7 @@ uv run pytest -v
 3. 배포 job은 GHCR에 `ghcr.io/<owner>/bridgework-aiserver:<commit-sha>` multi-arch 이미지를 push합니다.
 4. 운영 `.env`, 배포 스크립트를 EC2로 업로드합니다.
 5. EC2에서 GHCR에 로그인하고 이미지를 pull한 뒤 비활성 슬롯(`19000` 또는 `19001`)에 새 컨테이너를 띄웁니다.
-6. `/health` 확인 후 Nginx `fastapi-upstream.inc`를 새 포트로 바꾸고 `nginx reload` 합니다.
+6. `/health` 확인 후 `backend-infra`의 `fastapi_blue_green_switch.sh`를 호출해 Nginx 업스트림을 전환합니다.
 7. 이전 슬롯 컨테이너를 제거합니다.
 8. 배포 성공 후 현재 서비스 이미지 저장소의 최근 이미지 5개만 남기도록 백그라운드에서 이전 이미지를 정리합니다.
 
@@ -116,7 +117,7 @@ EC2에서는 이미지를 빌드하지 않으므로 배포 중 Docker builder ca
 1. Docker, Nginx, curl 설치
 2. 배포 계정에 Docker 실행 권한 부여
 3. 배포 계정에 `sudo nginx -t`, `sudo systemctl reload nginx`, `sudo cp` 권한 부여
-4. `backend/deploy/setup_nginx.sh` 기준 Nginx 설정이 이미 적용되어 있어야 함
+4. `backend-infra` 레포 CI/CD를 먼저 1회 실행해 `~/bridgework-infra/deploy`를 준비
 
 
 ### 폴더구조
