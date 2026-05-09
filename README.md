@@ -27,6 +27,8 @@ uv run python -m uvicorn app.main:app --reload
 
 ```bash
 curl http://127.0.0.1:8000/health
+curl http://127.0.0.1:8000/db-health
+curl http://127.0.0.1:8000/metrics
 ```
 
 ### 4. 패키지 추가
