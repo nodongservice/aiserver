@@ -100,14 +100,24 @@ jobs:
           push: true
           tags: ${{ steps.image.outputs.image_uri }}
 
-      - name: Verify OCR runtime dependencies in image
+      - name: Verify OCR runtime dependencies in image (amd64)
         run: |
-          docker pull "$IMAGE_URI"
-          docker run --rm --entrypoint /app/.venv/bin/python "$IMAGE_URI" - <<'PY'
+          docker pull --platform linux/amd64 "$IMAGE_URI"
+          docker run --rm --platform linux/amd64 --entrypoint /app/.venv/bin/python "$IMAGE_URI" - <<'PY'
           from app.services.profile_portfolio_draft_service import verify_profile_draft_ocr_runtime_dependencies
 
           verify_profile_draft_ocr_runtime_dependencies()
-          print("OCR runtime dependency verification passed")
+          print("OCR runtime dependency verification passed (amd64)")
+          PY
+
+      - name: Verify OCR runtime dependencies in image (arm64)
+        run: |
+          docker pull --platform linux/arm64 "$IMAGE_URI"
+          docker run --rm --platform linux/arm64 --entrypoint /app/.venv/bin/python "$IMAGE_URI" - <<'PY'
+          from app.services.profile_portfolio_draft_service import verify_profile_draft_ocr_runtime_dependencies
+
+          verify_profile_draft_ocr_runtime_dependencies()
+          print("OCR runtime dependency verification passed (arm64)")
           PY
 
       - name: Generate production env file
