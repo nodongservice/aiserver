@@ -141,6 +141,7 @@ Spring Backend가 호출하는 scoring v2 API는 다음과 같습니다.
 | `POST /api/v1/score/quick` | 기능 2. 최신 공고를 조회하고 직무 적합도만 계산 |
 | `POST /api/v1/score/map` | 기능 3. 공고/공공데이터를 조회하고 6개 항목 동일비중 종합 점수 계산 |
 | `POST /api/v1/explain/recommendation` | 이미 계산된 점수/근거를 추천 사유, 주의사항, 체크리스트로 변환 |
+| `POST /api/v1/profile-draft/from-portfolio` | 포트폴리오 PDF를 분석해 프로필 전체 필드 초안 생성(null 허용) |
 
 구조 원칙:
 
@@ -149,6 +150,46 @@ Spring Backend가 호출하는 scoring v2 API는 다음과 같습니다.
 - FastAPI는 Spring DB의 `pd_*` 정규화 테이블을 직접 조회합니다.
 - 점수는 룰 기반이며 LLM은 점수를 직접 결정하지 않습니다.
 - 데이터가 부족한 항목은 확정하지 않고 `추가 확인 필요`로 응답합니다.
+
+## 포트폴리오 OCR 기반 프로필 초안 생성
+
+`POST /api/v1/profile-draft/from-portfolio`는 `multipart/form-data`의 `file`(PDF) 1개를 받아 다음 순서로 처리합니다.
+
+1. 파일 검증
+- 비어있는 파일 차단
+- Content-Type 허용 목록 검증(`application/pdf`)
+- PDF 시그니처(`%PDF-`) 검증
+- 최대 용량 제한 검증
+
+2. 텍스트 추출 전략(운영형)
+- 먼저 `pypdf`로 페이지별 임베디드 텍스트 추출
+- 페이지별 품질 점수(한글 비율, 깨짐 문자 비율, 제어문자 비율, 긴 토큰 비율, 이력서 키워드 히트) 계산
+- 저품질 페이지에 대해서만 PaddleOCR 수행
+- 페이지별로 임베디드 텍스트와 OCR 결과를 비교해 더 신뢰도 높은 텍스트 선택
+
+3. LLM 구조화
+- OpenAI Responses API + JSON Schema(`strict=true`)로 스프링 프로필 스키마에 맞춰 구조화
+- 전체 필드를 항상 포함하고, 근거가 부족한 값은 `null`로 반환
+
+4. 응답
+- `draft`: 전체 필드 초안
+- `missingFields`: `null`인 필드명 목록
+- `confidence`, `ocrTextLength`, `modelVersion`, `warnings`
+
+## 포트폴리오 OCR/LLM 관련 환경변수
+
+- `PROFILE_DRAFT_OPENAI_MODEL` (기본: `OPENAI_MODEL`)
+- `PROFILE_DRAFT_OPENAI_TIMEOUT_SECONDS` (기본: `40`)
+- `PROFILE_DRAFT_MAX_FILE_SIZE_BYTES` (기본: `10485760`)
+- `PROFILE_DRAFT_MAX_PAGES` (기본: `10`)
+- `PROFILE_DRAFT_PDF_RENDER_SCALE` (기본: `2.0`)
+- `PROFILE_DRAFT_MAX_PROMPT_CHARS` (기본: `15000`)
+- `PROFILE_DRAFT_ALLOWED_CONTENT_TYPES` (코드 기본값: `application/pdf`)
+- `PROFILE_DRAFT_EMBEDDED_QUALITY_THRESHOLD` (기본: `55`)
+- `PROFILE_DRAFT_EMBEDDED_MIN_CHARS_PER_PAGE` (기본: `40`)
+- `PROFILE_DRAFT_EMBEDDED_MAX_REPLACEMENT_RATIO` (기본: `0.08`)
+- `PROFILE_DRAFT_EMBEDDED_MAX_CONTROL_RATIO` (기본: `0.02`)
+- `PROFILE_DRAFT_OCR_PREFER_MARGIN` (기본: `8`)
 
 ## 스코어링 DB 조회 기준
 
