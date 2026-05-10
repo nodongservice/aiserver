@@ -270,6 +270,11 @@ def verify_profile_draft_ocr_runtime_dependencies() -> None:
         dependency_errors.append(format_dependency_error("pypdfium2", exception))
 
     try:
+        import paddle  # noqa: F401
+    except Exception as exception:
+        dependency_errors.append(format_dependency_error("paddlepaddle", exception))
+
+    try:
         from paddleocr import PaddleOCR  # noqa: F401
     except Exception as exception:
         dependency_errors.append(format_dependency_error("paddleocr", exception))

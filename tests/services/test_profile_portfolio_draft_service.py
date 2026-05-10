@@ -9,7 +9,7 @@ def test_verify_profile_draft_ocr_runtime_dependencies_reports_missing_modules(m
     original_import = builtins.__import__
 
     def fake_import(name, globals=None, locals=None, fromlist=(), level=0):
-        if name in {"numpy", "pypdfium2", "paddleocr"}:
+        if name in {"numpy", "pypdfium2", "paddle", "paddleocr"}:
             raise ImportError(f"no module named {name}")
         return original_import(name, globals, locals, fromlist, level)
 
@@ -21,6 +21,7 @@ def test_verify_profile_draft_ocr_runtime_dependencies_reports_missing_modules(m
     message = str(exc_info.value)
     assert "numpy" in message
     assert "pypdfium2" in message
+    assert "paddlepaddle" in message
     assert "paddleocr" in message
 
 
