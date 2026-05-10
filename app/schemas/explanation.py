@@ -1,6 +1,6 @@
 # 파일: app/schemas/explanation.py
 
-from typing import List, Optional
+from typing import List, Literal, Optional
 
 from pydantic import BaseModel, Field
 
@@ -36,6 +36,11 @@ class ExplanationGenerateRequest(BaseModel):
     # 접근성 등급
     # GOOD, CAUTION, RISK 중 하나를 권장합니다.
     accessibility_grade: str
+
+    # 설명 기준
+    # quick: 단일 직무 적합도 점수 기반 설명
+    # map: 지도 추천의 종합/접근성 점수 기반 설명
+    score_mode: Literal["quick", "map"] = "map"
 
     # 점수 상세
     score_detail: ScoreDetail

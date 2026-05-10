@@ -15,7 +15,7 @@ from app.repositories.scoring_repository import (
     to_standard_workplace_match,
 )
 from app.schemas.explanation import ExplanationGenerateResponse
-from app.schemas.score import JobPosting, RecommendationExplainRequest, ScoreProfile, ScoreRequest
+from app.schemas.score import JobPosting, MapScoreDetail, RecommendationExplainRequest, ScoreProfile, ScoreRequest
 from app.services import recommendation_explanation_service, score_service
 from app.services.scoring.accessibility_summary import calculate_accessibility_score
 from app.services.scoring.job_fit import calculate_job_fit_score
@@ -169,12 +169,59 @@ def test_recommendation_explanation_uses_configured_provider(monkeypatch):
 
     assert captured["provider_name"] is None
     assert captured["request"].job_post_id == 1
+    assert captured["request"].score_mode == "quick"
     assert captured["request"].accessibility_score == 82
+    assert captured["request"].score_detail.work_environment_score == 0
     assert response.used_llm is True
     assert response.short_summary == "ABC복지센터: LLM 요약"
     assert response.recommendation_reasons == ["LLM 상세 설명"]
     assert response.caution_points == ["지원 전 접근성 확인이 필요합니다."]
     assert response.checklist == ["LLM 체크포인트"]
+
+
+def test_recommendation_explanation_uses_total_score_for_map_provider(monkeypatch):
+    captured = {}
+
+    def fake_generate(request, provider_name=None):
+        captured["request"] = request
+        return ExplanationGenerateResponse(
+            explanation_version="v1-test",
+            short_summary="지도 요약",
+            detail_explanation="지도 상세 설명",
+            check_points=["지도 체크포인트"],
+            used_llm=False,
+        )
+
+    monkeypatch.setattr(
+        recommendation_explanation_service,
+        "generate_explanation_with_provider",
+        fake_generate,
+    )
+
+    recommendation_explanation_service.explain_recommendation(
+        RecommendationExplainRequest(
+            profile=ScoreProfile(user_id=1, desired_jobs=["사무보조"]),
+            job=JobPosting(
+                job_post_id=1,
+                company_name="ABC복지센터",
+                job_title="사무보조",
+            ),
+            score_detail=MapScoreDetail(
+                job_fit_score=86,
+                work_condition_score=80,
+                disability_support_score=82,
+                work_environment_score=85,
+                company_stability_score=83,
+                accessibility_score=88,
+            ),
+            total_score=84,
+            reasons=["종합 점수가 양호합니다."],
+        )
+    )
+
+    assert captured["request"].score_mode == "map"
+    assert captured["request"].accessibility_score == 84
+    assert captured["request"].accessibility_grade == "GOOD"
 
 
 def test_to_job_posting_from_pd_kepad_recruitment_row():
