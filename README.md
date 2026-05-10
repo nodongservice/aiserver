@@ -190,6 +190,7 @@ Spring Backend가 호출하는 scoring v2 API는 다음과 같습니다.
 - `PROFILE_DRAFT_EMBEDDED_MAX_REPLACEMENT_RATIO` (기본: `0.08`)
 - `PROFILE_DRAFT_EMBEDDED_MAX_CONTROL_RATIO` (기본: `0.02`)
 - `PROFILE_DRAFT_OCR_PREFER_MARGIN` (기본: `8`)
+- `REQUIRE_PROFILE_DRAFT_OCR_DEPENDENCIES` (기본: `true`, 시작 시 OCR 의존성 import 검증)
 
 ## 스코어링 DB 조회 기준
 

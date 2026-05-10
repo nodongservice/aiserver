@@ -100,6 +100,16 @@ jobs:
           push: true
           tags: ${{ steps.image.outputs.image_uri }}
 
+      - name: Verify OCR runtime dependencies in image
+        run: |
+          docker pull "$IMAGE_URI"
+          docker run --rm --entrypoint /app/.venv/bin/python "$IMAGE_URI" - <<'PY'
+          from app.services.profile_portfolio_draft_service import verify_profile_draft_ocr_runtime_dependencies
+
+          verify_profile_draft_ocr_runtime_dependencies()
+          print("OCR runtime dependency verification passed")
+          PY
+
       - name: Generate production env file
         env:
           PROD_DATABASE_URL: ${{ secrets.DATABASE_URL }}
@@ -114,6 +124,7 @@ jobs:
           PROD_LOG_LEVEL: ${{ secrets.LOG_LEVEL }}
           PROD_AUTO_CREATE_DB_SCHEMA: ${{ secrets.AUTO_CREATE_DB_SCHEMA }}
           PROD_REQUIRE_POSTGIS: ${{ secrets.REQUIRE_POSTGIS }}
+          PROD_REQUIRE_PROFILE_DRAFT_OCR_DEPENDENCIES: ${{ secrets.REQUIRE_PROFILE_DRAFT_OCR_DEPENDENCIES }}
         run: |
           if [ -n "$PROD_EXPLANATION_PROVIDER" ]; then
             RESOLVED_EXPLANATION_PROVIDER="$PROD_EXPLANATION_PROVIDER"
@@ -155,6 +166,7 @@ jobs:
             echo "LOG_LEVEL=${PROD_LOG_LEVEL:-INFO}"
             echo "AUTO_CREATE_DB_SCHEMA=${PROD_AUTO_CREATE_DB_SCHEMA:-false}"
             echo "REQUIRE_POSTGIS=${PROD_REQUIRE_POSTGIS:-true}"
+            echo "REQUIRE_PROFILE_DRAFT_OCR_DEPENDENCIES=${PROD_REQUIRE_PROFILE_DRAFT_OCR_DEPENDENCIES:-true}"
           } > .env.cicd.prod
 
       - name: Configure SSH

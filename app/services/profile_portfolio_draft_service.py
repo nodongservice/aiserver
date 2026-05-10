@@ -256,12 +256,40 @@ def extract_text_with_paddle_ocr(
     return page_result_map
 
 
+def verify_profile_draft_ocr_runtime_dependencies() -> None:
+    dependency_errors: list[str] = []
+
+    try:
+        import numpy  # noqa: F401
+    except Exception as exception:
+        dependency_errors.append(format_dependency_error("numpy", exception))
+
+    try:
+        import pypdfium2  # noqa: F401
+    except Exception as exception:
+        dependency_errors.append(format_dependency_error("pypdfium2", exception))
+
+    try:
+        from paddleocr import PaddleOCR  # noqa: F401
+    except Exception as exception:
+        dependency_errors.append(format_dependency_error("paddleocr", exception))
+
+    if dependency_errors:
+        raise RuntimeError(
+            "프로필 OCR 런타임 의존성 검증 실패: " + " | ".join(dependency_errors)
+        )
+
+
+def format_dependency_error(dependency_name: str, exception: Exception) -> str:
+    return f"{dependency_name} ({exception.__class__.__name__}: {exception})"
+
+
 @lru_cache(maxsize=1)
 def get_paddle_ocr() -> Any:
     try:
         from paddleocr import PaddleOCR
-    except ImportError as exception:
-        raise RuntimeError("paddleocr 의존성이 설치되어 있지 않습니다.") from exception
+    except Exception as exception:
+        raise RuntimeError(format_dependency_error("paddleocr", exception)) from exception
 
     try:
         # 문서 회전/왜곡 보정은 성능 비용이 커 기본 비활성화한다.

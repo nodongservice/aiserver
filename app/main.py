@@ -36,6 +36,9 @@ from app.schemas.common import (
     PostgisHealthResult,
     RootResult,
 )
+from app.services.profile_portfolio_draft_service import (
+    verify_profile_draft_ocr_runtime_dependencies,
+)
 
 load_dotenv(".env.local")
 setup_logging()
@@ -59,6 +62,10 @@ def should_require_postgis() -> bool:
     return os.getenv("REQUIRE_POSTGIS", "true").lower() == "true"
 
 
+def should_require_profile_draft_ocr_dependencies() -> bool:
+    return os.getenv("REQUIRE_PROFILE_DRAFT_OCR_DEPENDENCIES", "true").lower() == "true"
+
+
 def get_postgis_version(db: Session) -> str:
     result = db.execute(text("SELECT PostGIS_Version()")).scalar()
     return str(result)
@@ -80,6 +87,19 @@ def verify_required_postgis() -> None:
         ) from exc
 
 
+def verify_required_profile_draft_ocr_dependencies() -> None:
+    if not should_require_profile_draft_ocr_dependencies():
+        logger.warning("REQUIRE_PROFILE_DRAFT_OCR_DEPENDENCIES=false, OCR 의존성 검사를 건너뜁니다.")
+        return
+
+    try:
+        verify_profile_draft_ocr_runtime_dependencies()
+        logger.info("프로필 OCR 런타임 의존성 확인 완료")
+    except Exception as exc:
+        logger.exception("프로필 OCR 런타임 의존성 검증에 실패했습니다.")
+        raise RuntimeError("프로필 OCR 런타임 의존성 검증 실패") from exc
+
+
 app = FastAPI(
     title="BridgeWork AI Server",
     version="0.1.0",
@@ -91,6 +111,7 @@ app = FastAPI(
 Instrumentator(excluded_handlers=["/metrics"]).instrument(app).expose(app)
 
 verify_required_postgis()
+verify_required_profile_draft_ocr_dependencies()
 
 if should_auto_create_db_schema():
     logger.warning("AUTO_CREATE_DB_SCHEMA=true, SQLAlchemy metadata.create_all()을 수행합니다.")
