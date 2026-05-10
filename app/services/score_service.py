@@ -1,3 +1,6 @@
+from collections import OrderedDict
+from threading import RLock
+from time import monotonic
 from typing import Optional
 
 from fastapi import HTTPException
@@ -33,6 +36,13 @@ from app.services.scoring.job_fit import calculate_job_fit_score
 from app.services.scoring.work_condition import calculate_work_condition_score
 from app.services.scoring.work_environment import calculate_work_environment_score
 
+MAP_SCORING_MIN_CANDIDATE_LIMIT = 80
+ACCESSIBILITY_CACHE_TTL_SECONDS = 10 * 60
+ACCESSIBILITY_CACHE_MAX_SIZE = 1000
+
+_accessibility_cache: OrderedDict[tuple[float, float, int], tuple[float, AccessibilityEvidence]] = OrderedDict()
+_accessibility_cache_lock = RLock()
+
 
 def score_quick_jobs(request: ScoreRequest, db: Optional[Session] = None) -> QuickScoreResponse:
     validate_score_request(request, mode="quick")
@@ -64,7 +74,8 @@ def score_quick_jobs(request: ScoreRequest, db: Optional[Session] = None) -> Qui
 
 def score_map_jobs(request: ScoreRequest, db: Optional[Session] = None) -> MapScoreResponse:
     validate_score_request(request, mode="map")
-    postings = get_map_candidate_job_postings(db=db)
+    candidate_limit = max(request.offset + request.limit, MAP_SCORING_MIN_CANDIDATE_LIMIT)
+    postings = get_map_candidate_job_postings(db=db, limit=candidate_limit)
     standard_workplaces = get_standard_workplaces(postings, db)
     results: list[MapScoreResult] = []
 
@@ -119,12 +130,12 @@ def get_all_job_postings(db: Optional[Session]) -> list[JobPosting]:
     return [posting for row in rows if (posting := to_job_posting(row)) is not None]
 
 
-def get_map_candidate_job_postings(db: Optional[Session]) -> list[JobPosting]:
+def get_map_candidate_job_postings(db: Optional[Session], limit: int) -> list[JobPosting]:
     if db is None:
         return []
     if not hasattr(db, "query"):
         raise RuntimeError("스코어링 공고 조회에는 SQLAlchemy Session이 필요합니다.")
-    rows = find_all_recruitments_for_scoring(db)
+    rows = find_all_recruitments_for_scoring(db, limit=limit)
     return [posting for row in rows if (posting := to_job_posting(row)) is not None]
 
 
@@ -155,7 +166,64 @@ def get_accessibility(profile: ScoreProfile, posting: JobPosting, db: Optional[S
     radius_meters = 700
     if profile.mobility_range_km is not None:
         radius_meters = max(300, min(2000, profile.mobility_range_km * 1000))
-    return find_accessibility_evidence(db, lat=posting.work_lat, lng=posting.work_lng, radius_meters=radius_meters)
+    cache_key = build_accessibility_cache_key(posting.work_lat, posting.work_lng, radius_meters)
+    if cache_key is None:
+        return find_accessibility_evidence(db, lat=posting.work_lat, lng=posting.work_lng, radius_meters=radius_meters)
+
+    cached = get_cached_accessibility(cache_key)
+    if cached is not None:
+        return cached
+
+    accessibility = find_accessibility_evidence(
+        db,
+        lat=posting.work_lat,
+        lng=posting.work_lng,
+        radius_meters=radius_meters,
+    )
+    set_cached_accessibility(cache_key, accessibility)
+    return accessibility
+
+
+def build_accessibility_cache_key(
+    lat: Optional[float],
+    lng: Optional[float],
+    radius_meters: float,
+) -> Optional[tuple[float, float, int]]:
+    if lat is None or lng is None:
+        return None
+    return (round(lat, 6), round(lng, 6), round(radius_meters))
+
+
+def get_cached_accessibility(cache_key: tuple[float, float, int]) -> Optional[AccessibilityEvidence]:
+    now = monotonic()
+    with _accessibility_cache_lock:
+        cached = _accessibility_cache.get(cache_key)
+        if cached is None:
+            return None
+
+        cached_at, accessibility = cached
+        if now - cached_at > ACCESSIBILITY_CACHE_TTL_SECONDS:
+            _accessibility_cache.pop(cache_key, None)
+            return None
+
+        _accessibility_cache.move_to_end(cache_key)
+        return accessibility
+
+
+def set_cached_accessibility(
+    cache_key: tuple[float, float, int],
+    accessibility: AccessibilityEvidence,
+) -> None:
+    with _accessibility_cache_lock:
+        _accessibility_cache[cache_key] = (monotonic(), accessibility)
+        _accessibility_cache.move_to_end(cache_key)
+        while len(_accessibility_cache) > ACCESSIBILITY_CACHE_MAX_SIZE:
+            _accessibility_cache.popitem(last=False)
+
+
+def clear_accessibility_cache() -> None:
+    with _accessibility_cache_lock:
+        _accessibility_cache.clear()
 
 
 def validate_score_request(request: ScoreRequest, *, mode: str) -> None:

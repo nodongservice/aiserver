@@ -323,7 +323,7 @@ def test_map_score_uses_equal_weight_average(monkeypatch):
         work_lat=37.5701,
         work_lng=126.9823,
     )
-    monkeypatch.setattr(score_service, "get_map_candidate_job_postings", lambda db: [posting])
+    monkeypatch.setattr(score_service, "get_map_candidate_job_postings", lambda db, limit: [posting])
     monkeypatch.setattr(
         score_service,
         "get_standard_workplaces",
@@ -402,7 +402,7 @@ def test_map_score_sorts_all_candidates_before_pagination(monkeypatch):
     monkeypatch.setattr(
         score_service,
         "get_map_candidate_job_postings",
-        lambda db: [low_score_latest, high_score_older],
+        lambda db, limit: [low_score_latest, high_score_older],
     )
     monkeypatch.setattr(
         score_service,
@@ -608,7 +608,7 @@ def test_salary_normalization_uses_salary_type_units():
     assert normalize_annual_salary("100,000", "일급") == 26_000_000
 
 
-def test_map_score_does_not_cap_candidates_before_sorting(monkeypatch):
+def test_map_score_limits_expensive_candidate_scoring(monkeypatch):
     postings = [
         JobPosting(
             job_post_id=index,
@@ -635,7 +635,13 @@ def test_map_score_does_not_cap_candidates_before_sorting(monkeypatch):
             work_lng=126.9823,
         )
     )
-    monkeypatch.setattr(score_service, "get_map_candidate_job_postings", lambda db: postings)
+    captured = {}
+
+    def limited_postings(db, limit):
+        captured["limit"] = limit
+        return postings[:limit]
+
+    monkeypatch.setattr(score_service, "get_map_candidate_job_postings", limited_postings)
     monkeypatch.setattr(score_service, "get_standard_workplaces", lambda postings, db: {})
     monkeypatch.setattr(
         score_service,
@@ -670,7 +676,8 @@ def test_map_score_does_not_cap_candidates_before_sorting(monkeypatch):
         )
     )
 
-    assert [result.job.job_post_id for result in response.results] == [5000]
+    assert captured["limit"] == score_service.MAP_SCORING_MIN_CANDIDATE_LIMIT
+    assert [result.job.job_post_id for result in response.results] != [5000]
 
 
 def test_map_score_allows_missing_home_coordinates_and_returns_risk(monkeypatch):
@@ -685,7 +692,7 @@ def test_map_score_allows_missing_home_coordinates_and_returns_risk(monkeypatch)
         work_lat=37.5701,
         work_lng=126.9823,
     )
-    monkeypatch.setattr(score_service, "get_map_candidate_job_postings", lambda db: [posting])
+    monkeypatch.setattr(score_service, "get_map_candidate_job_postings", lambda db, limit: [posting])
     monkeypatch.setattr(score_service, "get_standard_workplaces", lambda postings, db: {})
     monkeypatch.setattr(
         score_service,
@@ -822,3 +829,54 @@ def test_postgis_wkt_query_rolls_back_before_fallback():
 
     assert result is None
     assert db.rolled_back is True
+
+
+def test_get_accessibility_reuses_cached_evidence_for_same_location(monkeypatch):
+    score_service.clear_accessibility_cache()
+    calls = []
+    expected = AccessibilityEvidence(
+        bus_stop_count=1,
+        crosswalk_count=0,
+        traffic_light_count=0,
+        transport_support_center_count=0,
+        subway_entrance_lift_count=0,
+        walking_network_count=0,
+        evidence_items=[],
+    )
+
+    def fake_find_accessibility_evidence(db, *, lat, lng, radius_meters):
+        calls.append((lat, lng, radius_meters))
+        return expected
+
+    class FakeDb:
+        def query(self):
+            return None
+
+    profile = ScoreProfile(
+        desired_jobs=["사무보조"],
+        skills=["엑셀"],
+        education="고졸",
+        career="신입",
+        available_employment_types=["정규직"],
+        disability_types=["wheelchair"],
+        disability_severity="중증",
+        is_registered_disabled=True,
+        address="서울특별시 중구 세종대로 110",
+    )
+    posting = JobPosting(
+        job_post_id=1,
+        company_name="ABC",
+        job_title="사무보조",
+        work_lat=37.5701234,
+        work_lng=126.9823456,
+    )
+
+    monkeypatch.setattr(score_service, "find_accessibility_evidence", fake_find_accessibility_evidence)
+
+    first = score_service.get_accessibility(profile, posting, FakeDb())
+    second = score_service.get_accessibility(profile, posting, FakeDb())
+
+    assert first is expected
+    assert second is expected
+    assert calls == [(37.5701234, 126.9823456, 700)]
+    score_service.clear_accessibility_cache()
