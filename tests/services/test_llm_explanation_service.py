@@ -76,11 +76,36 @@ def test_build_detail_explanation_includes_score_summary_and_filtered_risk_text(
 
     explanation = build_detail_explanation(request)
 
-    assert "접근성 점수 88점, 등급 GOOD" in explanation
+    assert "종합 추천 점수 88점, 등급 GOOD" in explanation
     assert "세부 점수에서는" in explanation
     assert "대중교통 접근성" in explanation or "업무환경 적합성" in explanation
     assert "지원 전 추가 확인이 필요합니다" in explanation
     assert "전국 버스정류장 위치정보" in explanation
+
+
+def test_build_detail_explanation_uses_job_fit_wording_for_quick_single_score():
+    request = build_request(
+        accessibility_score=82,
+        accessibility_grade="GOOD",
+        score_mode="quick",
+        score_detail=ScoreDetail(
+            transport_score=0,
+            station_access_score=0,
+            crosswalk_score=0,
+            facility_score=0,
+            work_environment_score=0,
+            risk_penalty=0,
+        ),
+        positive_factors=["희망 직무와 모집 직종이 겹칩니다."],
+        evidence_items=[],
+    )
+
+    explanation = build_detail_explanation(request)
+
+    assert "직무 적합도 점수 82점" in explanation
+    assert "단일 점수는 희망 직무" in explanation
+    assert "접근성 점수" not in explanation
+    assert "업무환경 적합성 항목이 상대적으로 높게 반영" not in explanation
 
 
 def test_build_check_points_skips_default_no_risk_message():

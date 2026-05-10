@@ -12,18 +12,17 @@ def explain_recommendation(request: RecommendationExplainRequest) -> Recommendat
 
 
 def build_explanation_generate_request(request: RecommendationExplainRequest) -> ExplanationGenerateRequest:
-    score = request.total_score if request.total_score is not None else request.job_fit_score
-    accessibility_score = request.score_detail.accessibility_score if request.score_detail else score
-    if accessibility_score is None:
-        accessibility_score = 0
+    score_mode = resolve_score_mode(request)
+    primary_score = resolve_primary_score(request, score_mode)
 
     return ExplanationGenerateRequest(
         user_id=request.profile.user_id,
         job_post_id=request.job.job_post_id,
         company_name=request.job.company_name,
         job_title=request.job.job_title,
-        accessibility_score=accessibility_score,
-        accessibility_grade=grade_from_score(accessibility_score),
+        accessibility_score=primary_score,
+        accessibility_grade=grade_from_score(primary_score),
+        score_mode=score_mode,
         score_detail=to_legacy_score_detail(request),
         positive_factors=request.reasons,
         risk_factors=request.risk_factors,
@@ -38,6 +37,25 @@ def build_explanation_generate_request(request: RecommendationExplainRequest) ->
             for item in request.evidence_items
         ],
     )
+
+
+def resolve_score_mode(request: RecommendationExplainRequest) -> str:
+    if request.score_detail is not None or request.total_score is not None:
+        return "map"
+    return "quick"
+
+
+def resolve_primary_score(request: RecommendationExplainRequest, score_mode: str) -> int:
+    if score_mode == "quick":
+        return request.job_fit_score or 0
+
+    if request.total_score is not None:
+        return request.total_score
+
+    if request.score_detail is not None:
+        return request.score_detail.accessibility_score
+
+    return 0
 
 
 def to_recommendation_explain_response(
@@ -59,13 +77,12 @@ def to_recommendation_explain_response(
 
 def to_legacy_score_detail(request: RecommendationExplainRequest) -> ScoreDetail:
     if request.score_detail is None:
-        score = request.job_fit_score or request.total_score or 0
         return ScoreDetail(
             transport_score=0,
             station_access_score=0,
             crosswalk_score=0,
             facility_score=0,
-            work_environment_score=score,
+            work_environment_score=0,
             risk_penalty=0,
         )
 
