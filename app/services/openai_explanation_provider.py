@@ -152,8 +152,12 @@ class OpenAIExplanationProvider(ExplanationProvider):
                             {
                                 "job_title": request.job_title,
                                 "company_name": request.company_name,
-                                "accessibility_score": request.accessibility_score,
-                                "accessibility_grade": request.accessibility_grade,
+                                "score_mode": request.score_mode,
+                                "primary_score": request.accessibility_score,
+                                "primary_score_label": "직무 적합도 점수"
+                                if request.score_mode == "quick"
+                                else "종합 추천 점수",
+                                "grade": request.accessibility_grade,
                                 "score_detail": request.score_detail.model_dump(),
                                 "positive_factors": request.positive_factors[:5],
                                 "risk_factors": request.risk_factors[:5],

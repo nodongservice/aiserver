@@ -54,6 +54,21 @@ def build_short_summary(request: ExplanationGenerateRequest) -> str:
     """
     has_real_risk = has_real_risk_factors(request.risk_factors)
 
+    if request.score_mode == "quick":
+        if request.accessibility_grade == "GOOD":
+            if has_real_risk:
+                return f"{request.job_title} 공고는 직무 적합도는 높지만 일부 확인이 필요합니다."
+
+            return f"{request.job_title} 공고는 현재 프로필 기준 직무 적합도가 비교적 높습니다."
+
+        if request.accessibility_grade == "CAUTION":
+            if has_real_risk:
+                return f"{request.job_title} 공고는 직무 조건과 주의사항을 함께 확인해볼 필요가 있습니다."
+
+            return f"{request.job_title} 공고는 일부 직무 조건 확인이 필요합니다."
+
+        return f"{request.job_title} 공고는 현재 프로필과 맞지 않는 조건이 있어 주의가 필요합니다."
+
     if request.accessibility_grade == "GOOD":
         if has_real_risk:
             return f"{request.job_title} 공고는 현재 조건 기준 접근성은 양호하지만 일부 확인이 필요합니다."
@@ -75,10 +90,7 @@ def build_detail_explanation(request: ExplanationGenerateRequest) -> str:
 
     현재는 LLM 대신 정해진 형식으로 설명을 조합합니다.
     """
-    overview_sentence = (
-        f"{request.company_name}의 {request.job_title} 공고는 접근성 점수 "
-        f"{request.accessibility_score}점, 등급 {request.accessibility_grade}로 분석되었습니다."
-    )
+    overview_sentence = build_overview_sentence(request)
     score_sentence = build_score_summary(request)
     positive_sentence = f"현재 확인된 긍정 요인으로는 {join_factors(request.positive_factors, limit=2)} 등이 있습니다."
     risk_sentence = build_risk_sentence(request)
@@ -92,6 +104,19 @@ def build_detail_explanation(request: ExplanationGenerateRequest) -> str:
             risk_sentence,
             evidence_sentence,
         ]
+    )
+
+
+def build_overview_sentence(request: ExplanationGenerateRequest) -> str:
+    if request.score_mode == "quick":
+        return (
+            f"{request.company_name}의 {request.job_title} 공고는 직무 적합도 점수 "
+            f"{request.accessibility_score}점, 등급 {request.accessibility_grade}로 분석되었습니다."
+        )
+
+    return (
+        f"{request.company_name}의 {request.job_title} 공고는 종합 추천 점수 "
+        f"{request.accessibility_score}점, 등급 {request.accessibility_grade}로 분석되었습니다."
     )
 
 
@@ -142,6 +167,12 @@ def build_score_summary(request: ExplanationGenerateRequest) -> str:
     """
     세부 점수에서 상대적으로 높게 반영된 항목을 설명합니다.
     """
+    if request.score_mode == "quick":
+        if request.positive_factors:
+            return "단일 점수는 희망 직무, 보유 기술, 경력·학력 조건의 일치도를 중심으로 산정했습니다."
+
+        return "단일 점수는 현재 프로필과 공고의 직무 조건 일치도를 중심으로 산정했습니다."
+
     score_pairs = [
         ("transport_score", request.score_detail.transport_score),
         ("station_access_score", request.score_detail.station_access_score),
