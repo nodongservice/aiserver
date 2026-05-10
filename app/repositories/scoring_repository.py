@@ -106,15 +106,28 @@ class AccessibilityEvidence:
 
 
 def find_latest_recruitments(db: Session, limit: int, offset: int = 0) -> list[PdKepadRecruitment]:
-    rows = db.query(PdKepadRecruitment).all()
-    return sort_recruitments_by_latest(rows)[offset : offset + limit]
+    rows = (
+        db.query(PdKepadRecruitment)
+        .filter(PdKepadRecruitment.job_nm.isnot(None))
+        .filter(PdKepadRecruitment.buspla_name.isnot(None))
+        .order_by(PdKepadRecruitment.raw_fetched_at.desc().nullslast(), PdKepadRecruitment.id.desc())
+        .offset(offset)
+        .limit(limit)
+        .all()
+    )
+    return sort_recruitments_by_latest(rows)
 
 
 def find_all_recruitments_for_scoring(db: Session, limit: Optional[int] = None) -> list[PdKepadRecruitment]:
-    rows = sort_recruitments_by_latest(db.query(PdKepadRecruitment).all())
+    query = (
+        db.query(PdKepadRecruitment)
+        .filter(PdKepadRecruitment.job_nm.isnot(None))
+        .filter(PdKepadRecruitment.buspla_name.isnot(None))
+        .order_by(PdKepadRecruitment.raw_fetched_at.desc().nullslast(), PdKepadRecruitment.id.desc())
+    )
     if limit is not None:
-        return rows[:limit]
-    return rows
+        query = query.limit(limit)
+    return sort_recruitments_by_latest(query.all())
 
 
 def to_job_posting(row: PdKepadRecruitment) -> Optional[JobPosting]:
