@@ -1,4 +1,5 @@
 import builtins
+from types import SimpleNamespace
 
 import pytest
 
@@ -9,20 +10,44 @@ def test_verify_profile_draft_ocr_runtime_dependencies_reports_missing_modules(m
     original_import = builtins.__import__
 
     def fake_import(name, globals=None, locals=None, fromlist=(), level=0):
-        if name in {"numpy", "pypdfium2", "paddle", "paddleocr"}:
+        if name in {"pypdf", "numpy", "pypdfium2", "paddle", "paddleocr"}:
             raise ImportError(f"no module named {name}")
         return original_import(name, globals, locals, fromlist, level)
 
+    monkeypatch.setattr(
+        profile_portfolio_draft_service,
+        "settings",
+        SimpleNamespace(profile_draft_enable_ocr=True),
+    )
     monkeypatch.setattr(builtins, "__import__", fake_import)
 
     with pytest.raises(RuntimeError) as exc_info:
         profile_portfolio_draft_service.verify_profile_draft_ocr_runtime_dependencies()
 
     message = str(exc_info.value)
+    assert "pypdf" in message
     assert "numpy" in message
     assert "pypdfium2" in message
     assert "paddlepaddle" in message
     assert "paddleocr" in message
+
+
+def test_verify_profile_draft_ocr_runtime_dependencies_skip_paddle_when_ocr_disabled(monkeypatch):
+    original_import = builtins.__import__
+
+    def fake_import(name, globals=None, locals=None, fromlist=(), level=0):
+        if name in {"numpy", "pypdfium2", "paddle", "paddleocr"}:
+            raise ImportError(f"no module named {name}")
+        return original_import(name, globals, locals, fromlist, level)
+
+    monkeypatch.setattr(
+        profile_portfolio_draft_service,
+        "settings",
+        SimpleNamespace(profile_draft_enable_ocr=False),
+    )
+    monkeypatch.setattr(builtins, "__import__", fake_import)
+
+    profile_portfolio_draft_service.verify_profile_draft_ocr_runtime_dependencies()
 
 
 def test_get_paddle_ocr_wraps_import_failure(monkeypatch):

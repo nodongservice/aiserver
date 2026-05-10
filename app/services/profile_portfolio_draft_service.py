@@ -1,5 +1,8 @@
 import json
 import io
+import logging
+import multiprocessing as mp
+import queue
 import re
 from dataclasses import dataclass
 from datetime import datetime
@@ -15,6 +18,7 @@ from app.schemas.profile_draft import (
 )
 
 PROFILE_DRAFT_MODEL_VERSION = "v1-paddleocr-openai-profile-draft"
+logger = logging.getLogger(__name__)
 
 PROFILE_ENUM_VALUES = {
     "genderType": {"MALE", "FEMALE", "OTHER", "NOT_DISCLOSED"},
@@ -186,9 +190,12 @@ def extract_text_from_pdf(pdf_bytes: bytes) -> TextExtractionResult:
 
     ocr_results: dict[int, OcrPageResult] = {}
     if ocr_target_pages:
-        ocr_results = extract_text_with_paddle_ocr(pdf_bytes, target_page_indices=ocr_target_pages)
-        if not ocr_results:
-            warnings.append("OCR 대상 페이지에서 텍스트를 추출하지 못했습니다.")
+        if not settings.profile_draft_enable_ocr:
+            warnings.append("OCR 기능이 비활성화되어 임베디드 텍스트만 사용했습니다.")
+        else:
+            ocr_results = extract_text_with_paddle_ocr(pdf_bytes, target_page_indices=ocr_target_pages)
+            if not ocr_results:
+                warnings.append("OCR 대상 페이지에서 텍스트를 추출하지 못했습니다.")
 
     final_page_texts: list[str] = []
     for quality in page_qualities:
@@ -227,6 +234,107 @@ def extract_text_with_paddle_ocr(
     *,
     target_page_indices: list[int],
 ) -> dict[int, OcrPageResult]:
+    if settings.profile_draft_ocr_process_isolation:
+        return extract_text_with_paddle_ocr_isolated(
+            pdf_bytes,
+            target_page_indices=target_page_indices,
+        )
+
+    return extract_text_with_paddle_ocr_in_process(
+        pdf_bytes,
+        target_page_indices=target_page_indices,
+    )
+
+
+def extract_text_with_paddle_ocr_isolated(
+    pdf_bytes: bytes,
+    *,
+    target_page_indices: list[int],
+) -> dict[int, OcrPageResult]:
+    context = mp.get_context("spawn")
+    result_queue: Any = context.Queue(maxsize=1)
+
+    process = context.Process(
+        target=run_paddle_ocr_worker,
+        args=(pdf_bytes, sorted(set(target_page_indices)), result_queue),
+        daemon=True,
+    )
+    process.start()
+    process.join(timeout=settings.profile_draft_ocr_subprocess_timeout_seconds)
+
+    if process.is_alive():
+        process.terminate()
+        process.join(timeout=5)
+        logger.warning("OCR 서브프로세스 타임아웃으로 강제 종료")
+        return {}
+
+    if process.exitcode != 0:
+        logger.warning("OCR 서브프로세스 비정상 종료: exitcode=%s", process.exitcode)
+        return {}
+
+    try:
+        payload = result_queue.get(timeout=1)
+    except queue.Empty:
+        logger.warning("OCR 서브프로세스 결과 큐가 비어 있습니다.")
+        return {}
+
+    if not isinstance(payload, dict):
+        logger.warning("OCR 서브프로세스 결과 형식이 올바르지 않습니다.")
+        return {}
+
+    if not payload.get("ok"):
+        logger.warning("OCR 서브프로세스 처리 실패: %s", payload.get("error", "unknown"))
+        return {}
+
+    raw_results = payload.get("results", {})
+    if not isinstance(raw_results, dict):
+        return {}
+
+    page_result_map: dict[int, OcrPageResult] = {}
+    for raw_page_index, raw_result in raw_results.items():
+        try:
+            page_index = int(raw_page_index)
+        except (TypeError, ValueError):
+            continue
+        if not isinstance(raw_result, dict):
+            continue
+        text = normalize_whitespace(str(raw_result.get("text", "")))
+        if not text:
+            continue
+        confidence = raw_result.get("avg_confidence")
+        avg_confidence = float(confidence) if isinstance(confidence, (int, float)) else None
+        page_result_map[page_index] = OcrPageResult(text=text, avg_confidence=avg_confidence)
+
+    return page_result_map
+
+
+def run_paddle_ocr_worker(pdf_bytes: bytes, target_page_indices: list[int], result_queue: Any) -> None:
+    try:
+        results = extract_text_with_paddle_ocr_in_process(
+            pdf_bytes,
+            target_page_indices=target_page_indices,
+        )
+        result_queue.put(
+            {
+                "ok": True,
+                "results": {
+                    page_index: {
+                        "text": result.text,
+                        "avg_confidence": result.avg_confidence,
+                    }
+                    for page_index, result in results.items()
+                },
+            }
+        )
+    except Exception as exception:
+        result_queue.put({"ok": False, "error": format_dependency_error("ocr_worker", exception)})
+
+
+def extract_text_with_paddle_ocr_in_process(
+    pdf_bytes: bytes,
+    *,
+    target_page_indices: list[int],
+) -> dict[int, OcrPageResult]:
     try:
         import numpy as np
         import pypdfium2 as pdfium
@@ -258,6 +366,19 @@ def extract_text_with_paddle_ocr(
 
 def verify_profile_draft_ocr_runtime_dependencies() -> None:
     dependency_errors: list[str] = []
+
+    try:
+        import pypdf  # noqa: F401
+    except Exception as exception:
+        dependency_errors.append(format_dependency_error("pypdf", exception))
+
+    if not settings.profile_draft_enable_ocr:
+        if dependency_errors:
+            raise RuntimeError(
+                "프로필 OCR 런타임 의존성 검증 실패: " + " | ".join(dependency_errors)
+            )
+        logger.warning("PROFILE_DRAFT_ENABLE_OCR=false, PaddleOCR 의존성 검사를 건너뜁니다.")
+        return
 
     try:
         import numpy  # noqa: F401
@@ -298,15 +419,20 @@ def get_paddle_ocr() -> Any:
 
     try:
         # 문서 회전/왜곡 보정은 성능 비용이 커 기본 비활성화한다.
+        # CPU 고정으로 런타임 환경 차이에 따른 GPU 초기화 실패를 회피한다.
         return PaddleOCR(
             lang="korean",
+            use_gpu=False,
             use_doc_orientation_classify=False,
             use_doc_unwarping=False,
             use_textline_orientation=False,
         )
     except TypeError:
         # PaddleOCR 버전별 파라미터 차이를 흡수한다.
-        return PaddleOCR(lang="korean")
+        try:
+            return PaddleOCR(lang="korean", use_gpu=False)
+        except TypeError:
+            return PaddleOCR(lang="korean")
 
 
 def extract_page_ocr_result(result: Any) -> OcrPageResult:
