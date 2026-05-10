@@ -205,6 +205,7 @@ class PdKepadRecruitment(PublicDataNormalizedMixin, Base):
     geo_matched_address: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     geo_latitude: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
     geo_longitude: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
+    posting_status: Mapped[Optional[str]] = mapped_column(String(16), nullable=True)
 
 
 class PdKepadStandardWorkplace(PublicDataNormalizedMixin, Base):

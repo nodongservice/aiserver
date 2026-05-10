@@ -5,7 +5,7 @@ from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Optional
 
-from sqlalchemy import func
+from sqlalchemy import func, or_
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
 
@@ -108,6 +108,7 @@ class AccessibilityEvidence:
 def find_latest_recruitments(db: Session, limit: int, offset: int = 0) -> list[PdKepadRecruitment]:
     rows = (
         db.query(PdKepadRecruitment)
+        .filter(or_(PdKepadRecruitment.posting_status == "ACTIVE", PdKepadRecruitment.posting_status.is_(None)))
         .filter(PdKepadRecruitment.job_nm.isnot(None))
         .filter(PdKepadRecruitment.buspla_name.isnot(None))
         .order_by(PdKepadRecruitment.raw_fetched_at.desc().nullslast(), PdKepadRecruitment.id.desc())
@@ -121,6 +122,7 @@ def find_latest_recruitments(db: Session, limit: int, offset: int = 0) -> list[P
 def find_all_recruitments_for_scoring(db: Session, limit: Optional[int] = None) -> list[PdKepadRecruitment]:
     query = (
         db.query(PdKepadRecruitment)
+        .filter(or_(PdKepadRecruitment.posting_status == "ACTIVE", PdKepadRecruitment.posting_status.is_(None)))
         .filter(PdKepadRecruitment.job_nm.isnot(None))
         .filter(PdKepadRecruitment.buspla_name.isnot(None))
         .order_by(PdKepadRecruitment.raw_fetched_at.desc().nullslast(), PdKepadRecruitment.id.desc())
