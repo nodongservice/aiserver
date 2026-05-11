@@ -1,219 +1,228 @@
-# nodong-aiserver
+# BridgeWork AI/GIS Server
 
-FastAPI + `uv` 기반 서버 프로젝트입니다.
+장애인 구직자의 프로필과 공공데이터를 결합해 **일자리 적합도**, **근무지 접근성**, **장애 지원 가능성**, **추천 사유**를 계산하는 FastAPI 기반 AI/GIS 분석 서버입니다.
 
-## 자주 쓰는 명령어
+BridgeWork 전체 서비스에서 이 레포는 Spring Backend가 내부 API로 호출하는 AI 분석 서버 역할을 담당합니다. 프론트엔드는 FastAPI를 직접 호출하지 않고, Spring Backend가 인증/프로필/공공데이터 동기화/API 게이트웨이를 처리한 뒤 필요한 분석 요청만 FastAPI로 전달합니다.
+
+## 전체 구조
+
+![BridgeWork system architecture](images/architect.jpeg)
+
+```text
+React Frontend
+  -> Nginx
+  -> Spring Backend
+  -> FastAPI AI/GIS Server
+  -> PostgreSQL/PostGIS + Redis + OpenAI API
+```
+
+아래 표의 레포명을 클릭하면 각 GitHub 레포지토리로 이동합니다.
+
+| 레포 | 역할 |
+| --- | --- |
+| [frontend](https://github.com/nodongservice/frontend) | React 웹 클라이언트, 소셜 로그인, 온보딩, 프로필, 추천/지도 화면 |
+| [backend](https://github.com/nodongservice/backend) | Spring Boot API 서버, 인증/프로필/공공데이터 동기화, FastAPI 게이트웨이 |
+| [aiserver](https://github.com/nodongservice/aiserver) | FastAPI AI/GIS 분석 서버, 스코어링, OCR/LLM 프로필 초안, 추천 설명 생성 |
+| [backend-infra](https://github.com/nodongservice/backend-infra) | Nginx, Blue/Green 전환 스크립트, Prometheus/Grafana/Loki/Alloy 모니터링 |
+
+## 핵심 기능
+
+### 1. 포트폴리오 PDF 기반 프로필 초안 생성
+
+![Portfolio OCR and profile draft flow](images/image4.png)
+
+사용자가 PDF 이력서/포트폴리오를 업로드하면 Spring Backend가 파일을 검증하고 FastAPI로 전달합니다. FastAPI는 PDF 텍스트를 추출한 뒤, 품질이 낮은 페이지만 OCR로 보강하고, OpenAI Responses API와 JSON Schema를 이용해 BridgeWork 프로필 스키마에 맞는 초안을 생성합니다.
+
+- `pypdf`로 페이지별 임베디드 텍스트 추출
+- 한글 비율, 깨짐 문자, 제어문자, 긴 토큰, 이력서 키워드 기반 텍스트 품질 평가
+- 저품질 페이지에 한해 `PaddleOCR` 수행
+- 임베디드 텍스트와 OCR 결과 중 신뢰도 높은 텍스트 선택
+- OpenAI Responses API + strict JSON Schema로 프로필 필드 구조화
+- 근거가 부족한 필드는 추측하지 않고 `null`로 반환
+- `missingFields`, `confidence`, `warnings`를 함께 제공해 사용자 확인/수정 흐름 지원
+
+### 2. 퀵 맞춤 일자리 추천
+
+![Quick recommendation flow](images/image2.png)
+
+퀵 추천은 최신 공고를 빠르게 확인하는 흐름입니다. AI 직무 적합도 토글이 켜져 있으면 Spring Backend가 선택된 프로필 1개를 FastAPI로 전달하고, FastAPI가 최신 공고별 직무 적합도와 근거를 계산합니다.
+
+- 최신 장애인 구인 공고 조회
+- 사용자 지원 직무, 기술, 학력, 경력과 공고 조건 비교
+- `job_fit_score`, 추천 근거, 위험요소 반환
+- AI 토글 OFF 시 Spring Backend가 최신 공고만 조회
+
+### 3. 지역 접근성 지도 추천
+
+![Map scoring flow](images/image3.png)
+
+지도 추천은 공고의 근무지 주변 접근성 공공데이터와 사용자 프로필을 함께 분석해 종합 점수를 계산합니다. 점수는 LLM이 직접 결정하지 않고, FastAPI의 룰 기반 스코어링 모듈이 계산합니다.
+
+6개 항목을 동일 비중으로 계산합니다.
+
+| 항목 | 설명 |
+| --- | --- |
+| 직무 적합도 | 직무명, 요구 경력, 학력, 자격, 기술 키워드 기반 적합도 |
+| 근무조건 적합도 | 고용형태, 임금형태, 모집기간, 근무 가능 조건 |
+| 장애 지원 적합도 | 장애 유형/정도, 표준사업장 매칭, 지원 필요사항 |
+| 업무환경 적합도 | 양손사용, 시력, 듣고 말하기, 서거나 걷기, 드는힘 등 작업환경 |
+| 기업 안정성/채용 친화도 | 표준사업장 인증, 담당기관, 공고 등록 정보 |
+| 접근성 요약 점수 | 근무지 주변 이동지원센터, 버스정류장, 횡단보도, 신호등, 지하철 리프트 등 |
+
+### 4. 추천 설명 생성
+
+스코어링 결과는 바로 사용자 문장으로 노출하지 않고, 별도 설명 생성 API를 통해 추천 사유, 주의사항, 체크리스트로 변환합니다.
+
+- LLM은 점수를 결정하지 않음
+- 이미 계산된 점수, 근거, 위험요소만 설명 재료로 사용
+- 제공자 설정에 따라 OpenAI 기반 설명 또는 룰 기반 fallback 설명 사용
+- 상담기관 또는 사용자 화면에서 바로 읽을 수 있는 문장 형태로 반환
+
+## AI/GIS 처리 원칙
+
+- **근거 기반 계산**: 공공데이터와 프로필 입력값을 기준으로 점수를 계산합니다.
+- **LLM 역할 제한**: LLM은 구조화와 설명 생성에 사용하며, 핵심 점수는 룰 기반으로 산정합니다.
+- **불확실성 보존**: 정보가 부족한 필드는 추측하지 않고 `null`, `추가 확인 필요`, `warnings`로 전달합니다.
+- **PostGIS 활용**: 근무지 좌표 주변의 접근성 데이터를 반경 기반으로 조회합니다.
+- **운영 안정성**: OCR 프로세스 격리, OCR 대상 페이지 최소화, 접근성 조회 캐시, 헬스체크/메트릭을 제공합니다.
+
+## 주요 API
+
+| Method | Path | 설명 |
+| --- | --- | --- |
+| `GET` | `/health` | 서버 헬스체크 |
+| `GET` | `/db-health` | DB 연결 확인 |
+| `GET` | `/postgis-health` | PostGIS extension 확인 |
+| `GET` | `/metrics` | Prometheus 메트릭 |
+| `POST` | `/api/v1/profile-draft/from-portfolio` | PDF 포트폴리오 기반 프로필 초안 생성 |
+| `POST` | `/api/v1/score/quick` | 최신 공고 대상 직무 적합도 계산 |
+| `POST` | `/api/v1/score/map` | 지도 추천용 6개 항목 종합 점수 계산 |
+| `POST` | `/api/v1/explain/recommendation` | 추천 사유/주의사항/체크리스트 생성 |
+
+## 기술 스택
+
+| 영역 | 사용 기술 |
+| --- | --- |
+| API | FastAPI, Uvicorn, Pydantic |
+| DB/GIS | PostgreSQL, PostGIS, SQLAlchemy, GeoAlchemy2 |
+| OCR | pypdf, pypdfium2, PaddleOCR, PaddlePaddle |
+| AI | OpenAI Responses API, JSON Schema structured output |
+| 운영 | Docker, GHCR, GitHub Actions, Blue/Green deployment |
+| 관측 | Prometheus metrics, Grafana, Loki, Alloy |
+| 품질 | pytest, ruff, pre-commit, uv |
+
+## 폴더 구조
+
+```text
+app/
+  api/                 FastAPI 라우터
+  core/                설정, 예외 처리, 로깅, 공통 응답
+  db/                  SQLAlchemy 세션과 DB 모델
+  repositories/        공고/공공데이터/PostGIS 조회
+  schemas/             요청/응답 Pydantic 모델
+  services/            OCR, LLM, 스코어링, 설명 생성 비즈니스 로직
+  services/scoring/    6개 점수 항목별 계산 모듈
+  utils/               지리 좌표 유틸리티
+tests/                 pytest 테스트
+deploy/                EC2 배포 스크립트
+images/                README 및 제출 문서용 다이어그램
+```
+
+## 로컬 실행
 
 ### 1. 의존성 설치
 
 ```bash
 uv sync
+```
+
+개발 도구까지 설치하려면 다음 명령을 사용합니다.
+
+```bash
 uv sync --dev
 ```
 
-`pyproject.toml` / `uv.lock` 기준으로 가상환경과 패키지를 맞춥니다.
+### 2. 환경변수 설정
 
-### 2. 개발 서버 실행
+로컬 기본값은 `.env.local`을 사용합니다. 최소 실행에는 PostgreSQL/PostGIS 접속 정보와 OpenAI 설정이 필요합니다.
+
+주요 환경변수:
+
+| 변수 | 설명 |
+| --- | --- |
+| `DATABASE_URL` | PostgreSQL/PostGIS 접속 URL |
+| `CORS_ALLOW_ORIGINS` | 허용할 CORS origin 목록 |
+| `OPENAI_API_KEY` | OpenAI API 키 |
+| `OPENAI_MODEL` | 설명 생성 기본 모델 |
+| `PROFILE_DRAFT_OPENAI_MODEL` | 프로필 초안 생성 모델, 미설정 시 `OPENAI_MODEL` 사용 |
+| `PROFILE_DRAFT_ENABLE_OCR` | OCR 사용 여부 |
+| `PROFILE_DRAFT_MAX_FILE_SIZE_BYTES` | PDF 업로드 최대 크기 |
+| `AUTO_CREATE_DB_SCHEMA` | SQLAlchemy 스키마 자동 생성 여부 |
+| `REQUIRE_POSTGIS` | 시작 시 PostGIS 필수 확인 여부 |
+| `REQUIRE_PROFILE_DRAFT_OCR_DEPENDENCIES` | 시작 시 OCR 의존성 확인 여부 |
+
+### 3. 개발 서버 실행
 
 ```bash
 uv run python -m uvicorn app.main:app --reload
 ```
 
-- 기본 주소: `http://127.0.0.1:8000`
+- API 서버: `http://127.0.0.1:8000`
 - Swagger UI: `http://127.0.0.1:8000/docs`
 - ReDoc: `http://127.0.0.1:8000/redoc`
 
-### 3. 서버 실행 확인
+### 4. 헬스체크
 
 ```bash
 curl http://127.0.0.1:8000/health
 curl http://127.0.0.1:8000/db-health
+curl http://127.0.0.1:8000/postgis-health
 curl http://127.0.0.1:8000/metrics
 ```
 
-### 4. 패키지 추가
-
-```bash
-uv add 패키지명
-```
-
-### 5. 개발용 패키지 추가
-
-```bash
-uv add --dev pytest
-```
-
-### 6. 포매터 / 린트 실행
-
-```bash
-uv run ruff check . --fix --unsafe-fixes
-
-uv run ruff format .
-```
-
-### 7. pre-commit 설치 및 실행
-
-```bash
-uv run pre-commit install
-uv run pre-commit run --all-files
-```
-### 8. pytest
+## 테스트와 코드 품질
 
 ```bash
 uv run pytest -v
+uv run ruff check . --fix --unsafe-fixes
+uv run ruff format .
+uv run pre-commit run --all-files
 ```
 
-## CI/CD
+테스트 작성 기준은 `.agents/skills/testing/SKILL.md`를 따릅니다.
 
-같은 EC2 인스턴스에서 FastAPI 컨테이너를 Blue/Green(`19000`, `19001`)으로 배포합니다.
-Nginx 라우팅/업스트림 전환은 `backend-infra` 레포에서 관리합니다.
+## 배포
+
+이 레포는 GitHub Actions에서 Docker 이미지를 빌드해 GHCR에 게시하고, EC2에서 비활성 Blue/Green 슬롯에 새 컨테이너를 띄운 뒤 Nginx 업스트림을 전환합니다.
 
 - 워크플로우: `.github/workflows/cicd-main-ec2.yml`
-- CI 트리거: 모든 브랜치 `push`, `main` 대상 `pull_request`
-- 배포 트리거: `main` 브랜치 `push`, `workflow_dispatch`
-- 이미지 빌드/게시: `Dockerfile` 기반 GHCR multi-arch 이미지(`linux/amd64`, `linux/arm64`)
-- 서버 배포 스크립트: `deploy/deploy.sh`
-- 트래픽 전환 스크립트: `~/bridgework-infra/deploy/fastapi_blue_green_switch.sh`
+- 컨테이너 이미지: `ghcr.io/<owner>/bridgework-aiserver:<commit-sha>`
+- Blue/Green 포트: `19000`, `19001`
+- 트래픽 전환: `../backend-infra/deploy/fastapi_blue_green_switch.sh`
+- 운영 모니터링: `../backend-infra/monitoring`
 
-### 배포 방식
+배포 대상 EC2에는 Git 저장소를 clone하지 않습니다. GitHub hosted runner가 이미지를 빌드/게시하고, EC2는 GHCR 이미지와 배포 스크립트만 사용합니다.
 
-1. `push`/`pull_request`마다 PostGIS 서비스 컨테이너를 띄운 뒤 `pytest`를 실행합니다.
-2. `main` 브랜치 `push` 또는 수동 실행일 때만 배포 job이 이어집니다.
-3. 배포 job은 GHCR에 `ghcr.io/<owner>/bridgework-aiserver:<commit-sha>` multi-arch 이미지를 push합니다.
-4. 운영 `.env`, 배포 스크립트를 EC2로 업로드합니다.
-5. EC2에서 GHCR에 로그인하고 이미지를 pull한 뒤 비활성 슬롯(`19000` 또는 `19001`)에 새 컨테이너를 띄웁니다.
-6. `/health` 확인 후 `backend-infra`의 `fastapi_blue_green_switch.sh`를 호출해 Nginx 업스트림을 전환합니다.
-7. 이전 슬롯 컨테이너를 제거합니다.
-8. 배포 성공 후 현재 서비스 이미지 저장소의 최근 이미지 5개만 남기도록 백그라운드에서 이전 이미지를 정리합니다.
+## 데이터 사용
 
-EC2에는 Git 저장소를 clone하지 않습니다. GitHub hosted runner가 이미지를 빌드해 GHCR에 게시하고, EC2는 GHCR 이미지와 배포 스크립트만 사용해 배포합니다.
-EC2에서는 이미지를 빌드하지 않으므로 배포 중 Docker builder cache 정리는 수행하지 않습니다.
+공공데이터 수집과 정규화는 `backend`가 담당하며, FastAPI는 Spring DB의 정규화 테이블을 직접 조회해 스코어링에 사용합니다.
 
-### GitHub Secrets
+대표 데이터:
 
-- `EC2_HOST`
-- `EC2_PORT`
-- `EC2_USER`
-- `EC2_SSH_PRIVATE_KEY`
-- `GHCR_USERNAME`
-- `GHCR_READ_TOKEN`
-- `DATABASE_URL`
-- `CORS_ALLOW_ORIGINS`
-- `EXPLANATION_PROVIDER`
-- `LLM_BASE_URL`
-- `LLM_API_KEY`
-- `OPENAI_BASE_URL`
-- `OPENAI_API_KEY`
-- `OPENAI_MODEL`
-- `OPENAI_TIMEOUT_SECONDS`
-- `LOG_LEVEL`
-- `AUTO_CREATE_DB_SCHEMA`
-- `REQUIRE_POSTGIS`
+- 한국장애인고용공단 장애인 구인 실시간 현황
+- 한국장애인고용공단 장애인 표준사업장 실시간 조회
+- 한국장애인고용공단 근로지원인 수행기관 정보
+- 전국교통약자이동지원센터 표준데이터
+- 전국 버스정류장, 횡단보도, 신호등 데이터
+- 서울 지하철 출입구 리프트, 도보 네트워크, 휠체어 경사로 데이터
+- 한국철도공사/KRIC 교통약자 편의시설 데이터
 
-비어도 되는 값은 빈 문자열로 넣어도 됩니다. 다만 `DATABASE_URL`은 필수입니다.
-`GHCR_READ_TOKEN`은 EC2에서 private GHCR 이미지를 pull할 수 있도록 `read:packages` 권한이 필요합니다.
-운영에서는 `AUTO_CREATE_DB_SCHEMA=false`, `REQUIRE_POSTGIS=true`를 권장합니다.
+상세 데이터 출처와 동기화 방식은 `backend/README.md`를 기준으로 합니다.
 
-### EC2 선행 작업
+## 창업 아이템 차별점
 
-1. Docker, Nginx, curl 설치
-2. 배포 계정에 Docker 실행 권한 부여
-3. 배포 계정에 `sudo nginx -t`, `sudo systemctl reload nginx`, `sudo cp` 권한 부여
-4. `backend-infra` 레포 CI/CD를 먼저 1회 실행해 `~/bridgework-infra/deploy`를 준비
-
-
-### 폴더구조
-| **영역** | **역할** |
-| --- | --- |
-| `api` | Spring이 호출하는 API 엔드포인트 |
-| `schemas` | 요청/응답 DTO, Pydantic 모델 |
-| `services` | 점수 계산, 태그 변환, 설명 생성 로직 |
-| `repositories` | PostGIS 조회 |
-| `db` | DB 연결 |
-| `core` | 환경변수, 로깅 |
-
-## FastAPI 내부 API
-
-Spring Backend가 호출하는 scoring v2 API는 다음과 같습니다.
-
-| API | 역할 |
-| --- | --- |
-| `POST /api/v1/score/quick` | 기능 2. 최신 공고를 조회하고 직무 적합도만 계산 |
-| `POST /api/v1/score/map` | 기능 3. 공고/공공데이터를 조회하고 6개 항목 동일비중 종합 점수 계산 |
-| `POST /api/v1/explain/recommendation` | 이미 계산된 점수/근거를 추천 사유, 주의사항, 체크리스트로 변환 |
-| `POST /api/v1/profile-draft/from-portfolio` | 포트폴리오 PDF를 분석해 프로필 전체 필드 초안 생성(null 허용) |
-
-구조 원칙:
-
-- 프론트엔드는 FastAPI를 직접 호출하지 않습니다.
-- Spring은 선택된 프로필 1개만 FastAPI에 전달합니다.
-- FastAPI는 Spring DB의 `pd_*` 정규화 테이블을 직접 조회합니다.
-- 점수는 룰 기반이며 LLM은 점수를 직접 결정하지 않습니다.
-- 데이터가 부족한 항목은 확정하지 않고 `추가 확인 필요`로 응답합니다.
-
-## 포트폴리오 OCR 기반 프로필 초안 생성
-
-`POST /api/v1/profile-draft/from-portfolio`는 `multipart/form-data`의 `file`(PDF) 1개를 받아 다음 순서로 처리합니다.
-
-1. 파일 검증
-- 비어있는 파일 차단
-- Content-Type 허용 목록 검증(`application/pdf`)
-- PDF 시그니처(`%PDF-`) 검증
-- 최대 용량 제한 검증
-
-2. 텍스트 추출 전략(운영형)
-- 먼저 `pypdf`로 페이지별 임베디드 텍스트 추출
-- 페이지별 품질 점수(한글 비율, 깨짐 문자 비율, 제어문자 비율, 긴 토큰 비율, 이력서 키워드 히트) 계산
-- 저품질 페이지에 대해서만 PaddleOCR 수행
-- 페이지별로 임베디드 텍스트와 OCR 결과를 비교해 더 신뢰도 높은 텍스트 선택
-
-3. LLM 구조화
-- OpenAI Responses API + JSON Schema(`strict=true`)로 스프링 프로필 스키마에 맞춰 구조화
-- 전체 필드를 항상 포함하고, 근거가 부족한 값은 `null`로 반환
-
-4. 응답
-- `draft`: 전체 필드 초안
-- `missingFields`: `null`인 필드명 목록
-- `confidence`, `ocrTextLength`, `modelVersion`, `warnings`
-
-## 포트폴리오 OCR/LLM 관련 환경변수
-
-- `PROFILE_DRAFT_OPENAI_MODEL` (기본: `OPENAI_MODEL`)
-- `PROFILE_DRAFT_OPENAI_TIMEOUT_SECONDS` (기본: `40`)
-- `PROFILE_DRAFT_MAX_FILE_SIZE_BYTES` (기본: `10485760`)
-- `PROFILE_DRAFT_MAX_PAGES` (기본: `10`)
-- `PROFILE_DRAFT_PDF_RENDER_SCALE` (기본: `2.0`)
-- `PROFILE_DRAFT_ENABLE_OCR` (기본: `true`, `false`면 PaddleOCR를 비활성화하고 임베디드 텍스트만 사용)
-- `PROFILE_DRAFT_OCR_PROCESS_ISOLATION` (기본: `true`, OCR를 서브프로세스로 격리해 네이티브 크래시 전파 방지)
-- `PROFILE_DRAFT_OCR_SUBPROCESS_TIMEOUT_SECONDS` (기본: `120`, OCR 서브프로세스 최대 대기 시간)
-- `PROFILE_DRAFT_MAX_PROMPT_CHARS` (기본: `15000`)
-- `PROFILE_DRAFT_ALLOWED_CONTENT_TYPES` (코드 기본값: `application/pdf`)
-- `PROFILE_DRAFT_EMBEDDED_QUALITY_THRESHOLD` (기본: `55`)
-- `PROFILE_DRAFT_EMBEDDED_MIN_CHARS_PER_PAGE` (기본: `40`)
-- `PROFILE_DRAFT_EMBEDDED_MAX_REPLACEMENT_RATIO` (기본: `0.08`)
-- `PROFILE_DRAFT_EMBEDDED_MAX_CONTROL_RATIO` (기본: `0.02`)
-- `PROFILE_DRAFT_OCR_PREFER_MARGIN` (기본: `8`)
-- `REQUIRE_PROFILE_DRAFT_OCR_DEPENDENCIES` (기본: `true`, 시작 시 OCR 의존성 import 검증)
-
-## 스코어링 DB 조회 기준
-
-주요 조회 테이블:
-
-| 테이블 | 용도 |
-| --- | --- |
-| `pd_kepad_recruitment` | 공고 조회, quick/map scoring의 기본 공고 소스 |
-| `pd_kepad_standard_workplace` | 장애인 표준사업장 매칭 |
-| `pd_transport_support_center` | 접근성 요약 점수 근거 |
-| `pd_nationwide_bus_stop` | 접근성 요약 점수 근거 |
-| `pd_nationwide_crosswalk` | 접근성 요약 점수 근거 |
-| `pd_nationwide_traffic_light` | 접근성 요약 점수 근거 |
-| `pd_seoul_subway_entrance_lift` | 접근성 요약 점수 근거 |
-| `pd_seoul_walking_network` | 접근성 요약 점수 근거 |
-| `pd_kepad_support_agency` | 근로지원인 수행기관 지도 레이어용, 점수 미반영 |
-
-`pd_kepad_recruitment`의 근무지 좌표는 `geo_latitude`, `geo_longitude`를 사용합니다.
-`pd_kepad_support_agency`의 위치도 `geo_latitude`, `geo_longitude`를 사용하지만 기능정의서 기준 점수에는 반영하지 않습니다.
-
-## 사용데이터 목록 
-../backend/README.md 참고
-test
+- 단순 채용 공고 추천이 아니라, 장애인 구직자의 **실제 출근 가능성**과 **근무 지속 가능성**을 함께 계산합니다.
+- 이력서 PDF를 프로필로 자동 변환해 사용자의 초기 입력 부담을 줄입니다.
+- AI 추천을 켜고 끌 수 있어, 최신 공고 조회와 AI 분석 흐름을 명확히 분리합니다.
+- 점수 산정은 설명 가능한 룰 기반 로직으로 처리하고, LLM은 구조화와 자연어 설명에 제한적으로 사용합니다.
+- 공공데이터, PostGIS, OCR, LLM을 하나의 내부 분석 API로 묶어 Spring Backend와 안정적으로 연동합니다.
