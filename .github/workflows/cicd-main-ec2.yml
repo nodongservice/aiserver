@@ -66,7 +66,7 @@ jobs:
       cancel-in-progress: false
 
     env:
-      IMAGE_PLATFORMS: linux/amd64,linux/arm64
+      IMAGE_PLATFORMS: linux/arm64
       REMOTE_APP_ROOT: ~/bridgework/aiserver
 
     steps:
@@ -102,16 +102,6 @@ jobs:
           platforms: ${{ env.IMAGE_PLATFORMS }}
           push: true
           tags: ${{ steps.image.outputs.image_uri }}
-
-      - name: Verify OCR runtime dependencies in image (amd64)
-        run: |
-          docker pull --platform linux/amd64 "$IMAGE_URI"
-          docker run --rm --platform linux/amd64 --entrypoint /app/.venv/bin/python "$IMAGE_URI" - <<'PY'
-          from app.services.profile_portfolio_draft_service import verify_profile_draft_ocr_runtime_dependencies
-
-          verify_profile_draft_ocr_runtime_dependencies()
-          print("OCR runtime dependency verification passed (amd64)")
-          PY
 
       - name: Verify OCR runtime dependencies in image (arm64)
         run: |
