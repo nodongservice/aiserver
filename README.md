@@ -128,69 +128,6 @@ deploy/                EC2 배포 스크립트
 images/                README 및 제출 문서용 다이어그램
 ```
 
-## 로컬 실행
-
-### 1. 의존성 설치
-
-```bash
-uv sync
-```
-
-개발 도구까지 설치하려면 다음 명령을 사용합니다.
-
-```bash
-uv sync --dev
-```
-
-### 2. 환경변수 설정
-
-로컬 기본값은 `.env.local`을 사용합니다. 최소 실행에는 PostgreSQL/PostGIS 접속 정보와 OpenAI 설정이 필요합니다.
-
-주요 환경변수:
-
-| 변수 | 설명 |
-| --- | --- |
-| `DATABASE_URL` | PostgreSQL/PostGIS 접속 URL |
-| `CORS_ALLOW_ORIGINS` | 허용할 CORS origin 목록 |
-| `OPENAI_API_KEY` | OpenAI API 키 |
-| `OPENAI_MODEL` | 설명 생성 기본 모델 |
-| `PROFILE_DRAFT_OPENAI_MODEL` | 프로필 초안 생성 모델, 미설정 시 `OPENAI_MODEL` 사용 |
-| `PROFILE_DRAFT_ENABLE_OCR` | OCR 사용 여부 |
-| `PROFILE_DRAFT_MAX_FILE_SIZE_BYTES` | PDF 업로드 최대 크기 |
-| `AUTO_CREATE_DB_SCHEMA` | SQLAlchemy 스키마 자동 생성 여부 |
-| `REQUIRE_POSTGIS` | 시작 시 PostGIS 필수 확인 여부 |
-| `REQUIRE_PROFILE_DRAFT_OCR_DEPENDENCIES` | 시작 시 OCR 의존성 확인 여부 |
-
-### 3. 개발 서버 실행
-
-```bash
-uv run python -m uvicorn app.main:app --reload
-```
-
-- API 서버: `http://127.0.0.1:8000`
-- Swagger UI: `http://127.0.0.1:8000/docs`
-- ReDoc: `http://127.0.0.1:8000/redoc`
-
-### 4. 헬스체크
-
-```bash
-curl http://127.0.0.1:8000/health
-curl http://127.0.0.1:8000/db-health
-curl http://127.0.0.1:8000/postgis-health
-curl http://127.0.0.1:8000/metrics
-```
-
-## 테스트와 코드 품질
-
-```bash
-uv run pytest -v
-uv run ruff check . --fix --unsafe-fixes
-uv run ruff format .
-uv run pre-commit run --all-files
-```
-
-테스트 작성 기준은 `.agents/skills/testing/SKILL.md`를 따릅니다.
-
 ## 배포
 
 이 레포는 GitHub Actions에서 Docker 이미지를 빌드해 GHCR에 게시하고, EC2에서 비활성 Blue/Green 슬롯에 새 컨테이너를 띄운 뒤 Nginx 업스트림을 전환합니다.
@@ -219,10 +156,9 @@ uv run pre-commit run --all-files
 
 상세 데이터 출처와 동기화 방식은 `backend/README.md`를 기준으로 합니다.
 
-## 창업 아이템 차별점
+## 사업 아이템 차별점
 
 - 단순 채용 공고 추천이 아니라, 장애인 구직자의 **실제 출근 가능성**과 **근무 지속 가능성**을 함께 계산합니다.
 - 이력서 PDF를 프로필로 자동 변환해 사용자의 초기 입력 부담을 줄입니다.
 - AI 추천을 켜고 끌 수 있어, 최신 공고 조회와 AI 분석 흐름을 명확히 분리합니다.
-- 점수 산정은 설명 가능한 룰 기반 로직으로 처리하고, LLM은 구조화와 자연어 설명에 제한적으로 사용합니다.
-- 공공데이터, PostGIS, OCR, LLM을 하나의 내부 분석 API로 묶어 Spring Backend와 안정적으로 연동합니다.
+- 점수 산정은 설명 가능한 룰 기반 로직으로 처리하고, LLM은 구조화와 자연어 설명에 제한적으로 사용합니다. 
