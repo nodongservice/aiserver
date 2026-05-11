@@ -3,7 +3,6 @@ from threading import RLock
 from time import monotonic
 from typing import Optional
 
-from fastapi import HTTPException
 from sqlalchemy.orm import Session
 
 from app.core.public_data_sources import KEPAD_RECRUITMENT, KEPAD_STANDARD_WORKPLACE, get_source_name
@@ -227,44 +226,7 @@ def clear_accessibility_cache() -> None:
 
 
 def validate_score_request(request: ScoreRequest, *, mode: str) -> None:
-    profile = request.profile
-    required_fields = [
-        ("profile.desired_jobs", bool(profile.desired_jobs), "지원 직무는 필수입니다."),
-        ("profile.skills", bool(profile.skills), "보유 기술/역량은 필수입니다."),
-        ("profile.education", bool(profile.education), "최종 학력은 필수입니다."),
-        ("profile.career", bool(profile.career), "주요 경력은 필수입니다."),
-    ]
-
-    if mode == "map":
-        required_fields.extend(
-            [
-                ("profile.address", bool(profile.address), "거주지 상세 주소는 필수입니다."),
-                (
-                    "profile.available_employment_types",
-                    bool(profile.available_employment_types),
-                    "가능한 고용형태는 필수입니다.",
-                ),
-                ("profile.disability_types", bool(profile.disability_types), "장애 유형은 필수입니다."),
-                ("profile.disability_severity", bool(profile.disability_severity), "장애 정도는 필수입니다."),
-                (
-                    "profile.is_registered_disabled",
-                    profile.is_registered_disabled is not None,
-                    "장애인 등록 여부는 필수입니다.",
-                ),
-            ]
-        )
-
-    errors = [
-        {
-            "loc": field_path.split("."),
-            "msg": message,
-            "type": "value_error.missing",
-        }
-        for field_path, is_valid, message in required_fields
-        if not is_valid
-    ]
-    if errors:
-        raise HTTPException(status_code=422, detail=errors)
+    return None
 
 
 def build_score_evidence_items(

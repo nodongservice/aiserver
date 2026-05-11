@@ -1,6 +1,48 @@
-from typing import Any, List, Optional
+from typing import Any, List, Optional, Union
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
+
+PROFILE_VALUE_LABELS = {
+    "BACHELOR": "대졸",
+    "COLLEGE": "전문대졸",
+    "DOCTOR": "박사",
+    "HIGH_SCHOOL": "고졸",
+    "HIGH_SCHOOL_OR_BELOW": "고졸 이하",
+    "MASTER": "석사",
+    "FULL_TIME": "정규직",
+    "CONTRACT": "계약직",
+    "INDEFINITE_CONTRACT": "무기계약직",
+    "PART_TIME": "시간제",
+    "DAILY": "일용직",
+    "INTERN": "인턴",
+    "DISPATCH_OUTSOURCING": "파견/용역",
+    "REMOTE": "재택/원격",
+    "DAYTIME": "주간",
+    "MORNING": "오전",
+    "AFTERNOON": "오후",
+    "EVENING": "야간",
+    "FLEXIBLE": "탄력근무",
+    "NEGOTIABLE": "협의 가능",
+    "SEVERE": "중증",
+    "MODERATE": "중등도",
+    "MILD": "경증",
+    "PHYSICAL": "지체장애",
+    "BRAIN_LESION": "뇌병변장애",
+    "VISUAL": "시각장애",
+    "HEARING": "청각장애",
+    "SPEECH": "언어장애",
+    "INTELLECTUAL": "지적장애",
+    "AUTISM": "자폐성장애",
+    "MENTAL": "정신장애",
+    "KIDNEY": "신장장애",
+    "HEART": "심장장애",
+    "RESPIRATORY": "호흡기장애",
+    "LIVER": "간장애",
+    "FACE": "안면장애",
+    "STOMA_URINARY": "장루·요루장애",
+    "EPILEPSY": "뇌전증장애",
+    "OTHER": "기타",
+}
 
 
 class ScoreProfile(BaseModel):
@@ -32,6 +74,53 @@ class ScoreProfile(BaseModel):
     assistive_devices: List[str] = Field(default_factory=list)
     required_supports: List[str] = Field(default_factory=list)
     mobility_range_km: Optional[float] = None
+
+    @field_validator(
+        "desired_jobs",
+        "skills",
+        "licenses",
+        "available_employment_types",
+        "disability_types",
+        "assistive_devices",
+        "required_supports",
+        mode="before",
+    )
+    @classmethod
+    def none_list_to_empty(cls, value: Any) -> Any:
+        if value is None:
+            return []
+        return value
+
+    @field_validator(
+        "education",
+        "disability_severity",
+        "time_preference",
+        mode="before",
+    )
+    @classmethod
+    def normalize_profile_label(cls, value: Any) -> Any:
+        return normalize_profile_value(value)
+
+    @field_validator(
+        "desired_jobs",
+        "skills",
+        "licenses",
+        "available_employment_types",
+        "disability_types",
+        "assistive_devices",
+        "required_supports",
+        mode="after",
+    )
+    @classmethod
+    def normalize_profile_label_list(cls, values: List[str]) -> List[str]:
+        return [normalize_profile_value(value) for value in values]
+
+
+def normalize_profile_value(value: Any) -> Any:
+    if not isinstance(value, str):
+        return value
+    stripped = value.strip()
+    return PROFILE_VALUE_LABELS.get(stripped, stripped)
 
 
 class ScoreRequest(BaseModel):
@@ -95,6 +184,15 @@ class MapScoreDetail(BaseModel):
     accessibility_score: int
 
 
+class RecommendationScoreDetail(BaseModel):
+    job_fit_score: Optional[int] = None
+    work_condition_score: Optional[int] = None
+    disability_support_score: Optional[int] = None
+    work_environment_score: Optional[int] = None
+    company_stability_score: Optional[int] = None
+    accessibility_score: Optional[int] = None
+
+
 class MapScoreResult(BaseModel):
     job: JobPosting
     score_detail: MapScoreDetail
@@ -111,7 +209,7 @@ class MapScoreResponse(BaseModel):
 class RecommendationExplainRequest(BaseModel):
     profile: ScoreProfile
     job: JobPosting
-    score_detail: Optional[MapScoreDetail] = None
+    score_detail: Optional[Union[RecommendationScoreDetail, MapScoreDetail]] = None
     total_score: Optional[int] = None
     job_fit_score: Optional[int] = None
     reasons: List[str] = Field(default_factory=list)

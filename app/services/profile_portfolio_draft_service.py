@@ -1,5 +1,5 @@
-import json
 import io
+import json
 import logging
 import multiprocessing as mp
 import queue
@@ -14,10 +14,11 @@ import httpx
 from app.core.config import settings
 from app.schemas.profile_draft import (
     ProfilePortfolioDraft,
+    ProfilePortfolioDraftFieldMapping,
     ProfilePortfolioDraftResponse,
 )
 
-PROFILE_DRAFT_MODEL_VERSION = "v1-paddleocr-openai-profile-draft"
+PROFILE_DRAFT_MODEL_VERSION = "v2-paddleocr-openai-profile-draft-field-mapping"
 logger = logging.getLogger(__name__)
 
 PROFILE_ENUM_VALUES = {
@@ -142,6 +143,7 @@ def generate_profile_draft_from_portfolio_pdf(
     extraction = extract_text_from_pdf(pdf_bytes)
     llm_payload = request_profile_draft_from_openai(extraction.text)
     normalized_draft = normalize_draft(llm_payload.get("draft"))
+    field_mappings = normalize_field_mappings(llm_payload.get("fieldMappings"))
     missing_fields = [field for field, value in normalized_draft.model_dump().items() if value is None]
     warnings = extraction.warnings + sanitize_string_list(llm_payload.get("warnings"))
 
@@ -154,6 +156,7 @@ def generate_profile_draft_from_portfolio_pdf(
     return ProfilePortfolioDraftResponse(
         draft=normalized_draft,
         missingFields=missing_fields,
+        fieldMappings=field_mappings,
         confidence=confidence,
         ocrTextLength=len(extraction.text),
         modelVersion=PROFILE_DRAFT_MODEL_VERSION,
@@ -374,9 +377,7 @@ def verify_profile_draft_ocr_runtime_dependencies() -> None:
 
     if not settings.profile_draft_enable_ocr:
         if dependency_errors:
-            raise RuntimeError(
-                "프로필 OCR 런타임 의존성 검증 실패: " + " | ".join(dependency_errors)
-            )
+            raise RuntimeError("프로필 OCR 런타임 의존성 검증 실패: " + " | ".join(dependency_errors))
         logger.warning("PROFILE_DRAFT_ENABLE_OCR=false, PaddleOCR 의존성 검사를 건너뜁니다.")
         return
 
@@ -401,9 +402,7 @@ def verify_profile_draft_ocr_runtime_dependencies() -> None:
         dependency_errors.append(format_dependency_error("paddleocr", exception))
 
     if dependency_errors:
-        raise RuntimeError(
-            "프로필 OCR 런타임 의존성 검증 실패: " + " | ".join(dependency_errors)
-        )
+        raise RuntimeError("프로필 OCR 런타임 의존성 검증 실패: " + " | ".join(dependency_errors))
 
 
 def format_dependency_error(dependency_name: str, exception: Exception) -> str:
@@ -719,15 +718,23 @@ def build_openai_request_body(extracted_text: str) -> dict[str, Any]:
 def build_system_prompt() -> str:
     return (
         "당신은 포트폴리오/이력서 OCR 텍스트를 스프링 프로필 입력 스키마로 구조화하는 파서다. "
-        "반드시 JSON 스키마를 지키고, 근거가 부족한 항목은 null로 채워라. "
-        "임의 추측 금지. 한국어 텍스트라도 enum 필드는 코드값으로 반환하라. "
-        "배열 필드에 값이 없으면 null을 반환하라."
+        "반드시 JSON 스키마를 지켜라. 컬럼명/항목명이 스키마와 달라도 의미가 가장 비슷한 프로필 필드로 매칭하라. "
+        "예: 성명/지원자/이름은 fullName, 연락처/휴대폰은 contactPhone, 희망직무/지원분야는 targetJob, "
+        "기술스택/역량은 skills, 자기소개/소개글은 selfIntroduction에 매칭한다. "
+        "단, OCR 텍스트에 명시 근거가 없거나 어느 필드인지 애매하면 임의 작성하지 말고 반드시 null로 채워라. "
+        "지원자가 작성한 문장형 내용은 요약, 교정, 재작성, 의미 변경 없이 원문 값을 그대로 반환하라. "
+        "날짜와 enum/boolean 필드는 스키마가 요구하는 값으로만 변환하고, 변환이 불확실하면 null로 반환하라. "
+        "배열 필드에 값이 없으면 null을 반환하라. "
+        "fieldMappings에는 null이 아닌 draft 필드마다 profileField, OCR 원본 항목명(sourceLabel), "
+        "지원자가 작성한 원본 값(sourceValue), 매칭 신뢰도(confidence)를 넣어 후처리 가능하게 하라. "
+        "매칭하지 못한 필드는 fieldMappings에 넣지 마라."
         "\n\n"
         "[Enum 코드]\n"
         "genderType: MALE,FEMALE,OTHER,NOT_DISCLOSED\n"
         "highestEducation: HIGH_SCHOOL_OR_BELOW,HIGH_SCHOOL,COLLEGE,BACHELOR,MASTER,DOCTOR,OTHER\n"
         "graduationStatus: GRADUATED,EXPECTED,ENROLLED,COMPLETED,DROPPED_OUT,OTHER\n"
-        "disabilityType: PHYSICAL,BRAIN_LESION,VISUAL,HEARING,SPEECH,INTELLECTUAL,AUTISM,MENTAL,KIDNEY,HEART,RESPIRATORY,LIVER,FACE,STOMA_URINARY,EPILEPSY,OTHER\n"
+        "disabilityType: PHYSICAL,BRAIN_LESION,VISUAL,HEARING,SPEECH,INTELLECTUAL,AUTISM,MENTAL,KIDNEY,"
+        "HEART,RESPIRATORY,LIVER,FACE,STOMA_URINARY,EPILEPSY,OTHER\n"
         "disabilitySeverity: SEVERE,MODERATE,MILD\n"
         "workAvailability: IMMEDIATE,WITHIN_TWO_WEEKS,WITHIN_ONE_MONTH,NEGOTIABLE\n"
         "workTimePreference: DAYTIME,MORNING,AFTERNOON,EVENING,FLEXIBLE,NEGOTIABLE\n"
@@ -777,10 +784,24 @@ def build_profile_draft_schema() -> dict[str, Any]:
                 "properties": properties,
                 "required": required,
             },
+            "fieldMappings": {
+                "type": "array",
+                "items": {
+                    "type": "object",
+                    "additionalProperties": False,
+                    "properties": {
+                        "profileField": {"type": "string", "enum": PROFILE_FIELD_NAMES},
+                        "sourceLabel": {"type": ["string", "null"]},
+                        "sourceValue": {"type": ["string", "null"]},
+                        "confidence": {"type": ["number", "null"], "minimum": 0, "maximum": 1},
+                    },
+                    "required": ["profileField", "sourceLabel", "sourceValue", "confidence"],
+                },
+            },
             "confidence": {"type": ["number", "null"], "minimum": 0, "maximum": 1},
             "warnings": {"type": "array", "items": {"type": "string"}},
         },
-        "required": ["draft", "confidence", "warnings"],
+        "required": ["draft", "fieldMappings", "confidence", "warnings"],
     }
 
 
@@ -839,6 +860,44 @@ def normalize_draft(raw_draft: Any) -> ProfilePortfolioDraft:
     return ProfilePortfolioDraft(**normalized)
 
 
+def normalize_field_mappings(raw_mappings: Any) -> list[ProfilePortfolioDraftFieldMapping]:
+    if not isinstance(raw_mappings, list):
+        return []
+
+    normalized: list[ProfilePortfolioDraftFieldMapping] = []
+    seen_fields: set[str] = set()
+    valid_fields = set(PROFILE_FIELD_NAMES)
+
+    for item in raw_mappings:
+        if not isinstance(item, dict):
+            continue
+
+        profile_field = normalize_string(item.get("profileField"))
+        if profile_field not in valid_fields or profile_field in seen_fields:
+            continue
+
+        confidence = item.get("confidence")
+        if not isinstance(confidence, (int, float)) or confidence < 0 or confidence > 1:
+            confidence = None
+
+        source_value = normalize_source_value(item.get("sourceValue"))
+        source_label = normalize_string(item.get("sourceLabel"))
+        if source_value is None and source_label is None:
+            continue
+
+        normalized.append(
+            ProfilePortfolioDraftFieldMapping(
+                profileField=profile_field,
+                sourceLabel=source_label,
+                sourceValue=source_value,
+                confidence=confidence,
+            )
+        )
+        seen_fields.add(profile_field)
+
+    return normalized
+
+
 def normalize_array(value: Any, *, enum_values: Optional[set[str]] = None) -> Optional[list[str]]:
     if not isinstance(value, list):
         return None
@@ -892,8 +951,14 @@ def normalize_enum(value: Any, enum_values: set[str]) -> Optional[str]:
 def normalize_string(value: Any) -> Optional[str]:
     if not isinstance(value, str):
         return None
-    cleaned = re.sub(r"\s+", " ", value).strip()
+    cleaned = value.strip()
     return cleaned if cleaned else None
+
+
+def normalize_source_value(value: Any) -> Optional[str]:
+    if not isinstance(value, str):
+        return None
+    return value if value.strip() else None
 
 
 def sanitize_string_list(value: Any) -> list[str]:

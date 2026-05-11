@@ -1,6 +1,6 @@
 from typing import Optional
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 
 class ProfilePortfolioDraft(BaseModel):
@@ -55,9 +55,17 @@ class ProfilePortfolioDraft(BaseModel):
     snsUrl: Optional[str] = None
 
 
+class ProfilePortfolioDraftFieldMapping(BaseModel):
+    profileField: str
+    sourceLabel: Optional[str] = None
+    sourceValue: Optional[str] = None
+    confidence: Optional[float] = None
+
+
 class ProfilePortfolioDraftResponse(BaseModel):
     draft: ProfilePortfolioDraft
     missingFields: list[str]
+    fieldMappings: list[ProfilePortfolioDraftFieldMapping] = Field(default_factory=list)
     confidence: Optional[float] = None
     ocrTextLength: int
     modelVersion: str
