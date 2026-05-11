@@ -1,3 +1,5 @@
+from typing import Optional
+
 from app.schemas.analysis import EvidenceItem, ScoreDetail
 from app.schemas.explanation import ExplanationGenerateRequest, ExplanationGenerateResponse
 from app.schemas.score import RecommendationExplainRequest, RecommendationExplainResponse
@@ -40,7 +42,9 @@ def build_explanation_generate_request(request: RecommendationExplainRequest) ->
 
 
 def resolve_score_mode(request: RecommendationExplainRequest) -> str:
-    if request.score_detail is not None or request.total_score is not None:
+    if request.total_score is not None:
+        return "map"
+    if request.score_detail is not None and any_score_detail_value(request.score_detail, exclude_job_fit=True):
         return "map"
     return "quick"
 
@@ -53,7 +57,10 @@ def resolve_primary_score(request: RecommendationExplainRequest, score_mode: str
         return request.total_score
 
     if request.score_detail is not None:
-        return request.score_detail.accessibility_score
+        return first_available_score(
+            request.score_detail.accessibility_score,
+            request.score_detail.job_fit_score,
+        )
 
     return 0
 
@@ -101,7 +108,29 @@ def to_legacy_score_detail(request: RecommendationExplainRequest) -> ScoreDetail
     )
 
 
-def scale_score_to_component(score: int) -> int:
+def any_score_detail_value(score_detail, *, exclude_job_fit: bool = False) -> bool:
+    values = [
+        score_detail.work_condition_score,
+        score_detail.disability_support_score,
+        score_detail.work_environment_score,
+        score_detail.company_stability_score,
+        score_detail.accessibility_score,
+    ]
+    if not exclude_job_fit:
+        values.append(score_detail.job_fit_score)
+    return any(value is not None for value in values)
+
+
+def first_available_score(*scores: Optional[int]) -> int:
+    for score in scores:
+        if score is not None:
+            return score
+    return 0
+
+
+def scale_score_to_component(score: Optional[int]) -> int:
+    if score is None:
+        return 0
     return round(max(0, min(100, score)) / 5)
 
 

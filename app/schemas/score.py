@@ -1,6 +1,6 @@
-from typing import Any, List, Optional
+from typing import Any, List, Optional, Union
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 
 class ScoreProfile(BaseModel):
@@ -32,6 +32,22 @@ class ScoreProfile(BaseModel):
     assistive_devices: List[str] = Field(default_factory=list)
     required_supports: List[str] = Field(default_factory=list)
     mobility_range_km: Optional[float] = None
+
+    @field_validator(
+        "desired_jobs",
+        "skills",
+        "licenses",
+        "available_employment_types",
+        "disability_types",
+        "assistive_devices",
+        "required_supports",
+        mode="before",
+    )
+    @classmethod
+    def none_list_to_empty(cls, value: Any) -> Any:
+        if value is None:
+            return []
+        return value
 
 
 class ScoreRequest(BaseModel):
@@ -95,6 +111,15 @@ class MapScoreDetail(BaseModel):
     accessibility_score: int
 
 
+class RecommendationScoreDetail(BaseModel):
+    job_fit_score: Optional[int] = None
+    work_condition_score: Optional[int] = None
+    disability_support_score: Optional[int] = None
+    work_environment_score: Optional[int] = None
+    company_stability_score: Optional[int] = None
+    accessibility_score: Optional[int] = None
+
+
 class MapScoreResult(BaseModel):
     job: JobPosting
     score_detail: MapScoreDetail
@@ -111,7 +136,7 @@ class MapScoreResponse(BaseModel):
 class RecommendationExplainRequest(BaseModel):
     profile: ScoreProfile
     job: JobPosting
-    score_detail: Optional[MapScoreDetail] = None
+    score_detail: Optional[Union[RecommendationScoreDetail, MapScoreDetail]] = None
     total_score: Optional[int] = None
     job_fit_score: Optional[int] = None
     reasons: List[str] = Field(default_factory=list)

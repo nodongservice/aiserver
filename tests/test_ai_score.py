@@ -57,7 +57,7 @@ def test_ai_score_map_contract_accepts_selected_profile(client, override_get_db)
     assert response.json() == {"code": "SUCCESS", "message": "성공", "result": {"results": []}}
 
 
-def test_quick_score_rejects_missing_required_profile_fields(client, override_get_db):
+def test_quick_score_accepts_partial_profile_fields(client, override_get_db):
     response = client.post(
         "/api/v1/score/quick",
         json={
@@ -68,18 +68,11 @@ def test_quick_score_rejects_missing_required_profile_fields(client, override_ge
         },
     )
 
-    assert response.status_code == 422
-    data = response.json()
-    assert data["code"] == "VALIDATION_ERROR"
-    assert {tuple(item["loc"]) for item in data["result"]["detail"]} >= {
-        ("profile", "desired_jobs"),
-        ("profile", "skills"),
-        ("profile", "education"),
-        ("profile", "career"),
-    }
+    assert response.status_code == 200, response.json()
+    assert response.json() == {"code": "SUCCESS", "message": "성공", "result": {"results": []}}
 
 
-def test_map_score_rejects_missing_map_required_profile_fields(client, override_get_db):
+def test_map_score_accepts_partial_profile_fields(client, override_get_db):
     response = client.post(
         "/api/v1/score/map",
         json={
@@ -92,18 +85,28 @@ def test_map_score_rejects_missing_map_required_profile_fields(client, override_
         },
     )
 
-    assert response.status_code == 422
-    data = response.json()
-    assert data["code"] == "VALIDATION_ERROR"
-    assert {tuple(item["loc"]) for item in data["result"]["detail"]} >= {
-        ("profile", "address"),
-        ("profile", "available_employment_types"),
-        ("profile", "disability_types"),
-        ("profile", "disability_severity"),
-        ("profile", "is_registered_disabled"),
-    }
-    assert ("profile", "home_lat") not in {tuple(item["loc"]) for item in data["result"]["detail"]}
-    assert ("profile", "home_lng") not in {tuple(item["loc"]) for item in data["result"]["detail"]}
+    assert response.status_code == 200, response.json()
+    assert response.json() == {"code": "SUCCESS", "message": "성공", "result": {"results": []}}
+
+
+def test_score_profile_null_lists_are_treated_as_empty(client, override_get_db):
+    response = client.post(
+        "/api/v1/score/quick",
+        json={
+            "profile": {
+                "desired_jobs": None,
+                "skills": None,
+                "licenses": None,
+                "available_employment_types": None,
+                "disability_types": None,
+                "assistive_devices": None,
+                "required_supports": None,
+            }
+        },
+    )
+
+    assert response.status_code == 200, response.json()
+    assert response.json() == {"code": "SUCCESS", "message": "성공", "result": {"results": []}}
 
 
 def test_ai_explain_recommendation_contract(client):
@@ -131,6 +134,38 @@ def test_ai_explain_recommendation_contract(client):
     assert result["recommendation_reasons"]
     assert result["caution_points"]
     assert result["checklist"]
+
+
+def test_ai_explain_recommendation_accepts_quick_score_detail_with_nulls(client):
+    payload = {
+        "profile": {
+            "profile_id": 7,
+            "desired_jobs": ["사무보조"],
+        },
+        "job": {
+            "job_post_id": 1,
+            "company_name": "ABC복지센터",
+            "job_title": "사무보조",
+        },
+        "score_detail": {
+            "job_fit_score": 82,
+            "work_condition_score": None,
+            "disability_support_score": None,
+            "work_environment_score": None,
+            "company_stability_score": None,
+            "accessibility_score": None,
+        },
+        "job_fit_score": 82,
+        "reasons": ["희망 직무와 모집 직종이 겹칩니다."],
+        "risk_factors": [],
+    }
+
+    response = client.post("/api/v1/explain/recommendation", json=payload)
+
+    assert response.status_code == 200, response.json()
+    data = response.json()
+    assert data["code"] == "SUCCESS"
+    assert data["result"]["used_llm"] is False
 
 
 def test_recommendation_explanation_uses_configured_provider(monkeypatch):
