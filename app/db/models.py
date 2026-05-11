@@ -208,6 +208,20 @@ class PdKepadRecruitment(PublicDataNormalizedMixin, Base):
     posting_status: Mapped[Optional[str]] = mapped_column(String(16), nullable=True)
 
 
+class PdKepadJobCategory(PublicDataNormalizedMixin, Base):
+    __tablename__ = "pd_kepad_job_category"
+
+    job_cd: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
+    job_cd_level: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
+    job_cd_nm: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
+    rnum: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
+    job_task: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    notice_cn: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    simlr_job: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    sprd_ockcls_yn: Mapped[Optional[str]] = mapped_column(String(20), nullable=True)
+    jobdevtip_cn: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+
+
 class PdKepadStandardWorkplace(PublicDataNormalizedMixin, Base):
     __tablename__ = "pd_kepad_standard_workplace"
 
@@ -252,7 +266,121 @@ class PdTransportSupportCenter(PublicDataNormalizedMixin, Base):
     longitude: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
     slope_vhcle_co: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
     lift_vhcle_co: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    car_hold_co: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    car_hold_knd: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    rcept_phone_number: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
+    rcept_itnadr: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    app_svc_nm: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
+    weekday_rcept_open_hhmm: Mapped[Optional[str]] = mapped_column(String(20), nullable=True)
+    weekday_rcept_colse_hhmm: Mapped[Optional[str]] = mapped_column(String(20), nullable=True)
+    wkend_rcept_open_hhmm: Mapped[Optional[str]] = mapped_column(String(20), nullable=True)
+    wkend_rcept_close_hhmm: Mapped[Optional[str]] = mapped_column(String(20), nullable=True)
+    weekday_oper_open_hhmm: Mapped[Optional[str]] = mapped_column(String(20), nullable=True)
+    weekday_oper_colse_hhmm: Mapped[Optional[str]] = mapped_column(String(20), nullable=True)
+    wkend_oper_open_hhmm: Mapped[Optional[str]] = mapped_column(String(20), nullable=True)
+    wkend_oper_close_hhmm: Mapped[Optional[str]] = mapped_column(String(20), nullable=True)
+    beffat_resve_pd: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
+    use_lmtt: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     inside_oprat_area: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    outside_oprat_area: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    use_trget: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    use_charge: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    institution_nm: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
+    phone_number: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
+    reference_date: Mapped[Optional[str]] = mapped_column(String(50), nullable=True)
+    instt_code: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
+    instt_nm: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
+
+
+class PdKorailWeekPersonFacilities(PublicDataNormalizedMixin, Base):
+    __tablename__ = "pd_korail_week_person_facilities"
+
+    pwdbs_slwy_estnc: Mapped[Optional[str]] = mapped_column(String(20), nullable=True)
+    pwdbs_tolt_estnc: Mapped[Optional[str]] = mapped_column(String(20), nullable=True)
+    stn_cd: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
+    stn_nm: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
+    whlch_liftt_cnt: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+
+
+class PdSeoulTransportWeakWheelchairLift(PublicDataNormalizedMixin, Base):
+    __tablename__ = "pd_seoul_transport_weak_wheelchair_lift"
+
+    fclt_no: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
+    fclt_nm: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
+    line_nm: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
+    stn_cd: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
+    stn_nm: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
+    stn_no: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
+    crtr_ymd: Mapped[Optional[str]] = mapped_column(String(50), nullable=True)
+    elvtr_sn: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
+    mng_no: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
+    vcnt_entrc_no: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
+    bgng_flr_grnd_udgd_se: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
+    bgng_flr: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
+    bgng_flr_dtl_pstn: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    end_flr_grnd_udgd_se: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
+    end_flr: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
+    end_flr_dtl_pstn: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    elvtr_len: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
+    elvtr_wdth_bt: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
+    limit_wht: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
+    oprtng_situ: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
+
+
+class PdRailWheelchairLift(PublicDataNormalizedMixin, Base):
+    __tablename__ = "pd_rail_wheelchair_lift"
+
+    rail_opr_istt_cd: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
+    ln_cd: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
+    stin_cd: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
+    exit_no: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
+    dtl_loc: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    grnd_dv_nm_fr: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
+    run_stin_flor_fr: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
+    grnd_dv_nm_to: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
+    run_stin_flor_to: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
+    len: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
+    wd: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
+    bnd_wgt: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
+    ln_nm: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
+    stin_nm: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
+
+
+class PdRailWheelchairLiftMovement(PublicDataNormalizedMixin, Base):
+    __tablename__ = "pd_rail_wheelchair_lift_movement"
+
+    rail_opr_istt_cd: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
+    ln_cd: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
+    stin_cd: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
+    mv_path_mg_no: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
+    mv_path_dv_cd: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
+    mv_path_dv_nm: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
+    mv_tp_ordr: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
+    mv_dst: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
+    mv_cont_dtl: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    ln_nm: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
+    stin_nm: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
+
+
+class PdSeoulWheelchairLift(PublicDataNormalizedMixin, Base):
+    __tablename__ = "pd_seoul_wheelchair_lift"
+
+    entrance_no: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
+    management_no: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
+    length: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
+    data_base_date: Mapped[Optional[str]] = mapped_column(String(50), nullable=True)
+    elevator_serial_no: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
+    start_floor_detail_location: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    start_floor_operation_station_floor: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
+    start_floor_ground_basement: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
+    station_name: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
+    serial_number: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
+    end_floor_detail_location: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    end_floor_operation_station_floor: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
+    end_floor_ground_basement: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
+    width: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
+    weight_limit: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
+    line_name: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
 
 
 class PdNationwideBusStop(PublicDataNormalizedMixin, Base):
@@ -274,14 +402,38 @@ class PdNationwideTrafficLight(PublicDataNormalizedMixin, Base):
 
     ctprvn_nm: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
     signgu_nm: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
+    road_knd: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
+    road_route_no: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
+    road_route_nm: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
+    road_route_drc: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
     rdnmadr: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     lnmadr: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     latitude: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
     longitude: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
+    sgngnr_instl_mthd: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
+    road_type: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
+    prior_road_yn: Mapped[Optional[str]] = mapped_column(String(20), nullable=True)
     tfclght_manage_no: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
+    tfclght_se: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
+    tfclght_color_knd: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
+    sgnasp_mthd: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
+    sgnasp_ordr: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
+    sgnasp_time: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
+    sot_knd: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
+    signl_ctrl_mthd: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
+    signl_time_mthd_type: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
+    opratn_yn: Mapped[Optional[str]] = mapped_column(String(20), nullable=True)
+    flashing_light_open_hhmm: Mapped[Optional[str]] = mapped_column(String(20), nullable=True)
+    flashing_light_close_hhmm: Mapped[Optional[str]] = mapped_column(String(20), nullable=True)
     fnctng_sgngnr_yn: Mapped[Optional[str]] = mapped_column(String(20), nullable=True)
     remndr_idct_yn: Mapped[Optional[str]] = mapped_column(String(20), nullable=True)
     sond_sgngnr_yn: Mapped[Optional[str]] = mapped_column(String(20), nullable=True)
+    drcbrd_sn: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
+    institution_nm: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
+    phone_number: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
+    reference_date: Mapped[Optional[str]] = mapped_column(String(50), nullable=True)
+    instt_code: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
+    instt_nm: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
 
 
 class PdNationwideCrosswalk(PublicDataNormalizedMixin, Base):
@@ -293,13 +445,28 @@ class PdNationwideCrosswalk(PublicDataNormalizedMixin, Base):
     rdnmadr: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     lnmadr: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     crslk_manage_no: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
+    crslk_knd: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
+    bcycl_crslk_cmbnat_yn: Mapped[Optional[str]] = mapped_column(String(20), nullable=True)
+    highland_yn: Mapped[Optional[str]] = mapped_column(String(20), nullable=True)
     latitude: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
     longitude: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
+    cartrk_co: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    bt: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
+    et: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
     tfclght_yn: Mapped[Optional[str]] = mapped_column(String(20), nullable=True)
     fnctng_sgngnr_yn: Mapped[Optional[str]] = mapped_column(String(20), nullable=True)
     sond_sgngnr_yn: Mapped[Optional[str]] = mapped_column(String(20), nullable=True)
+    green_sgngnr_time: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
+    red_sgngnr_time: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
+    tfcilnd_yn: Mapped[Optional[str]] = mapped_column(String(20), nullable=True)
     ftpth_lower_yn: Mapped[Optional[str]] = mapped_column(String(20), nullable=True)
     brll_blck_yn: Mapped[Optional[str]] = mapped_column(String(20), nullable=True)
+    cnctr_lght_fclty_yn: Mapped[Optional[str]] = mapped_column(String(20), nullable=True)
+    institution_nm: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
+    phone_number: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
+    reference_date: Mapped[Optional[str]] = mapped_column(String(50), nullable=True)
+    instt_code: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
+    instt_nm: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
 
 
 class PdSeoulSubwayEntranceLift(PublicDataNormalizedMixin, Base):
@@ -323,13 +490,90 @@ class PdSeoulWalkingNetwork(PublicDataNormalizedMixin, Base):
     node_type: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
     node_wkt: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     node_id: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
+    node_type_cd: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
     lnkg_wkt: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     lnkg_id: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
+    lnkg_type_cd: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
+    bgng_lnkg_id: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
+    end_lnkg_id: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
     lnkg_len: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    sgg_cd: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
     sgg_nm: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
+    emd_cd: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
     emd_nm: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
+    expn_car_rd: Mapped[Optional[str]] = mapped_column(String(20), nullable=True)
+    sbwy_ntw: Mapped[Optional[str]] = mapped_column(String(20), nullable=True)
     brg: Mapped[Optional[str]] = mapped_column(String(20), nullable=True)
     tnl: Mapped[Optional[str]] = mapped_column(String(20), nullable=True)
     ovrp: Mapped[Optional[str]] = mapped_column(String(20), nullable=True)
     crswk: Mapped[Optional[str]] = mapped_column(String(20), nullable=True)
+    park: Mapped[Optional[str]] = mapped_column(String(20), nullable=True)
     bldg: Mapped[Optional[str]] = mapped_column(String(20), nullable=True)
+
+
+class PdSeoulWheelchairRampStatus(PublicDataNormalizedMixin, Base):
+    __tablename__ = "pd_seoul_wheelchair_ramp_status"
+
+    line_name: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
+    station_name: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
+    division: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
+    location: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+
+
+class PdSeoulLowFloorBusRouteRetention(PublicDataNormalizedMixin, Base):
+    __tablename__ = "pd_seoul_low_floor_bus_route_retention"
+
+    route_no: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
+    authorized_count: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    low_floor_bus_count: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    low_floor_retention_rate: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
+
+
+class PdVocationalTraining(PublicDataNormalizedMixin, Base):
+    __tablename__ = "pd_vocational_training"
+
+    address: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    certificate: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    contents: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    course_man: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
+    ei_empl_cnt3: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
+    ei_empl_cnt3_gt10: Mapped[Optional[str]] = mapped_column(String(20), nullable=True)
+    ei_empl_rate3: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
+    ei_empl_rate6: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
+    grade: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
+    inst_cd: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
+    ncs_cd: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
+    real_man: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
+    reg_course_man: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
+    stdg_scor: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
+    sub_title: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    sub_title_link: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    tel_no: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
+    title: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    title_icon: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
+    title_link: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    tra_end_date: Mapped[Optional[str]] = mapped_column(String(50), nullable=True)
+    tra_start_date: Mapped[Optional[str]] = mapped_column(String(50), nullable=True)
+    train_target: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    train_target_cd: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
+    trainst_cst_id: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
+    trng_area_cd: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
+    trpr_degr: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
+    trpr_id: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
+    wkend_se: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
+    yard_man: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
+
+
+class PdJobseekerCompetencyProgram(PublicDataNormalizedMixin, Base):
+    __tablename__ = "pd_jobseeker_competency_program"
+
+    org_nm: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
+    pgm_nm: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    pgm_sub_nm: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    pgm_target: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    pgm_stdt: Mapped[Optional[str]] = mapped_column(String(50), nullable=True)
+    pgm_endt: Mapped[Optional[str]] = mapped_column(String(50), nullable=True)
+    open_time_clcd: Mapped[Optional[str]] = mapped_column(String(20), nullable=True)
+    open_time: Mapped[Optional[str]] = mapped_column(String(50), nullable=True)
+    operation_time: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
+    open_plc_cont: Mapped[Optional[str]] = mapped_column(Text, nullable=True)

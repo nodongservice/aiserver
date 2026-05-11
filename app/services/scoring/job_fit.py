@@ -12,6 +12,8 @@ def calculate_job_fit_score(profile: ScoreProfile, posting: JobPosting) -> int:
                 posting.job_title,
                 posting.required_major or "",
                 posting.required_licenses or "",
+                " ".join(str(value) for value in posting.job_category_context.values() if value),
+                " ".join(str(value) for item in posting.development_context for value in item.values() if value),
                 " ".join(value for value in posting.environment.values() if value),
             ]
         )
@@ -44,6 +46,14 @@ def calculate_job_fit_score(profile: ScoreProfile, posting: JobPosting) -> int:
 
     if profile.job_fit_statement and token_overlap_count(profile.job_fit_statement, job_text) > 0:
         score += 4
+
+    if posting.job_category_context:
+        score += 5
+        if profile.desired_jobs and list_token_overlap_count(profile.desired_jobs, job_text) > 0:
+            score += 4
+
+    if posting.development_context and (profile.skills or profile.licenses):
+        score += 3
 
     return clamp_score(score)
 
