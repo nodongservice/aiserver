@@ -27,6 +27,7 @@ from app.schemas.score import (
     ScoreEvidenceItem,
     ScoreProfile,
     ScoreRequest,
+    TransitTimeResult,
 )
 from app.services.scoring.accessibility_summary import calculate_accessibility_score
 from app.services.scoring.common import clamp_score, token_overlap_count
@@ -35,6 +36,12 @@ from app.services.scoring.disability_support import calculate_disability_support
 from app.services.scoring.job_fit import calculate_job_fit_score
 from app.services.scoring.work_condition import calculate_work_condition_score
 from app.services.scoring.work_environment import calculate_work_environment_score
+from app.services.transit_time_service import (
+    ODSAY_SOURCE_NAME,
+    ODSAY_SOURCE_TYPE,
+    TransitTimeEstimate,
+    get_transit_time_estimate,
+)
 
 MAP_SCORING_MIN_CANDIDATE_LIMIT = 80
 ACCESSIBILITY_CACHE_TTL_SECONDS = 10 * 60
@@ -84,6 +91,7 @@ def score_map_jobs(request: ScoreRequest, db: Optional[Session] = None) -> MapSc
     for posting in postings:
         standard_workplace = standard_workplaces.get(posting.job_post_id, StandardWorkplaceMatch(is_match=False))
         accessibility = get_accessibility(request.profile, posting, db)
+        transit_time = get_transit_time(request.profile, posting)
         score_detail = MapScoreDetail(
             job_fit_score=calculate_job_fit_score(request.profile, posting),
             work_condition_score=calculate_work_condition_score(request.profile, posting),
@@ -94,18 +102,19 @@ def score_map_jobs(request: ScoreRequest, db: Optional[Session] = None) -> MapSc
             ),
             work_environment_score=calculate_work_environment_score(request.profile, posting),
             company_stability_score=calculate_company_stability_score(posting, standard_workplace),
-            accessibility_score=calculate_accessibility_score(request.profile, accessibility, posting),
+            accessibility_score=calculate_accessibility_score(request.profile, accessibility, posting, transit_time),
         )
         total_score = calculate_equal_weight_total_score(score_detail)
-        evidence_items = build_score_evidence_items(posting, standard_workplace, accessibility)
+        evidence_items = build_score_evidence_items(posting, standard_workplace, accessibility, transit_time)
 
         results.append(
             MapScoreResult(
                 job=posting,
                 score_detail=score_detail,
                 total_score=total_score,
-                reasons=build_map_reasons(score_detail, standard_workplace, accessibility),
-                risk_factors=build_map_risks(request.profile, posting, standard_workplace, accessibility),
+                transit_time=to_transit_time_result(transit_time),
+                reasons=build_map_reasons(score_detail, standard_workplace, accessibility, transit_time),
+                risk_factors=build_map_risks(request.profile, posting, standard_workplace, accessibility, transit_time),
                 evidence_items=evidence_items,
             )
         )
@@ -189,6 +198,15 @@ def get_accessibility(profile: ScoreProfile, posting: JobPosting, db: Optional[S
     return accessibility
 
 
+def get_transit_time(profile: ScoreProfile, posting: JobPosting) -> Optional[TransitTimeEstimate]:
+    return get_transit_time_estimate(
+        origin_lat=profile.home_lat,
+        origin_lng=profile.home_lng,
+        destination_lat=posting.work_lat,
+        destination_lng=posting.work_lng,
+    )
+
+
 def build_accessibility_cache_key(
     lat: Optional[float],
     lng: Optional[float],
@@ -239,6 +257,7 @@ def build_score_evidence_items(
     posting: JobPosting,
     standard_workplace: StandardWorkplaceMatch,
     accessibility: AccessibilityEvidence,
+    transit_time: Optional[TransitTimeEstimate] = None,
 ) -> list[ScoreEvidenceItem]:
     evidence_items = [
         ScoreEvidenceItem(
@@ -271,7 +290,27 @@ def build_score_evidence_items(
         )
     evidence_items.extend(build_job_context_evidence_items(posting))
     evidence_items.extend(accessibility.evidence_items)
+    transit_evidence = build_transit_time_evidence_item(transit_time)
+    if transit_evidence is not None:
+        evidence_items.append(transit_evidence)
     return evidence_items
+
+
+def build_transit_time_evidence_item(transit_time: Optional[TransitTimeEstimate]) -> Optional[ScoreEvidenceItem]:
+    if transit_time is None:
+        return None
+    description = "ODsay 대중교통 길찾기 예상 소요시간을 조회했습니다."
+    if transit_time.error_reason:
+        description = "ODsay 대중교통 길찾기 예상 소요시간 조회에 실패했습니다."
+    return ScoreEvidenceItem(
+        source_type=ODSAY_SOURCE_TYPE,
+        source_name=ODSAY_SOURCE_NAME,
+        source_table=None,
+        record_id=None,
+        distance_meters=transit_time.distance_meters,
+        description=description,
+        fields=transit_time.model_dump(),
+    )
 
 
 def build_job_context_evidence_items(posting: JobPosting) -> list[ScoreEvidenceItem]:
@@ -343,6 +382,7 @@ def build_map_reasons(
     score_detail: MapScoreDetail,
     standard_workplace: StandardWorkplaceMatch,
     accessibility: AccessibilityEvidence,
+    transit_time: Optional[TransitTimeEstimate] = None,
 ) -> list[str]:
     reasons = ["6개 항목을 동일 비중으로 계산했습니다."]
     if score_detail.job_fit_score >= 80:
@@ -355,6 +395,8 @@ def build_map_reasons(
         used_source_count = sum(1 for count in accessibility.source_counts.values() if count > 0)
         if used_source_count:
             reasons.append(f"접근성 산정에 {used_source_count}개 공공데이터 소스가 반영되었습니다.")
+    if transit_time is not None and transit_time.duration_minutes is not None and not transit_time.error_reason:
+        reasons.append(f"대중교통 예상 통근시간 {transit_time.duration_minutes}분을 접근성 점수에 반영했습니다.")
     return reasons
 
 
@@ -374,6 +416,7 @@ def build_map_risks(
     posting: JobPosting,
     standard_workplace: StandardWorkplaceMatch,
     accessibility: AccessibilityEvidence,
+    transit_time: Optional[TransitTimeEstimate] = None,
 ) -> list[str]:
     risks = build_common_job_risks(posting)
     if profile.home_lat is None or profile.home_lng is None:
@@ -382,4 +425,20 @@ def build_map_risks(
         risks.append("장애인 표준사업장 여부는 현재 데이터에서 확인되지 않습니다.")
     if not accessibility.evidence_items:
         risks.append("근무지 주변 접근성 근거 데이터가 부족하여 추가 확인이 필요합니다.")
+    if transit_time is None:
+        risks.append("대중교통 통근시간 계산에 필요한 출발지 또는 근무지 좌표가 부족합니다.")
+    elif transit_time.error_reason:
+        risks.append("대중교통 예상 통근시간 조회에 실패하여 기존 거리/주변시설 기반 접근성 평가를 사용했습니다.")
+    elif profile.commute_limit_minutes is not None and transit_time.duration_minutes is not None:
+        if transit_time.duration_minutes > profile.commute_limit_minutes:
+            risks.append(
+                f"대중교통 예상 통근시간이 {transit_time.duration_minutes}분으로 희망 통근시간 "
+                f"{profile.commute_limit_minutes}분을 초과합니다."
+            )
     return risks
+
+
+def to_transit_time_result(transit_time: Optional[TransitTimeEstimate]) -> Optional[TransitTimeResult]:
+    if transit_time is None:
+        return None
+    return TransitTimeResult(**transit_time.model_dump())

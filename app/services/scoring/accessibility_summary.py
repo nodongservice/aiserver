@@ -3,6 +3,7 @@ from typing import Optional
 from app.repositories.scoring_repository import AccessibilityEvidence
 from app.schemas.score import JobPosting, ScoreProfile
 from app.services.scoring.common import clamp_score, contains_any
+from app.services.transit_time_service import TransitTimeEstimate
 from app.utils.geo import calculate_haversine_distance_meters
 
 
@@ -10,6 +11,7 @@ def calculate_accessibility_score(
     profile: ScoreProfile,
     accessibility: AccessibilityEvidence,
     posting: JobPosting,
+    transit_time: Optional[TransitTimeEstimate] = None,
 ) -> int:
     if posting.work_lat is None or posting.work_lng is None:
         return 45
@@ -65,6 +67,28 @@ def calculate_accessibility_score(
             score += 4
         elif distance_km >= 25:
             score -= 8
+
+    if transit_time is not None and transit_time.duration_minutes is not None and transit_time.error_reason is None:
+        duration = transit_time.duration_minutes
+        if profile.commute_limit_minutes is not None:
+            over_minutes = duration - profile.commute_limit_minutes
+            if over_minutes <= 0:
+                score += 8
+            elif over_minutes <= 10:
+                score += 2
+            else:
+                score -= min(24, 4 * max(1, round(over_minutes / 10)))
+        elif duration <= 45:
+            score += 6
+        elif duration <= 75:
+            score += 2
+        elif duration >= 100:
+            score -= 8
+
+        if transit_time.transfer_count is not None and transit_time.transfer_count >= 2:
+            score -= 4
+        if transit_time.walk_distance_meters is not None and transit_time.walk_distance_meters >= 1200:
+            score -= 4
 
     accessibility_needs_text = " ".join(
         profile.disability_types
