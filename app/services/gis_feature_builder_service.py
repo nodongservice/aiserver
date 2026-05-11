@@ -9,18 +9,27 @@ from app.core.gis_feature_types import (
     AUDIBLE_SIGNAL,
     BUS_STOP,
     CROSSWALK,
+    STEP_FREE_ACCESS,
     SUBWAY_ENTRANCE_LIFT,
     TRAFFIC_LIGHT,
     TRANSPORT_SUPPORT_CENTER,
     WALKING_LINK,
     WALKING_NODE,
+    WHEELCHAIR_LIFT,
 )
 from app.core.public_data_sources import (
+    KORAIL_WEEK_PERSON_FACILITIES,
     NATIONWIDE_BUS_STOP,
     NATIONWIDE_CROSSWALK,
     NATIONWIDE_TRAFFIC_LIGHT,
+    RAIL_WHEELCHAIR_LIFT,
+    RAIL_WHEELCHAIR_LIFT_MOVEMENT,
+    SEOUL_LOW_FLOOR_BUS_ROUTE_RETENTION,
     SEOUL_SUBWAY_ENTRANCE_LIFT,
+    SEOUL_TRANSPORT_WEAK_WHEELCHAIR_LIFT,
     SEOUL_WALKING_NETWORK,
+    SEOUL_WHEELCHAIR_LIFT,
+    SEOUL_WHEELCHAIR_RAMP_STATUS,
 )
 from app.core.public_data_sources import (
     TRANSPORT_SUPPORT_CENTER as TRANSPORT_SUPPORT_CENTER_SOURCE,
@@ -399,6 +408,99 @@ def build_walking_network_feature_value_list(
     return features
 
 
+def build_station_facility_feature_values(
+    record: PublicDataRecord,
+    field_map: dict[str, str],
+    *,
+    source_type: str,
+    feature_type: str,
+) -> Optional[dict]:
+    """
+    역명 기반 편의시설 데이터를 GIS feature 값으로 변환합니다.
+
+    일부 철도/리프트/경사로 데이터는 자체 좌표가 없으므로, 이후 저장 단계에서
+    같은 역명의 지하철 출입구 엘리베이터 feature를 공간 앵커로 사용합니다.
+    """
+
+    station_name = get_first_value(
+        field_map,
+        [
+            "stn_nm",
+            "STN_NM",
+            "stin_nm",
+            "STIN_NM",
+            "station_name",
+            "역명",
+            "stnNm",
+        ],
+    )
+    name = (
+        get_first_value(
+            field_map,
+            [
+                "fclt_nm",
+                "fcltNm",
+                "management_no",
+                "managementNo",
+                "dtl_loc",
+                "dtlLoc",
+                "location",
+                "위치",
+            ],
+        )
+        or station_name
+    )
+
+    if not station_name and not name:
+        return None
+
+    latitude = parse_float(get_first_value(field_map, ["latitude", "LATITUDE", "geo_latitude"]))
+    longitude = parse_float(get_first_value(field_map, ["longitude", "LONGITUDE", "geo_longitude"]))
+    wkt = get_first_value(field_map, ["wkt", "WKT", "geom_wkt", "GEOM_WKT", "node_wkt", "NODE_WKT"])
+
+    if not is_valid_coordinate(latitude, longitude):
+        latitude = None
+        longitude = None
+    if not is_valid_wkt(wkt):
+        wkt = None
+
+    return {
+        "public_data_record_id": record.id,
+        "source_type": source_type,
+        "feature_type": feature_type,
+        "name": name,
+        "address": get_first_value(field_map, ["address", "rdnmadr", "lnmadr", "location", "위치"]),
+        "latitude": latitude,
+        "longitude": longitude,
+        "wkt": wkt,
+        "properties": {
+            **field_map,
+            "station_name": station_name,
+        },
+    }
+
+
+def build_low_floor_bus_feature_values(record: PublicDataRecord, field_map: dict[str, str]) -> Optional[dict]:
+    route_no = get_first_value(field_map, ["route_no", "노선\n번호", "노선번호", "routeNo"])
+    if not route_no:
+        return None
+
+    return {
+        "public_data_record_id": record.id,
+        "source_type": SEOUL_LOW_FLOOR_BUS_ROUTE_RETENTION,
+        "feature_type": STEP_FREE_ACCESS,
+        "name": route_no,
+        "address": None,
+        "latitude": None,
+        "longitude": None,
+        "wkt": None,
+        "properties": {
+            **field_map,
+            "route_no": route_no,
+        },
+    }
+
+
 def build_gis_feature_values(
     record: PublicDataRecord,
     field_map: dict[str, str],
@@ -418,6 +520,31 @@ def build_gis_feature_values(
 
     if record.source_type == SEOUL_SUBWAY_ENTRANCE_LIFT:
         return build_subway_entrance_lift_feature_values(record, field_map)
+
+    if record.source_type in {
+        RAIL_WHEELCHAIR_LIFT,
+        RAIL_WHEELCHAIR_LIFT_MOVEMENT,
+        SEOUL_WHEELCHAIR_LIFT,
+        SEOUL_TRANSPORT_WEAK_WHEELCHAIR_LIFT,
+        KORAIL_WEEK_PERSON_FACILITIES,
+    }:
+        return build_station_facility_feature_values(
+            record,
+            field_map,
+            source_type=record.source_type,
+            feature_type=WHEELCHAIR_LIFT,
+        )
+
+    if record.source_type == SEOUL_WHEELCHAIR_RAMP_STATUS:
+        return build_station_facility_feature_values(
+            record,
+            field_map,
+            source_type=SEOUL_WHEELCHAIR_RAMP_STATUS,
+            feature_type=STEP_FREE_ACCESS,
+        )
+
+    if record.source_type == SEOUL_LOW_FLOOR_BUS_ROUTE_RETENTION:
+        return build_low_floor_bus_feature_values(record, field_map)
 
     return None
 
@@ -629,6 +756,10 @@ def build_accessibility_gis_features_by_source_type(
             continue
 
         for values in value_list:
+            values = attach_station_spatial_anchor(db, values)
+            if not has_spatial_value(values):
+                skipped_count += 1
+                continue
             upsert_accessibility_gis_feature(
                 db=db,
                 values=values,
@@ -643,3 +774,60 @@ def build_accessibility_gis_features_by_source_type(
         "created_or_updated_count": created_count,
         "skipped_count": skipped_count,
     }
+
+
+def has_spatial_value(values: dict) -> bool:
+    return bool(values.get("wkt")) or is_valid_coordinate(values.get("latitude"), values.get("longitude"))
+
+
+def attach_station_spatial_anchor(db: Session, values: dict) -> dict:
+    if has_spatial_value(values):
+        return values
+
+    station_name = (values.get("properties") or {}).get("station_name")
+    if not station_name:
+        return values
+
+    anchor_wkt = find_station_anchor_wkt(db, str(station_name))
+    if not anchor_wkt:
+        return values
+
+    return {
+        **values,
+        "wkt": anchor_wkt,
+    }
+
+
+def find_station_anchor_wkt(db: Session, station_name: str) -> Optional[str]:
+    normalized_name = station_name.strip()
+    if not normalized_name:
+        return None
+
+    row = (
+        db.execute(
+            text(
+                """
+            SELECT ST_AsText(geom) AS wkt
+            FROM public_accessibility_gis_feature
+            WHERE source_type = :source_type
+              AND geom IS NOT NULL
+              AND (
+                  name = :station_name
+                  OR replace(name, '역', '') = replace(:station_name, '역', '')
+              )
+            ORDER BY id ASC
+            LIMIT 1
+            """
+            ),
+            {
+                "source_type": SEOUL_SUBWAY_ENTRANCE_LIFT,
+                "station_name": normalized_name,
+            },
+        )
+        .mappings()
+        .first()
+    )
+
+    if row is None:
+        return None
+    return row.get("wkt")
