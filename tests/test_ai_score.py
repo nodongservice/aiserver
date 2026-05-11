@@ -620,6 +620,76 @@ def test_accessibility_score_penalizes_jobs_outside_mobility_range():
     )
 
 
+def test_accessibility_score_uses_more_granular_evidence_buckets():
+    profile = ScoreProfile(disability_types=["청각장애"], disability_severity="경증")
+    posting = JobPosting(
+        job_post_id=1,
+        company_name="ABC",
+        job_title="사무보조",
+        work_lat=37.5701,
+        work_lng=126.9823,
+    )
+    bus_only = AccessibilityEvidence(
+        bus_stop_count=3,
+        crosswalk_count=0,
+        traffic_light_count=0,
+        transport_support_center_count=0,
+        subway_entrance_lift_count=0,
+        walking_network_count=0,
+        evidence_items=[],
+        source_counts={"NATIONWIDE_BUS_STOP": 3},
+    )
+    richer = AccessibilityEvidence(
+        bus_stop_count=3,
+        crosswalk_count=2,
+        traffic_light_count=1,
+        transport_support_center_count=0,
+        subway_entrance_lift_count=0,
+        walking_network_count=0,
+        evidence_items=[],
+        source_counts={
+            "NATIONWIDE_BUS_STOP": 3,
+            "NATIONWIDE_CROSSWALK": 2,
+            "NATIONWIDE_TRAFFIC_LIGHT": 1,
+        },
+    )
+
+    assert calculate_accessibility_score(profile, bus_only, posting) != 47
+    assert calculate_accessibility_score(profile, richer, posting) > calculate_accessibility_score(
+        profile, bus_only, posting
+    )
+
+
+def test_accessibility_score_treats_physical_disability_as_mobility_support_need():
+    posting = JobPosting(
+        job_post_id=1,
+        company_name="ABC",
+        job_title="사무보조",
+        work_lat=37.5701,
+        work_lng=126.9823,
+    )
+    evidence_without_mobility_support = AccessibilityEvidence(
+        bus_stop_count=3,
+        crosswalk_count=0,
+        traffic_light_count=0,
+        transport_support_center_count=0,
+        subway_entrance_lift_count=0,
+        walking_network_count=0,
+        evidence_items=[],
+        source_counts={"NATIONWIDE_BUS_STOP": 3},
+    )
+    physical_profile = ScoreProfile(disability_types=["PHYSICAL"], disability_severity="중증")
+    hearing_profile = ScoreProfile(disability_types=["HEARING"], disability_severity="중증")
+
+    assert calculate_accessibility_score(
+        physical_profile, evidence_without_mobility_support, posting
+    ) < calculate_accessibility_score(
+        hearing_profile,
+        evidence_without_mobility_support,
+        posting,
+    )
+
+
 def test_accessibility_score_reflects_detailed_spec_columns():
     base = AccessibilityEvidence(
         bus_stop_count=1,

@@ -2,18 +2,23 @@ from app.core.gis_feature_types import (
     AUDIBLE_SIGNAL,
     BUS_STOP,
     CROSSWALK,
+    STEP_FREE_ACCESS,
     SUBWAY_ENTRANCE_LIFT,
     TRAFFIC_LIGHT,
     TRANSPORT_SUPPORT_CENTER,
     WALKING_LINK,
     WALKING_NODE,
+    WHEELCHAIR_LIFT,
 )
 from app.core.public_data_sources import (
     NATIONWIDE_BUS_STOP,
     NATIONWIDE_CROSSWALK,
     NATIONWIDE_TRAFFIC_LIGHT,
+    RAIL_WHEELCHAIR_LIFT,
+    SEOUL_LOW_FLOOR_BUS_ROUTE_RETENTION,
     SEOUL_SUBWAY_ENTRANCE_LIFT,
     SEOUL_WALKING_NETWORK,
+    SEOUL_WHEELCHAIR_RAMP_STATUS,
 )
 from app.core.public_data_sources import (
     TRANSPORT_SUPPORT_CENTER as TRANSPORT_SUPPORT_CENTER_SOURCE,
@@ -23,6 +28,8 @@ from app.services.gis_feature_builder_service import (
     build_bus_stop_feature_values,
     build_crosswalk_feature_values,
     build_gis_feature_value_list,
+    build_low_floor_bus_feature_values,
+    build_station_facility_feature_values,
     build_subway_entrance_lift_feature_values,
     build_traffic_light_feature_value_list,
     build_traffic_light_feature_values,
@@ -294,3 +301,71 @@ def test_build_gis_feature_value_list_supports_new_source_types():
         TRAFFIC_LIGHT,
         AUDIBLE_SIGNAL,
     }
+
+    lift_record = PublicDataRecord(
+        id=10,
+        source_type=RAIL_WHEELCHAIR_LIFT,
+        external_id="LIFT-MULTI",
+        is_active=True,
+    )
+    lift_result = build_gis_feature_value_list(
+        lift_record,
+        {
+            "stin_nm": "시청역",
+            "exit_no": "1",
+            "dtl_loc": "1번 출구",
+            "wd": "800",
+        },
+    )
+
+    assert len(lift_result) == 1
+    assert lift_result[0]["source_type"] == RAIL_WHEELCHAIR_LIFT
+    assert lift_result[0]["feature_type"] == WHEELCHAIR_LIFT
+    assert lift_result[0]["properties"]["station_name"] == "시청역"
+
+
+def test_build_station_facility_feature_values_supports_ramp_source():
+    record = PublicDataRecord(
+        id=11,
+        source_type=SEOUL_WHEELCHAIR_RAMP_STATUS,
+        external_id="RAMP-001",
+        is_active=True,
+    )
+
+    result = build_station_facility_feature_values(
+        record,
+        {
+            "station_name": "시청역",
+            "location": "1번 출구",
+        },
+        source_type=SEOUL_WHEELCHAIR_RAMP_STATUS,
+        feature_type=STEP_FREE_ACCESS,
+    )
+
+    assert result is not None
+    assert result["source_type"] == SEOUL_WHEELCHAIR_RAMP_STATUS
+    assert result["feature_type"] == STEP_FREE_ACCESS
+    assert result["properties"]["station_name"] == "시청역"
+
+
+def test_build_low_floor_bus_feature_values_keeps_route_metadata():
+    record = PublicDataRecord(
+        id=12,
+        source_type=SEOUL_LOW_FLOOR_BUS_ROUTE_RETENTION,
+        external_id="LOW-BUS-001",
+        is_active=True,
+    )
+
+    result = build_low_floor_bus_feature_values(
+        record,
+        {
+            "route_no": "100",
+            "low_floor_bus_count": "12",
+            "low_floor_retention_rate": "85",
+        },
+    )
+
+    assert result is not None
+    assert result["source_type"] == SEOUL_LOW_FLOOR_BUS_ROUTE_RETENTION
+    assert result["feature_type"] == STEP_FREE_ACCESS
+    assert result["properties"]["route_no"] == "100"

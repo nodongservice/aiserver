@@ -14,13 +14,18 @@ def calculate_accessibility_score(
     if posting.work_lat is None or posting.work_lng is None:
         return 45
 
-    score = 35
-    score += min(12, accessibility.bus_stop_count * 4)
-    score += min(8, accessibility.crosswalk_count * 2)
-    score += min(6, accessibility.traffic_light_count * 2)
-    score += min(6, accessibility.transport_support_center_count * 3)
-    score += min(8, accessibility.subway_entrance_lift_count * 4)
-    score += min(4, accessibility.walking_network_count)
+    score = 38
+    evidence_source_count = sum(1 for count in accessibility.source_counts.values() if count > 0)
+    if not accessibility.source_counts and accessibility.evidence_items:
+        evidence_source_count = len({item.source_type for item in accessibility.evidence_items})
+
+    score += min(8, evidence_source_count * 2)
+    score += min(15, accessibility.bus_stop_count * 3)
+    score += min(12, accessibility.crosswalk_count * 3)
+    score += min(9, accessibility.traffic_light_count * 3)
+    score += min(8, accessibility.transport_support_center_count * 4)
+    score += min(10, accessibility.subway_entrance_lift_count * 5)
+    score += min(8, accessibility.walking_network_count * 2)
 
     score += min(10, accessibility.transport_support_vehicle_count)
     score += min(4, accessibility.transport_support_inside_area_count * 2)
@@ -61,7 +66,19 @@ def calculate_accessibility_score(
         elif distance_km >= 25:
             score -= 8
 
-    if contains_any(" ".join(profile.disability_types + profile.assistive_devices), keywords=["wheelchair", "휠체어"]):
+    accessibility_needs_text = " ".join(
+        profile.disability_types
+        + profile.assistive_devices
+        + profile.required_supports
+        + [profile.disability_description or ""]
+    )
+    has_explicit_wheelchair_need = contains_any(accessibility_needs_text, keywords=["wheelchair", "휠체어"])
+    has_mobility_support_need = contains_any(
+        accessibility_needs_text,
+        keywords=["wheelchair", "휠체어", "지체", "뇌병변", "경사로", "엘리베이터", "리프트", "보행"],
+    )
+
+    if has_mobility_support_need:
         wheelchair_support_count = (
             accessibility.subway_entrance_lift_count
             + accessibility.transport_support_center_count
@@ -72,10 +89,13 @@ def calculate_accessibility_score(
             + accessibility.source_counts.get("KORAIL_WEEK_PERSON_FACILITIES", 0)
         )
         if wheelchair_support_count == 0:
-            score -= 12
+            score -= 12 if has_explicit_wheelchair_need else 6
 
     if profile.disability_severity and "중증" in profile.disability_severity and not accessibility.evidence_items:
-        score -= 8
+        score -= 6
+
+    if not accessibility.evidence_items:
+        score = max(score, 35)
 
     return clamp_score(score)
 
