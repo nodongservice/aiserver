@@ -59,8 +59,11 @@ jobs:
 
   deploy:
     needs: ci
-    if: github.event_name == 'workflow_dispatch' || (github.event_name == 'push' && github.ref == 'refs/heads/main')
+    if: github.ref == 'refs/heads/main' && (github.event_name == 'workflow_dispatch' || github.event_name == 'push')
     runs-on: ubuntu-latest
+    concurrency:
+      group: aiserver-prod-deploy
+      cancel-in-progress: false
 
     env:
       IMAGE_PLATFORMS: linux/amd64,linux/arm64
@@ -199,6 +202,11 @@ jobs:
             exit 1
           fi
 
+          {
+            echo "EC2_HOST_TRIMMED=$EC2_HOST_TRIMMED"
+            echo "EC2_PORT_TRIMMED=$EC2_PORT_TRIMMED"
+          } >> "$GITHUB_ENV"
+
           mkdir -p ~/.ssh
           printf '%s\n' "$EC2_SSH_PRIVATE_KEY" > ~/.ssh/id_ed25519
           chmod 600 ~/.ssh/id_ed25519
@@ -242,34 +250,28 @@ jobs:
 
       - name: Prepare remote directories
         env:
-          EC2_HOST: ${{ secrets.EC2_HOST }}
-          EC2_PORT: ${{ secrets.EC2_PORT }}
           EC2_USER: ${{ secrets.EC2_USER }}
         run: |
-          ssh -p "$EC2_PORT" "$EC2_USER@$EC2_HOST" \
+          ssh -p "$EC2_PORT_TRIMMED" "$EC2_USER@$EC2_HOST_TRIMMED" \
             "mkdir -p $REMOTE_APP_ROOT/deploy $REMOTE_APP_ROOT/state"
 
       - name: Upload deploy assets
         env:
-          EC2_HOST: ${{ secrets.EC2_HOST }}
-          EC2_PORT: ${{ secrets.EC2_PORT }}
           EC2_USER: ${{ secrets.EC2_USER }}
         run: |
-          scp -P "$EC2_PORT" .env.cicd.prod "$EC2_USER@$EC2_HOST:$REMOTE_APP_ROOT/.env.prod"
-          scp -P "$EC2_PORT" deploy/deploy.sh "$EC2_USER@$EC2_HOST:$REMOTE_APP_ROOT/deploy/deploy.sh"
+          scp -P "$EC2_PORT_TRIMMED" .env.cicd.prod "$EC2_USER@$EC2_HOST_TRIMMED:$REMOTE_APP_ROOT/.env.prod"
+          scp -P "$EC2_PORT_TRIMMED" deploy/deploy.sh "$EC2_USER@$EC2_HOST_TRIMMED:$REMOTE_APP_ROOT/deploy/deploy.sh"
 
       - name: Deploy on EC2
         env:
-          EC2_HOST: ${{ secrets.EC2_HOST }}
-          EC2_PORT: ${{ secrets.EC2_PORT }}
           EC2_USER: ${{ secrets.EC2_USER }}
           GHCR_USERNAME: ${{ secrets.GHCR_USERNAME }}
           GHCR_READ_TOKEN: ${{ secrets.GHCR_READ_TOKEN }}
         run: |
-          printf '%s' "$GHCR_READ_TOKEN" | ssh -p "$EC2_PORT" "$EC2_USER@$EC2_HOST" \
+          printf '%s' "$GHCR_READ_TOKEN" | ssh -p "$EC2_PORT_TRIMMED" "$EC2_USER@$EC2_HOST_TRIMMED" \
             "docker login ghcr.io -u '$GHCR_USERNAME' --password-stdin"
 
-          ssh -p "$EC2_PORT" "$EC2_USER@$EC2_HOST" "
+          ssh -p "$EC2_PORT_TRIMMED" "$EC2_USER@$EC2_HOST_TRIMMED" "
             chmod +x $REMOTE_APP_ROOT/deploy/deploy.sh && \
             IMAGE_URI=$IMAGE_URI PULL_IMAGE=true ENV_FILE=$REMOTE_APP_ROOT/.env.prod UPSTREAM_SWITCH_SCRIPT=\$HOME/bridgework-infra/deploy/fastapi_blue_green_switch.sh bash $REMOTE_APP_ROOT/deploy/deploy.sh
           "

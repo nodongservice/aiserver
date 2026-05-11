@@ -37,9 +37,12 @@ HEALTH_REQUEST_TIMEOUT_SECONDS="${HEALTH_REQUEST_TIMEOUT_SECONDS:-3}"
 
 IMAGE_URI="${IMAGE_URI:-}"
 IMAGE_RETENTION_COUNT="${IMAGE_RETENTION_COUNT:-5}"
+PRE_PULL_IMAGE_RETENTION_COUNT="${PRE_PULL_IMAGE_RETENTION_COUNT:-2}"
 PULL_IMAGE="${PULL_IMAGE:-false}"
 CLEANUP_ONLY="${CLEANUP_ONLY:-false}"
 ASYNC_IMAGE_CLEANUP="${ASYNC_IMAGE_CLEANUP:-true}"
+PRE_PULL_CLEANUP="${PRE_PULL_CLEANUP:-true}"
+PRE_PULL_SYSTEM_PRUNE="${PRE_PULL_SYSTEM_PRUNE:-true}"
 if [[ -z "$IMAGE_URI" ]]; then
   log "IMAGE_URI 환경변수는 필수입니다."
   exit 1
@@ -52,6 +55,13 @@ fi
 
 require_command docker
 require_command curl
+
+log_docker_disk_usage() {
+  log "디스크 사용량:"
+  df -h / /var/lib/docker 2>/dev/null || df -h /
+  log "Docker 사용량:"
+  docker system df || true
+}
 
 cleanup_old_app_images() {
   local image_ref="$1"
@@ -90,6 +100,18 @@ cleanup_old_app_images() {
 
   docker image prune -f >/dev/null 2>&1 || true
   log "이미지 정리 완료: repository=$repository deleted=$deleted keep=$keep_count"
+}
+
+cleanup_before_pull() {
+  log "pull 전 Docker 공간 정리 시작"
+  cleanup_old_app_images "$IMAGE_URI" "$PRE_PULL_IMAGE_RETENTION_COUNT"
+
+  if [[ "$PRE_PULL_SYSTEM_PRUNE" == "true" ]]; then
+    docker system prune -f >/dev/null 2>&1 || true
+    log "Docker system prune 완료"
+  fi
+
+  log_docker_disk_usage
 }
 
 if [[ "$CLEANUP_ONLY" == "true" ]]; then
@@ -154,9 +176,17 @@ log "대상 슬롯: $TARGET_SLOT (container=$TARGET_CONTAINER, hostPort=$TARGET_
 docker rm -f "$TARGET_CONTAINER" >/dev/null 2>&1 || true
 
 if [[ "$PULL_IMAGE" == "true" ]]; then
+  if [[ "$PRE_PULL_CLEANUP" == "true" ]]; then
+    cleanup_before_pull
+  fi
+
   pull_started_at="$(date +%s)"
   log "이미지 pull: $IMAGE_URI"
-  docker pull "$IMAGE_URI"
+  if ! docker pull "$IMAGE_URI"; then
+    log "이미지 pull 실패. 디스크 상태를 출력합니다."
+    log_docker_disk_usage
+    exit 1
+  fi
   log "이미지 pull 완료: $(( $(date +%s) - pull_started_at ))s"
 fi
 
