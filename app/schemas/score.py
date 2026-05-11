@@ -74,6 +74,7 @@ class ScoreProfile(BaseModel):
     assistive_devices: List[str] = Field(default_factory=list)
     required_supports: List[str] = Field(default_factory=list)
     mobility_range_km: Optional[float] = None
+    commute_limit_minutes: Optional[int] = None
 
     @field_validator(
         "desired_jobs",
@@ -169,6 +170,23 @@ class ScoreEvidenceItem(BaseModel):
     fields: dict[str, Any] = Field(default_factory=dict)
 
 
+class TransitTimeResult(BaseModel):
+    provider: str
+    mode: str
+    duration_minutes: Optional[int] = None
+    distance_meters: Optional[float] = None
+    walk_distance_meters: Optional[int] = None
+    fare: Optional[int] = None
+    transfer_count: Optional[int] = None
+    path_type: Optional[int] = None
+    first_start_station: Optional[str] = None
+    last_end_station: Optional[str] = None
+    requested_departure_at: str
+    departure_policy: str
+    source: str
+    error_reason: Optional[str] = None
+
+
 class QuickScoreResult(BaseModel):
     job: JobPosting
     job_fit_score: int
@@ -203,6 +221,7 @@ class MapScoreResult(BaseModel):
     job: JobPosting
     score_detail: MapScoreDetail
     total_score: int
+    transit_time: Optional[TransitTimeResult] = None
     reasons: List[str] = Field(default_factory=list)
     risk_factors: List[str] = Field(default_factory=list)
     evidence_items: List[ScoreEvidenceItem] = Field(default_factory=list)

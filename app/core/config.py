@@ -27,15 +27,17 @@ class Settings:
     openai_api_key: Optional[str] = os.getenv("OPENAI_API_KEY")
     openai_model: str = os.getenv("OPENAI_MODEL", "gpt-5.4-nano")
     openai_timeout_seconds: float = float(os.getenv("OPENAI_TIMEOUT_SECONDS", "8"))
+    odsay_api_key: Optional[str] = os.getenv("ODSAY_API_KEY")
+    odsay_base_url: str = os.getenv("ODSAY_BASE_URL", "https://api.odsay.com/v1/api")
+    odsay_timeout_seconds: float = float(os.getenv("ODSAY_TIMEOUT_SECONDS", "5"))
+    transit_time_cache_ttl_seconds: int = int(os.getenv("TRANSIT_TIME_CACHE_TTL_SECONDS", "21600"))
     profile_draft_openai_model: str = os.getenv("PROFILE_DRAFT_OPENAI_MODEL", openai_model)
     profile_draft_openai_timeout_seconds: float = float(os.getenv("PROFILE_DRAFT_OPENAI_TIMEOUT_SECONDS", "40"))
     profile_draft_max_file_size_bytes: int = int(os.getenv("PROFILE_DRAFT_MAX_FILE_SIZE_BYTES", "10485760"))
     profile_draft_max_pages: int = int(os.getenv("PROFILE_DRAFT_MAX_PAGES", "10"))
     profile_draft_pdf_render_scale: float = float(os.getenv("PROFILE_DRAFT_PDF_RENDER_SCALE", "2.0"))
     profile_draft_enable_ocr: bool = os.getenv("PROFILE_DRAFT_ENABLE_OCR", "true").lower() == "true"
-    profile_draft_ocr_process_isolation: bool = (
-        os.getenv("PROFILE_DRAFT_OCR_PROCESS_ISOLATION", "true").lower() == "true"
-    )
+    profile_draft_ocr_process_isolation: bool = os.getenv("PROFILE_DRAFT_OCR_PROCESS_ISOLATION", "true").lower() == "true"
     profile_draft_ocr_subprocess_timeout_seconds: float = float(
         os.getenv("PROFILE_DRAFT_OCR_SUBPROCESS_TIMEOUT_SECONDS", "120")
     )
@@ -47,9 +49,7 @@ class Settings:
     profile_draft_embedded_max_replacement_ratio: float = float(
         os.getenv("PROFILE_DRAFT_EMBEDDED_MAX_REPLACEMENT_RATIO", "0.08")
     )
-    profile_draft_embedded_max_control_ratio: float = float(
-        os.getenv("PROFILE_DRAFT_EMBEDDED_MAX_CONTROL_RATIO", "0.02")
-    )
+    profile_draft_embedded_max_control_ratio: float = float(os.getenv("PROFILE_DRAFT_EMBEDDED_MAX_CONTROL_RATIO", "0.02"))
     profile_draft_ocr_prefer_margin: int = int(os.getenv("PROFILE_DRAFT_OCR_PREFER_MARGIN", "8"))
 
 

@@ -1,4 +1,6 @@
+from datetime import datetime
 from types import SimpleNamespace
+from zoneinfo import ZoneInfo
 
 import pytest
 from sqlalchemy.exc import SQLAlchemyError
@@ -22,6 +24,7 @@ from app.services.scoring.disability_support import calculate_disability_support
 from app.services.scoring.job_fit import calculate_job_fit_score
 from app.services.scoring.work_condition import calculate_work_condition_score, normalize_annual_salary
 from app.services.scoring.work_environment import calculate_work_environment_score
+from app.services.transit_time_service import TransitTimeEstimate, calculate_next_weekday_8, parse_odsay_transit_time
 
 
 def build_score_payload(**profile_overrides):
@@ -617,6 +620,92 @@ def test_accessibility_score_penalizes_jobs_outside_mobility_range():
 
     assert calculate_accessibility_score(profile, evidence, nearby) > calculate_accessibility_score(
         profile, evidence, far
+    )
+
+
+def test_next_weekday_departure_policy_skips_weekend():
+    friday = datetime(2026, 5, 15, 9, 0, tzinfo=ZoneInfo("Asia/Seoul"))
+
+    departure = calculate_next_weekday_8(friday)
+
+    assert departure.isoformat() == "2026-05-18T08:00:00+09:00"
+
+
+def test_parse_odsay_transit_time_selects_shortest_path():
+    estimate = parse_odsay_transit_time(
+        {
+            "result": {
+                "path": [
+                    {
+                        "pathType": 3,
+                        "info": {
+                            "totalTime": 55,
+                            "totalWalk": 900,
+                            "totalDistance": 18000,
+                            "payment": 1450,
+                            "busTransitCount": 1,
+                            "subwayTransitCount": 1,
+                            "firstStartStation": "시청",
+                            "lastEndStation": "강남",
+                        },
+                    },
+                    {
+                        "pathType": 2,
+                        "info": {
+                            "totalTime": 42,
+                            "totalWalk": 700,
+                            "totalDistance": 15000,
+                            "payment": 1450,
+                            "busTransitCount": 1,
+                            "subwayTransitCount": 0,
+                        },
+                    },
+                ]
+            }
+        },
+        requested_departure_at="2026-05-13T08:00:00+09:00",
+    )
+
+    assert estimate.duration_minutes == 42
+    assert estimate.walk_distance_meters == 700
+    assert estimate.transfer_count == 1
+
+
+def test_accessibility_score_reflects_transit_commute_limit():
+    profile = ScoreProfile(
+        home_lat=37.5665,
+        home_lng=126.978,
+        commute_limit_minutes=50,
+    )
+    posting = JobPosting(
+        job_post_id=1,
+        company_name="ABC",
+        job_title="사무보조",
+        work_lat=37.57,
+        work_lng=126.98,
+    )
+    evidence = AccessibilityEvidence(
+        bus_stop_count=1,
+        crosswalk_count=0,
+        traffic_light_count=0,
+        transport_support_center_count=0,
+        subway_entrance_lift_count=0,
+        walking_network_count=0,
+        evidence_items=[],
+    )
+    within_limit = TransitTimeEstimate(
+        duration_minutes=45,
+        transfer_count=1,
+        requested_departure_at="2026-05-13T08:00:00+09:00",
+    )
+    over_limit = TransitTimeEstimate(
+        duration_minutes=95,
+        transfer_count=2,
+        requested_departure_at="2026-05-13T08:00:00+09:00",
+    )
+
+    assert calculate_accessibility_score(profile, evidence, posting, within_limit) > calculate_accessibility_score(
+        profile, evidence, posting, over_limit
     )
 
 
