@@ -10,6 +10,7 @@ from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
 
 from app.core.public_data_sources import (
+    JOBSEEKER_COMPETENCY_PROGRAM,
     KORAIL_WEEK_PERSON_FACILITIES,
     NATIONWIDE_BUS_STOP,
     NATIONWIDE_CROSSWALK,
@@ -23,10 +24,13 @@ from app.core.public_data_sources import (
     SEOUL_WHEELCHAIR_LIFT,
     SEOUL_WHEELCHAIR_RAMP_STATUS,
     TRANSPORT_SUPPORT_CENTER,
+    VOCATIONAL_TRAINING,
     get_source_name,
 )
 from app.db.models import (
     AccessibilityGisFeature,
+    PdJobseekerCompetencyProgram,
+    PdKepadJobCategory,
     PdKepadRecruitment,
     PdKepadStandardWorkplace,
     PdNationwideBusStop,
@@ -35,6 +39,7 @@ from app.db.models import (
     PdSeoulSubwayEntranceLift,
     PdSeoulWalkingNetwork,
     PdTransportSupportCenter,
+    PdVocationalTraining,
 )
 from app.schemas.score import JobPosting, ScoreEvidenceItem
 from app.utils.geo import calculate_haversine_distance_meters
@@ -102,6 +107,9 @@ class AccessibilityEvidence:
     crosswalk_accessible_feature_count: int = 0
     walking_network_crosswalk_count: int = 0
     walking_network_barrier_count: int = 0
+    walking_network_favorable_count: int = 0
+    transport_support_service_detail_score: int = 0
+    low_floor_bus_quality_score: int = 0
     generic_accessibility_quality_score: int = 0
 
 
@@ -132,9 +140,55 @@ def find_all_recruitments_for_scoring(db: Session, limit: Optional[int] = None) 
     return sort_recruitments_by_latest(query.all())
 
 
+def enrich_job_postings_with_public_data(db: Session, postings: list[JobPosting]) -> list[JobPosting]:
+    """
+    공고별 보조 공공데이터 컨텍스트를 붙입니다.
+
+    직무분류/훈련/역량프로그램은 위치 기반 접근성 테이블은 아니지만,
+    README에 명시된 스코어링/설명 근거로 공고 직무와 함께 활용합니다.
+    """
+
+    if not postings:
+        return postings
+
+    job_categories = db.query(PdKepadJobCategory).filter(PdKepadJobCategory.job_cd_nm.isnot(None)).limit(5000).all()
+    trainings = db.query(PdVocationalTraining).filter(PdVocationalTraining.title.isnot(None)).limit(5000).all()
+    programs = (
+        db.query(PdJobseekerCompetencyProgram)
+        .filter(or_(PdJobseekerCompetencyProgram.pgm_nm.isnot(None), PdJobseekerCompetencyProgram.pgm_sub_nm.isnot(None)))
+        .limit(1000)
+        .all()
+    )
+
+    for posting in postings:
+        category = _best_job_category_match(posting, job_categories)
+        if category is not None:
+            posting.job_category_context = {
+                "record_id": category.id,
+                "job_cd": category.job_cd,
+                "job_cd_level": category.job_cd_level,
+                "job_cd_nm": category.job_cd_nm,
+                "job_task": category.job_task,
+                "simlr_job": category.simlr_job,
+                "notice_cn": category.notice_cn,
+                "jobdevtip_cn": category.jobdevtip_cn,
+                "sprd_ockcls_yn": category.sprd_ockcls_yn,
+            }
+
+        posting.development_context = [
+            *_matching_training_context(posting, trainings, limit=2),
+            *_matching_program_context(posting, programs, limit=1),
+        ]
+
+    return postings
+
+
 def to_job_posting(row: PdKepadRecruitment) -> Optional[JobPosting]:
     if not row.job_nm or not row.buspla_name:
         return None
+
+    def value(attr: str):
+        return getattr(row, attr, None)
 
     return JobPosting(
         job_post_id=row.id,
@@ -162,9 +216,173 @@ def to_job_posting(row: PdKepadRecruitment) -> Optional[JobPosting]:
         },
         agency_name=row.regagn_name,
         registered_at=row.offerreg_dt or row.reg_dt,
+        contact_no=value("cntct_no"),
+        recruitment_no=value("rno") or value("rnum"),
+        offer_registered_at=row.offerreg_dt,
+        recruitment_context={
+            "buspla_name": row.buspla_name,
+            "cntct_no": value("cntct_no"),
+            "comp_addr": row.comp_addr,
+            "emp_type": row.emp_type,
+            "enter_type": row.enter_type,
+            "env_both_hands": row.env_both_hands,
+            "env_eyesight": row.env_eyesight,
+            "env_lstn_talk": row.env_lstn_talk,
+            "env_hand_work": row.env_hand_work,
+            "env_lift_power": row.env_lift_power,
+            "env_stnd_walk": row.env_stnd_walk,
+            "job_nm": row.job_nm,
+            "offerreg_dt": row.offerreg_dt,
+            "reg_dt": row.reg_dt,
+            "regagn_name": row.regagn_name,
+            "req_career": row.req_career,
+            "req_educ": row.req_educ,
+            "req_major": value("req_major"),
+            "req_licens": value("req_licens"),
+            "rno": value("rno"),
+            "rnum": value("rnum"),
+            "salary": row.salary,
+            "salary_type": row.salary_type,
+            "term_date": row.term_date,
+            "geo_original_address": value("geo_original_address"),
+            "geo_matched_address": row.geo_matched_address,
+            "posting_status": value("posting_status"),
+        },
         source_id=row.id,
         external_id=row.external_id,
     )
+
+
+def _best_job_category_match(
+    posting: JobPosting,
+    categories: list[PdKepadJobCategory],
+) -> Optional[PdKepadJobCategory]:
+    best: tuple[int, Optional[PdKepadJobCategory]] = (0, None)
+    target = " ".join(
+        [
+            posting.job_title,
+            " ".join(str(value) for value in posting.recruitment_context.values() if value)
+            if posting.recruitment_context
+            else "",
+        ]
+    )
+    for category in categories:
+        haystack = " ".join(
+            value
+            for value in [
+                category.job_cd_nm,
+                category.job_task,
+                category.simlr_job,
+                category.notice_cn,
+                category.jobdevtip_cn,
+            ]
+            if value
+        )
+        score = text_overlap_score(target, haystack)
+        if score > best[0]:
+            best = (score, category)
+    return best[1] if best[0] > 0 else None
+
+
+def _matching_training_context(
+    posting: JobPosting,
+    trainings: list[PdVocationalTraining],
+    *,
+    limit: int,
+) -> list[dict[str, object]]:
+    matches: list[tuple[int, PdVocationalTraining]] = []
+    target = " ".join([posting.job_title, posting.required_licenses or "", posting.required_major or ""])
+    for row in trainings:
+        haystack = " ".join(
+            value
+            for value in [
+                row.title,
+                row.sub_title,
+                row.contents,
+                row.certificate,
+                row.ncs_cd,
+                row.train_target,
+                row.address,
+            ]
+            if value
+        )
+        score = text_overlap_score(target, haystack)
+        if score > 0:
+            matches.append((score, row))
+    matches.sort(key=lambda item: (item[0], item[1].stdg_scor or "", item[1].ei_empl_rate6 or ""), reverse=True)
+    return [
+        {
+            "source_type": VOCATIONAL_TRAINING,
+            "source_table": "pd_vocational_training",
+            "record_id": row.id,
+            "title": row.title,
+            "sub_title": row.sub_title,
+            "certificate": row.certificate,
+            "address": row.address,
+            "tra_start_date": row.tra_start_date,
+            "tra_end_date": row.tra_end_date,
+            "ei_empl_rate3": row.ei_empl_rate3,
+            "ei_empl_rate6": row.ei_empl_rate6,
+            "stdg_scor": row.stdg_scor,
+            "course_man": row.course_man,
+            "real_man": row.real_man,
+            "yard_man": row.yard_man,
+        }
+        for _, row in matches[:limit]
+    ]
+
+
+def _matching_program_context(
+    posting: JobPosting,
+    programs: list[PdJobseekerCompetencyProgram],
+    *,
+    limit: int,
+) -> list[dict[str, object]]:
+    matches: list[tuple[int, PdJobseekerCompetencyProgram]] = []
+    for row in programs:
+        haystack = " ".join(
+            value
+            for value in [
+                row.pgm_nm,
+                row.pgm_sub_nm,
+                row.pgm_target,
+                row.org_nm,
+                row.open_plc_cont,
+            ]
+            if value
+        )
+        score = text_overlap_score(posting.job_title, haystack)
+        if score > 0 or any(keyword in haystack for keyword in ["구직", "취업", "역량"]):
+            matches.append((score, row))
+    matches.sort(key=lambda item: (item[0], item[1].pgm_stdt or ""), reverse=True)
+    return [
+        {
+            "source_type": JOBSEEKER_COMPETENCY_PROGRAM,
+            "source_table": "pd_jobseeker_competency_program",
+            "record_id": row.id,
+            "pgm_nm": row.pgm_nm,
+            "pgm_sub_nm": row.pgm_sub_nm,
+            "pgm_target": row.pgm_target,
+            "org_nm": row.org_nm,
+            "pgm_stdt": row.pgm_stdt,
+            "pgm_endt": row.pgm_endt,
+            "open_time_clcd": row.open_time_clcd,
+            "open_time": row.open_time,
+            "operation_time": row.operation_time,
+            "open_plc_cont": row.open_plc_cont,
+        }
+        for _, row in matches[:limit]
+    ]
+
+
+def text_overlap_score(left: str, right: str) -> int:
+    left_tokens = {
+        normalize_company_text(token)
+        for token in re.split(r"[\s,;/|()\\[\\]{}]+", left or "")
+        if len(normalize_company_text(token)) >= 2
+    }
+    right_text = normalize_company_text(right or "")
+    return sum(1 for token in left_tokens if token in right_text)
 
 
 def find_standard_workplace_match(
@@ -352,7 +570,17 @@ def find_accessibility_evidence(
             "pd_nationwide_bus_stop",
             bus_stops,
             name_attr="stop_name",
-            field_attrs=["city_name", "latitude", "longitude"],
+            field_attrs=[
+                "stop_id",
+                "stop_name",
+                "mobile_short_no",
+                "city_code",
+                "city_name",
+                "admin_city_name",
+                "collected_at",
+                "latitude",
+                "longitude",
+            ],
             description_prefix="근무지 주변 버스정류장",
         )
     )
@@ -362,7 +590,34 @@ def find_accessibility_evidence(
             "pd_nationwide_crosswalk",
             crosswalks,
             name_attr="crslk_manage_no",
-            field_attrs=["ftpth_lower_yn", "brll_blck_yn", "sond_sgngnr_yn", "tfclght_yn"],
+            field_attrs=[
+                "ctprvn_nm",
+                "signgu_nm",
+                "road_nm",
+                "rdnmadr",
+                "lnmadr",
+                "crslk_manage_no",
+                "crslk_knd",
+                "bcycl_crslk_cmbnat_yn",
+                "highland_yn",
+                "cartrk_co",
+                "bt",
+                "et",
+                "tfclght_yn",
+                "fnctng_sgngnr_yn",
+                "sond_sgngnr_yn",
+                "green_sgngnr_time",
+                "red_sgngnr_time",
+                "tfcilnd_yn",
+                "ftpth_lower_yn",
+                "brll_blck_yn",
+                "cnctr_lght_fclty_yn",
+                "institution_nm",
+                "phone_number",
+                "reference_date",
+                "instt_code",
+                "instt_nm",
+            ],
             description_prefix="근무지 주변 횡단보도",
         )
     )
@@ -372,7 +627,40 @@ def find_accessibility_evidence(
             "pd_nationwide_traffic_light",
             traffic_lights,
             name_attr="tfclght_manage_no",
-            field_attrs=["fnctng_sgngnr_yn", "sond_sgngnr_yn", "remndr_idct_yn"],
+            field_attrs=[
+                "ctprvn_nm",
+                "signgu_nm",
+                "road_knd",
+                "road_route_no",
+                "road_route_nm",
+                "road_route_drc",
+                "rdnmadr",
+                "lnmadr",
+                "sgngnr_instl_mthd",
+                "road_type",
+                "prior_road_yn",
+                "tfclght_manage_no",
+                "tfclght_se",
+                "tfclght_color_knd",
+                "sgnasp_mthd",
+                "sgnasp_ordr",
+                "sgnasp_time",
+                "sot_knd",
+                "signl_ctrl_mthd",
+                "signl_time_mthd_type",
+                "opratn_yn",
+                "flashing_light_open_hhmm",
+                "flashing_light_close_hhmm",
+                "fnctng_sgngnr_yn",
+                "sond_sgngnr_yn",
+                "remndr_idct_yn",
+                "drcbrd_sn",
+                "institution_nm",
+                "phone_number",
+                "reference_date",
+                "instt_code",
+                "instt_nm",
+            ],
             description_prefix="근무지 주변 신호등",
         )
     )
@@ -382,7 +670,36 @@ def find_accessibility_evidence(
             "pd_transport_support_center",
             centers,
             name_attr="tfcwker_mvmn_cnter_nm",
-            field_attrs=["lift_vhcle_co", "slope_vhcle_co", "inside_oprat_area"],
+            field_attrs=[
+                "rdnmadr",
+                "lnmadr",
+                "car_hold_co",
+                "car_hold_knd",
+                "slope_vhcle_co",
+                "lift_vhcle_co",
+                "rcept_phone_number",
+                "rcept_itnadr",
+                "app_svc_nm",
+                "weekday_rcept_open_hhmm",
+                "weekday_rcept_colse_hhmm",
+                "wkend_rcept_open_hhmm",
+                "wkend_rcept_close_hhmm",
+                "weekday_oper_open_hhmm",
+                "weekday_oper_colse_hhmm",
+                "wkend_oper_open_hhmm",
+                "wkend_oper_close_hhmm",
+                "beffat_resve_pd",
+                "use_lmtt",
+                "inside_oprat_area",
+                "outside_oprat_area",
+                "use_trget",
+                "use_charge",
+                "institution_nm",
+                "phone_number",
+                "reference_date",
+                "instt_code",
+                "instt_nm",
+            ],
             description_prefix="교통약자 이동지원센터",
         )
     )
@@ -415,12 +732,16 @@ def find_accessibility_evidence(
     for source_type, rows in generic_gis_features.items():
         source_counts[source_type] = source_counts.get(source_type, 0) + len(rows)
 
-    transport_support_vehicle_count = sum((row.lift_vhcle_co or 0) + (row.slope_vhcle_co or 0) for row, _ in centers)
+    transport_support_vehicle_count = sum(
+        (row.lift_vhcle_co or 0) + (row.slope_vhcle_co or 0) + (row.car_hold_co or 0) for row, _ in centers
+    )
     transport_support_inside_area_count = sum(1 for row, _ in centers if row.inside_oprat_area)
+    transport_support_service_detail_score = sum(calculate_transport_support_detail_score(row) for row, _ in centers)
     traffic_light_accessible_signal_count = sum(
         int(is_yes_like(row.fnctng_sgngnr_yn))
         + int(is_yes_like(row.sond_sgngnr_yn))
         + int(is_yes_like(row.remndr_idct_yn))
+        + int(is_yes_like(row.opratn_yn))
         for row, _ in traffic_lights
     )
     crosswalk_accessible_feature_count = sum(
@@ -428,13 +749,26 @@ def find_accessibility_evidence(
         + int(is_yes_like(row.brll_blck_yn))
         + int(is_yes_like(row.sond_sgngnr_yn))
         + int(is_yes_like(row.tfclght_yn))
+        + int(is_yes_like(row.fnctng_sgngnr_yn))
+        + int(is_yes_like(row.highland_yn))
+        + int(is_yes_like(row.tfcilnd_yn))
+        + int(is_yes_like(row.cnctr_lght_fclty_yn))
         for row, _ in crosswalks
     )
     walking_network_crosswalk_count = sum(1 for row, _ in walking_links if is_yes_like(row.crswk))
+    walking_network_favorable_count = sum(
+        int(is_yes_like(row.park)) + int(is_yes_like(row.bldg)) + int(is_yes_like(row.sbwy_ntw))
+        for row, _ in walking_links
+    )
     walking_network_barrier_count = sum(
-        int(is_yes_like(row.ovrp)) + int(is_yes_like(row.tnl)) + int(is_yes_like(row.brg)) for row, _ in walking_links
+        int(is_yes_like(row.ovrp))
+        + int(is_yes_like(row.tnl))
+        + int(is_yes_like(row.brg))
+        + int(is_yes_like(row.expn_car_rd))
+        for row, _ in walking_links
     )
     generic_quality_score = calculate_generic_accessibility_quality_score(generic_gis_features)
+    low_floor_bus_quality_score = calculate_low_floor_bus_quality_score(generic_gis_features)
 
     return AccessibilityEvidence(
         bus_stop_count=len(bus_stops),
@@ -451,6 +785,9 @@ def find_accessibility_evidence(
         crosswalk_accessible_feature_count=crosswalk_accessible_feature_count,
         walking_network_crosswalk_count=walking_network_crosswalk_count,
         walking_network_barrier_count=walking_network_barrier_count,
+        walking_network_favorable_count=walking_network_favorable_count,
+        transport_support_service_detail_score=transport_support_service_detail_score,
+        low_floor_bus_quality_score=low_floor_bus_quality_score,
         generic_accessibility_quality_score=generic_quality_score,
     )
 
@@ -545,17 +882,129 @@ def calculate_generic_accessibility_quality_score(
         for row, _ in rows:
             properties = row.properties or {}
             if source_type in {RAIL_WHEELCHAIR_LIFT, SEOUL_WHEELCHAIR_LIFT, SEOUL_TRANSPORT_WEAK_WHEELCHAIR_LIFT}:
-                score += _score_yes_properties(properties, ["oprtngSitu", "pwdbs_slwy_estnc"])
-                score += _score_numeric_properties(properties, ["whlch_liftt_cnt", "liftCount"], max_points=4)
+                score += _score_yes_properties(properties, ["oprtngSitu", "pwdbs_slwy_estnc", "oprtng_situ"])
+                score += _score_numeric_properties(
+                    properties,
+                    [
+                        "whlch_liftt_cnt",
+                        "liftCount",
+                        "whlch_lift_cnt",
+                        "limitWht",
+                        "limit_wht",
+                        "weight_limit",
+                        "bndWgt",
+                        "bnd_wgt",
+                    ],
+                    max_points=4,
+                )
+                score += _score_presence_properties(
+                    properties,
+                    [
+                        "exitNo",
+                        "exit_no",
+                        "dtlLoc",
+                        "dtl_loc",
+                        "vcntEntrcNo",
+                        "vcnt_entrc_no",
+                        "bgngFlr",
+                        "bgng_flr",
+                        "endFlr",
+                        "end_flr",
+                        "elvtrLen",
+                        "elvtrWdthBt",
+                        "width",
+                        "wd",
+                    ],
+                    max_points=8,
+                )
             elif source_type == RAIL_WHEELCHAIR_LIFT_MOVEMENT:
-                score += 2 if properties.get("mvDst") else 0
+                score += _score_presence_properties(
+                    properties,
+                    [
+                        "mvPathDvNm",
+                        "mv_path_dv_nm",
+                        "mvDst",
+                        "mv_dst",
+                        "mvContDtl",
+                        "mv_cont_dtl",
+                        "mvTpOrdr",
+                        "mv_tp_ordr",
+                    ],
+                    max_points=8,
+                )
+                score += _score_numeric_properties(properties, ["mvDst", "mv_dst"], max_points=4)
             elif source_type == KORAIL_WEEK_PERSON_FACILITIES:
                 score += _score_yes_properties(properties, ["pwdbs_slwy_estnc", "pwdbs_tolt_estnc"])
                 score += _score_numeric_properties(properties, ["whlch_liftt_cnt"], max_points=4)
             elif source_type == SEOUL_WHEELCHAIR_RAMP_STATUS:
-                score += 3
+                score += _score_presence_properties(
+                    properties,
+                    [
+                        "호선",
+                        "역명",
+                        "구분",
+                        "위치",
+                        "line_name",
+                        "station_name",
+                        "division",
+                        "location",
+                    ],
+                    max_points=8,
+                )
             elif source_type == SEOUL_LOW_FLOOR_BUS_ROUTE_RETENTION:
-                score += _score_numeric_properties(properties, ["저상보유율", "lowFloorBusRate"], max_points=5)
+                score += _score_numeric_properties(
+                    properties,
+                    [
+                        "저상보유율",
+                        "lowFloorBusRate",
+                        "low_floor_retention_rate",
+                        "저상버스 대수",
+                        "low_floor_bus_count",
+                    ],
+                    max_points=8,
+                )
+    return score
+
+
+def calculate_transport_support_detail_score(row: PdTransportSupportCenter) -> int:
+    score = 0
+    if row.rcept_phone_number or row.phone_number:
+        score += 1
+    if row.rcept_itnadr or row.app_svc_nm:
+        score += 2
+    if row.weekday_oper_open_hhmm and row.weekday_oper_colse_hhmm:
+        score += 2
+    if row.wkend_oper_open_hhmm and row.wkend_oper_close_hhmm:
+        score += 2
+    if row.beffat_resve_pd:
+        score += 1
+    if row.use_trget:
+        score += 1
+    if row.use_charge:
+        score += 1
+    if row.outside_oprat_area:
+        score += 1
+    if row.use_lmtt:
+        score -= 1
+    return max(0, score)
+
+
+def calculate_low_floor_bus_quality_score(
+    grouped_rows: dict[str, list[tuple[AccessibilityGisFeature, float]]],
+) -> int:
+    score = 0
+    for row, _ in grouped_rows.get(SEOUL_LOW_FLOOR_BUS_ROUTE_RETENTION, []):
+        properties = row.properties or {}
+        score += _score_numeric_properties(
+            properties,
+            ["저상보유율", "lowFloorBusRate", "low_floor_retention_rate"],
+            max_points=8,
+        )
+        score += _score_numeric_properties(
+            properties,
+            ["저상버스 대수", "low_floor_bus_count"],
+            max_points=5,
+        )
     return score
 
 
@@ -573,6 +1022,11 @@ def _score_numeric_properties(properties: dict, keys: list[str], *, max_points: 
         if match:
             total += min(max_points, round(float(match.group(0)) / 10) or 1)
     return total
+
+
+def _score_presence_properties(properties: dict, keys: list[str], *, max_points: int) -> int:
+    total = sum(1 for key in keys if properties.get(key) not in {None, ""})
+    return min(max_points, total)
 
 
 def _nearby_point_rows(query, model, *, lat: float, lng: float, radius_meters: float, limit: int):

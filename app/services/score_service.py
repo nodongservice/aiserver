@@ -9,6 +9,7 @@ from app.core.public_data_sources import KEPAD_RECRUITMENT, KEPAD_STANDARD_WORKP
 from app.repositories.scoring_repository import (
     AccessibilityEvidence,
     StandardWorkplaceMatch,
+    enrich_job_postings_with_public_data,
     find_accessibility_evidence,
     find_all_recruitments_for_scoring,
     find_latest_recruitments,
@@ -63,8 +64,10 @@ def score_quick_jobs(request: ScoreRequest, db: Optional[Session] = None) -> Qui
                         source_table="pd_kepad_recruitment",
                         record_id=posting.source_id,
                         description="한국장애인고용공단 장애인 구인 실시간 현황 공고를 기준으로 계산했습니다.",
+                        fields=posting.recruitment_context,
                     )
-                ],
+                ]
+                + build_job_context_evidence_items(posting),
             )
         )
 
@@ -117,7 +120,8 @@ def get_latest_job_postings(db: Optional[Session], limit: int, offset: int = 0) 
     if not hasattr(db, "query"):
         raise RuntimeError("스코어링 공고 조회에는 SQLAlchemy Session이 필요합니다.")
     rows = find_latest_recruitments(db, limit=limit, offset=offset)
-    return [posting for row in rows if (posting := to_job_posting(row)) is not None]
+    postings = [posting for row in rows if (posting := to_job_posting(row)) is not None]
+    return enrich_job_postings_with_public_data(db, postings)
 
 
 def get_all_job_postings(db: Optional[Session]) -> list[JobPosting]:
@@ -126,7 +130,8 @@ def get_all_job_postings(db: Optional[Session]) -> list[JobPosting]:
     if not hasattr(db, "query"):
         raise RuntimeError("스코어링 공고 조회에는 SQLAlchemy Session이 필요합니다.")
     rows = find_all_recruitments_for_scoring(db)
-    return [posting for row in rows if (posting := to_job_posting(row)) is not None]
+    postings = [posting for row in rows if (posting := to_job_posting(row)) is not None]
+    return enrich_job_postings_with_public_data(db, postings)
 
 
 def get_map_candidate_job_postings(db: Optional[Session], limit: int) -> list[JobPosting]:
@@ -135,7 +140,8 @@ def get_map_candidate_job_postings(db: Optional[Session], limit: int) -> list[Jo
     if not hasattr(db, "query"):
         raise RuntimeError("스코어링 공고 조회에는 SQLAlchemy Session이 필요합니다.")
     rows = find_all_recruitments_for_scoring(db, limit=limit)
-    return [posting for row in rows if (posting := to_job_posting(row)) is not None]
+    postings = [posting for row in rows if (posting := to_job_posting(row)) is not None]
+    return enrich_job_postings_with_public_data(db, postings)
 
 
 def get_standard_workplace(posting: JobPosting, db: Optional[Session]) -> StandardWorkplaceMatch:
@@ -241,6 +247,7 @@ def build_score_evidence_items(
             source_table="pd_kepad_recruitment",
             record_id=posting.source_id,
             description="공고 원천 데이터입니다.",
+            fields=posting.recruitment_context,
         )
     ]
     if standard_workplace.is_match:
@@ -262,7 +269,39 @@ def build_score_evidence_items(
                 },
             )
         )
+    evidence_items.extend(build_job_context_evidence_items(posting))
     evidence_items.extend(accessibility.evidence_items)
+    return evidence_items
+
+
+def build_job_context_evidence_items(posting: JobPosting) -> list[ScoreEvidenceItem]:
+    evidence_items: list[ScoreEvidenceItem] = []
+    if posting.job_category_context:
+        record_id = posting.job_category_context.get("record_id")
+        evidence_items.append(
+            ScoreEvidenceItem(
+                source_type="KEPAD_JOB_CATEGORY",
+                source_name=get_source_name("KEPAD_JOB_CATEGORY"),
+                source_table="pd_kepad_job_category",
+                record_id=record_id if isinstance(record_id, int) else None,
+                description="장애인 고용직무분류 데이터와 공고 직무를 매칭했습니다.",
+                fields=posting.job_category_context,
+            )
+        )
+    for item in posting.development_context:
+        source_type = str(item.get("source_type"))
+        evidence_items.append(
+            ScoreEvidenceItem(
+                source_type=source_type,
+                source_name=get_source_name(source_type),
+                source_table=str(item.get("source_table")),
+                record_id=item.get("record_id") if isinstance(item.get("record_id"), int) else None,
+                description="직무 보완 또는 취업역량 강화에 활용 가능한 공공 프로그램 데이터입니다.",
+                fields={
+                    key: value for key, value in item.items() if key not in {"source_type", "source_table", "record_id"}
+                },
+            )
+        )
     return evidence_items
 
 
@@ -289,6 +328,10 @@ def build_job_fit_reasons(profile: ScoreProfile, posting: JobPosting, score: int
         reasons.append("최종 학력과 요구학력을 비교했습니다.")
     if profile.career and posting.required_career:
         reasons.append("주요 경력과 요구경력을 비교했습니다.")
+    if posting.job_category_context:
+        reasons.append("장애인 고용직무분류의 수행업무/유사직무/직무개발 팁을 함께 참고했습니다.")
+    if posting.development_context:
+        reasons.append("관련 직업훈련 또는 취업역량 프로그램 데이터를 보완 근거로 연결했습니다.")
     if score < 60:
         reasons.append("직무명 또는 요건과 프로필 간 직접 일치 항목이 제한적입니다.")
     if not reasons:
@@ -308,6 +351,10 @@ def build_map_reasons(
         reasons.append("장애인 표준사업장 데이터와 매칭되어 장애 지원/기업 안정성 점수에 반영했습니다.")
     if accessibility.evidence_items:
         reasons.append("근무지 주변 공공 접근성 데이터가 확인됩니다.")
+    if accessibility.source_counts:
+        used_source_count = sum(1 for count in accessibility.source_counts.values() if count > 0)
+        if used_source_count:
+            reasons.append(f"접근성 산정에 {used_source_count}개 공공데이터 소스가 반영되었습니다.")
     return reasons
 
 

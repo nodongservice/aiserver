@@ -24,9 +24,11 @@ def calculate_accessibility_score(
 
     score += min(10, accessibility.transport_support_vehicle_count)
     score += min(4, accessibility.transport_support_inside_area_count * 2)
+    score += min(6, accessibility.transport_support_service_detail_score)
     score += min(10, accessibility.traffic_light_accessible_signal_count * 2)
     score += min(12, accessibility.crosswalk_accessible_feature_count * 2)
     score += min(4, accessibility.walking_network_crosswalk_count * 2)
+    score += min(4, accessibility.walking_network_favorable_count)
     score -= min(8, accessibility.walking_network_barrier_count * 2)
 
     additional_evidence_count = sum(
@@ -43,6 +45,7 @@ def calculate_accessibility_score(
         }
     )
     score += min(10, additional_evidence_count * 2)
+    score += min(6, accessibility.low_floor_bus_quality_score)
     score += min(14, accessibility.generic_accessibility_quality_score)
 
     home_distance = calculate_home_to_work_distance_meters(profile, posting)

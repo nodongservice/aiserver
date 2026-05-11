@@ -148,6 +148,12 @@ class JobPosting(BaseModel):
     environment: dict[str, Optional[str]] = Field(default_factory=dict)
     agency_name: Optional[str] = None
     registered_at: Optional[str] = None
+    contact_no: Optional[str] = None
+    recruitment_no: Optional[str] = None
+    offer_registered_at: Optional[str] = None
+    recruitment_context: dict[str, Any] = Field(default_factory=dict)
+    job_category_context: dict[str, Any] = Field(default_factory=dict)
+    development_context: List[dict[str, Any]] = Field(default_factory=list)
     source_table: str = "pd_kepad_recruitment"
     source_id: Optional[int] = None
     external_id: Optional[str] = None
