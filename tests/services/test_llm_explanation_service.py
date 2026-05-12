@@ -63,7 +63,8 @@ def test_build_short_summary_for_good_grade_with_real_risk():
 
     summary = build_short_summary(request)
 
-    assert "양호하지만 일부 확인이 필요합니다" in summary
+    assert "비교적 안정적으로 추천되는 일자리예요" in summary
+    assert "일부 이동 환경 정보는 지원 전 확인해 주세요" in summary
 
 
 def test_build_detail_explanation_includes_score_summary_and_filtered_risk_text():
@@ -76,10 +77,10 @@ def test_build_detail_explanation_includes_score_summary_and_filtered_risk_text(
 
     explanation = build_detail_explanation(request)
 
-    assert "종합 추천 점수 88점, 등급 GOOD" in explanation
+    assert "종합 추천 점수 88점" in explanation
     assert "세부 점수에서는" in explanation
     assert "대중교통 접근성" in explanation or "업무환경 적합성" in explanation
-    assert "지원 전 추가 확인이 필요합니다" in explanation
+    assert "지원 전 추가 확인이 필요해요" in explanation
     assert "전국 버스정류장 위치정보" in explanation
 
 
@@ -137,8 +138,8 @@ def test_build_check_points_adds_actionable_guidance_for_large_penalty_and_missi
 
     check_points = build_check_points(request)
 
-    assert "공공데이터 기반 근거가 부족하므로 사업장 접근성과 통근 동선을 직접 확인해 주세요." in check_points
-    assert "사용자 조건과 충돌할 수 있는 업무환경 및 필수 지원 조건을 다시 확인해 주세요." in check_points
+    assert "집에서 근무지까지 실제 대중교통 이동 시간이 어느 정도인지 확인해 주세요." in check_points
+    assert "업무환경과 필수 지원 조건이 본인에게 맞는지 다시 확인해 주세요." in check_points
     assert len(check_points) <= 3
 
 

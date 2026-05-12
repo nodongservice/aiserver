@@ -4,10 +4,11 @@ from app.schemas.explanation import (
     ExplanationGenerateRequest,
     ExplanationGenerateResponse,
 )
+from app.services.next_step_program_service import build_next_step_summary, build_recommended_programs
 
 EXPLANATION_VERSION = "v1-rule-fallback"
 DEFAULT_NO_RISK_MESSAGE = "현재 확인된 주요 위험 요인은 없습니다."
-DEFAULT_CHECK_POINT = "면접 또는 지원 전 실제 근무지 접근성과 통근 동선을 한 번 더 확인하는 것이 좋습니다."
+DEFAULT_CHECK_POINT = "지원 전 실제 근무지 접근성과 통근 동선을 한 번 더 확인해 주세요."
 
 SCORE_LABELS = {
     "transport_score": "대중교통 접근성",
@@ -38,12 +39,15 @@ def generate_accessibility_explanation(
     short_summary = build_short_summary(request)
     detail_explanation = build_detail_explanation(request)
     check_points = build_check_points(request)
+    recommended_programs = build_recommended_programs(request)
 
     return ExplanationGenerateResponse(
         explanation_version=EXPLANATION_VERSION,
         short_summary=short_summary,
         detail_explanation=detail_explanation,
         check_points=check_points,
+        next_step_summary=build_next_step_summary(request, recommended_programs),
+        recommended_programs=recommended_programs,
         used_llm=False,
     )
 
@@ -57,31 +61,31 @@ def build_short_summary(request: ExplanationGenerateRequest) -> str:
     if request.score_mode == "quick":
         if request.accessibility_grade == "GOOD":
             if has_real_risk:
-                return f"{request.job_title} 공고는 직무 적합도는 높지만 일부 확인이 필요합니다."
+                return f"{request.company_name}의 {request.job_title} 공고는 현재 프로필 기준으로 비교적 잘 맞는 일자리예요. 다만 일부 조건은 지원 전 한 번 더 확인해보시는 걸 권장드려요."
 
-            return f"{request.job_title} 공고는 현재 프로필 기준 직무 적합도가 비교적 높습니다."
+            return f"{request.company_name}의 {request.job_title} 공고는 현재 프로필 기준으로 비교적 잘 맞는 일자리예요. 직무 적합도 점수 {request.accessibility_score}점으로 분석되었어요."
 
         if request.accessibility_grade == "CAUTION":
             if has_real_risk:
-                return f"{request.job_title} 공고는 직무 조건과 주의사항을 함께 확인해볼 필요가 있습니다."
+                return f"{request.company_name}의 {request.job_title} 공고는 일부 조건이 맞지만 확인이 필요한 항목도 있어요. 지원 전 근무 조건과 이동 환경을 함께 살펴봐 주세요."
 
-            return f"{request.job_title} 공고는 일부 직무 조건 확인이 필요합니다."
+            return f"{request.company_name}의 {request.job_title} 공고는 현재 프로필과 일부 조건이 맞는 것으로 분석되었어요. 세부 근무 조건은 지원 전 확인해 주세요."
 
-        return f"{request.job_title} 공고는 현재 프로필과 맞지 않는 조건이 있어 주의가 필요합니다."
+        return f"{request.company_name}의 {request.job_title} 공고는 현재 프로필과 맞지 않을 수 있는 조건이 있어요. 지원 전 업무 내용과 근무 조건을 꼼꼼히 확인해 주세요."
 
     if request.accessibility_grade == "GOOD":
         if has_real_risk:
-            return f"{request.job_title} 공고는 현재 조건 기준 접근성은 양호하지만 일부 확인이 필요합니다."
+            return f"{request.company_name}의 {request.job_title} 공고는 현재 조건 기준으로 비교적 안정적으로 추천되는 일자리예요. 종합 추천 점수 {request.accessibility_score}점으로 분석되었지만, 일부 이동 환경 정보는 지원 전 확인해 주세요."
 
-        return f"{request.job_title} 공고는 현재 조건 기준 접근성이 비교적 양호합니다."
+        return f"{request.company_name}의 {request.job_title} 공고는 현재 조건 기준으로 비교적 안정적으로 추천되는 일자리예요. 종합 추천 점수 {request.accessibility_score}점으로 분석되었어요."
 
     if request.accessibility_grade == "CAUTION":
         if has_real_risk:
-            return f"{request.job_title} 공고는 일부 접근성 정보와 근무 조건을 함께 확인해볼 필요가 있습니다."
+            return f"{request.company_name}의 {request.job_title} 공고는 일부 조건이 맞지만 확인이 필요한 항목도 있어요. 실제 출퇴근 동선과 주변 이동 환경을 지원 전 확인해 주세요."
 
-        return f"{request.job_title} 공고는 일부 접근성 정보 확인이 필요합니다."
+        return f"{request.company_name}의 {request.job_title} 공고는 현재 조건 기준으로 검토해볼 수 있는 일자리예요. 다만 접근성 정보 일부는 추가 확인이 필요해요."
 
-    return f"{request.job_title} 공고는 사용자 조건과 충돌할 수 있어 주의가 필요합니다."
+    return f"{request.company_name}의 {request.job_title} 공고는 현재 조건과 맞지 않을 수 있는 항목이 있어요. 지원 전 이동 환경과 업무 조건을 충분히 확인해 주세요."
 
 
 def build_detail_explanation(request: ExplanationGenerateRequest) -> str:
@@ -92,9 +96,9 @@ def build_detail_explanation(request: ExplanationGenerateRequest) -> str:
     """
     overview_sentence = build_overview_sentence(request)
     score_sentence = build_score_summary(request)
-    positive_sentence = f"현재 확인된 긍정 요인으로는 {join_factors(request.positive_factors, limit=2)} 등이 있습니다."
+    positive_sentence = f"확인된 정보 기준으로는 {join_factors(request.positive_factors, limit=2)} 등이 긍정적으로 반영되었어요."
     risk_sentence = build_risk_sentence(request)
-    evidence_sentence = f"근거 데이터는 {build_evidence_summary(request)}를 기준으로 검토했습니다."
+    evidence_sentence = f"근거 데이터는 {build_evidence_summary(request)}를 기준으로 살펴봤어요."
 
     return " ".join(
         [
@@ -109,15 +113,9 @@ def build_detail_explanation(request: ExplanationGenerateRequest) -> str:
 
 def build_overview_sentence(request: ExplanationGenerateRequest) -> str:
     if request.score_mode == "quick":
-        return (
-            f"{request.company_name}의 {request.job_title} 공고는 직무 적합도 점수 "
-            f"{request.accessibility_score}점, 등급 {request.accessibility_grade}로 분석되었습니다."
-        )
+        return f"{request.company_name}의 {request.job_title} 공고는 직무 적합도 점수 {request.accessibility_score}점으로 분석되었어요."
 
-    return (
-        f"{request.company_name}의 {request.job_title} 공고는 종합 추천 점수 "
-        f"{request.accessibility_score}점, 등급 {request.accessibility_grade}로 분석되었습니다."
-    )
+    return f"{request.company_name}의 {request.job_title} 공고는 종합 추천 점수 {request.accessibility_score}점으로 분석되었어요."
 
 
 def build_check_points(request: ExplanationGenerateRequest) -> list[str]:
@@ -137,11 +135,11 @@ def build_check_points(request: ExplanationGenerateRequest) -> list[str]:
 
     # 근거 데이터가 없으면 현장 확인 필요성을 명시합니다.
     if not request.evidence_items:
-        check_points.append("공공데이터 기반 근거가 부족하므로 사업장 접근성과 통근 동선을 직접 확인해 주세요.")
+        check_points.append("집에서 근무지까지 실제 대중교통 이동 시간이 어느 정도인지 확인해 주세요.")
 
     # 감점이 큰 경우에는 업무환경 또는 필수 지원 조건을 다시 확인하도록 안내합니다.
     if request.score_detail.risk_penalty <= -10:
-        check_points.append("사용자 조건과 충돌할 수 있는 업무환경 및 필수 지원 조건을 다시 확인해 주세요.")
+        check_points.append("업무환경과 필수 지원 조건이 본인에게 맞는지 다시 확인해 주세요.")
 
     if not check_points:
         check_points.append(DEFAULT_CHECK_POINT)
@@ -169,9 +167,9 @@ def build_score_summary(request: ExplanationGenerateRequest) -> str:
     """
     if request.score_mode == "quick":
         if request.positive_factors:
-            return "단일 점수는 희망 직무, 보유 기술, 경력·학력 조건의 일치도를 중심으로 산정했습니다."
+            return "단일 점수는 희망 직무, 보유 기술, 경력·학력 조건의 일치도를 중심으로 계산했어요."
 
-        return "단일 점수는 현재 프로필과 공고의 직무 조건 일치도를 중심으로 산정했습니다."
+        return "단일 점수는 현재 프로필과 공고의 직무 조건 일치도를 중심으로 계산했어요."
 
     score_pairs = [
         ("transport_score", request.score_detail.transport_score),
@@ -185,10 +183,10 @@ def build_score_summary(request: ExplanationGenerateRequest) -> str:
     highlighted_labels = [SCORE_LABELS[key] for key, value in score_pairs if value >= 12][:2]
 
     if not highlighted_labels:
-        return "세부 점수는 여러 접근성 항목을 종합해 산정했습니다."
+        return "여러 접근성 항목을 함께 반영해 점수를 계산했어요."
 
     joined_labels = ", ".join(highlighted_labels)
-    return f"세부 점수에서는 {joined_labels} 항목이 상대적으로 높게 반영되었습니다."
+    return f"세부 점수에서는 {joined_labels} 항목이 상대적으로 높게 반영되었어요."
 
 
 def build_risk_sentence(request: ExplanationGenerateRequest) -> str:
@@ -196,12 +194,9 @@ def build_risk_sentence(request: ExplanationGenerateRequest) -> str:
     위험 요인을 상세 설명용 문장으로 정리합니다.
     """
     if not has_real_risk_factors(request.risk_factors):
-        return "현재 확인된 주요 위험 요인은 크지 않습니다."
+        return "현재 확인된 주요 위험 요인은 크지 않아요."
 
-    return (
-        f"다만 {join_factors(request.risk_factors, limit=2, exclude_default_risk=True)} "
-        "항목은 지원 전 추가 확인이 필요합니다."
-    )
+    return f"다만 {join_factors(request.risk_factors, limit=2, exclude_default_risk=True)} 항목은 지원 전 추가 확인이 필요해요."
 
 
 def join_factors(

@@ -1,4 +1,4 @@
-from typing import List, Optional
+from typing import Any, List, Optional
 
 from pydantic import BaseModel, Field
 
@@ -178,3 +178,9 @@ class EvidenceItem(BaseModel):
     # 원본 레코드 ID
     # Spring의 public_data_record.id 또는 FastAPI/GIS 테이블 ID를 넣을 수 있습니다.
     record_id: Optional[int] = None
+
+    # 원천 정규화 테이블명
+    source_table: Optional[str] = None
+
+    # 근거 원본의 보조 필드
+    fields: dict[str, Any] = Field(default_factory=dict)

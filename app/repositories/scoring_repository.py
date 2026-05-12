@@ -1,5 +1,6 @@
 import logging
 import math
+import random
 import re
 from dataclasses import dataclass, field
 from datetime import datetime
@@ -153,12 +154,7 @@ def enrich_job_postings_with_public_data(db: Session, postings: list[JobPosting]
 
     job_categories = db.query(PdKepadJobCategory).filter(PdKepadJobCategory.job_cd_nm.isnot(None)).limit(5000).all()
     trainings = db.query(PdVocationalTraining).filter(PdVocationalTraining.title.isnot(None)).limit(5000).all()
-    programs = (
-        db.query(PdJobseekerCompetencyProgram)
-        .filter(or_(PdJobseekerCompetencyProgram.pgm_nm.isnot(None), PdJobseekerCompetencyProgram.pgm_sub_nm.isnot(None)))
-        .limit(1000)
-        .all()
-    )
+    programs = db.query(PdJobseekerCompetencyProgram).filter(or_(PdJobseekerCompetencyProgram.pgm_nm.isnot(None), PdJobseekerCompetencyProgram.pgm_sub_nm.isnot(None))).limit(1000).all()
 
     for posting in postings:
         category = _best_job_category_match(posting, job_categories)
@@ -177,7 +173,7 @@ def enrich_job_postings_with_public_data(db: Session, postings: list[JobPosting]
 
         posting.development_context = [
             *_matching_training_context(posting, trainings, limit=2),
-            *_matching_program_context(posting, programs, limit=1),
+            *_matching_program_context(posting, programs, limit=2),
         ]
 
     return postings
@@ -261,9 +257,7 @@ def _best_job_category_match(
     target = " ".join(
         [
             posting.job_title,
-            " ".join(str(value) for value in posting.recruitment_context.values() if value)
-            if posting.recruitment_context
-            else "",
+            " ".join(str(value) for value in posting.recruitment_context.values() if value) if posting.recruitment_context else "",
         ]
     )
     for category in categories:
@@ -290,7 +284,7 @@ def _matching_training_context(
     *,
     limit: int,
 ) -> list[dict[str, object]]:
-    matches: list[tuple[int, PdVocationalTraining]] = []
+    matches: list[PdVocationalTraining] = []
     target = " ".join([posting.job_title, posting.required_licenses or "", posting.required_major or ""])
     for row in trainings:
         haystack = " ".join(
@@ -308,8 +302,8 @@ def _matching_training_context(
         )
         score = text_overlap_score(target, haystack)
         if score > 0:
-            matches.append((score, row))
-    matches.sort(key=lambda item: (item[0], item[1].stdg_scor or "", item[1].ei_empl_rate6 or ""), reverse=True)
+            matches.append(row)
+    random.Random(_posting_seed(posting, "training")).shuffle(matches)
     return [
         {
             "source_type": VOCATIONAL_TRAINING,
@@ -321,6 +315,8 @@ def _matching_training_context(
             "address": row.address,
             "tra_start_date": row.tra_start_date,
             "tra_end_date": row.tra_end_date,
+            "title_link": row.title_link,
+            "sub_title_link": row.sub_title_link,
             "ei_empl_rate3": row.ei_empl_rate3,
             "ei_empl_rate6": row.ei_empl_rate6,
             "stdg_scor": row.stdg_scor,
@@ -328,7 +324,7 @@ def _matching_training_context(
             "real_man": row.real_man,
             "yard_man": row.yard_man,
         }
-        for _, row in matches[:limit]
+        for row in matches[:limit]
     ]
 
 
@@ -338,7 +334,7 @@ def _matching_program_context(
     *,
     limit: int,
 ) -> list[dict[str, object]]:
-    matches: list[tuple[int, PdJobseekerCompetencyProgram]] = []
+    matches: list[PdJobseekerCompetencyProgram] = []
     for row in programs:
         haystack = " ".join(
             value
@@ -353,8 +349,8 @@ def _matching_program_context(
         )
         score = text_overlap_score(posting.job_title, haystack)
         if score > 0 or any(keyword in haystack for keyword in ["구직", "취업", "역량"]):
-            matches.append((score, row))
-    matches.sort(key=lambda item: (item[0], item[1].pgm_stdt or ""), reverse=True)
+            matches.append(row)
+    random.Random(_posting_seed(posting, "program")).shuffle(matches)
     return [
         {
             "source_type": JOBSEEKER_COMPETENCY_PROGRAM,
@@ -371,16 +367,16 @@ def _matching_program_context(
             "operation_time": row.operation_time,
             "open_plc_cont": row.open_plc_cont,
         }
-        for _, row in matches[:limit]
+        for row in matches[:limit]
     ]
 
 
+def _posting_seed(posting: JobPosting, category: str) -> str:
+    return f"{posting.job_post_id}:{posting.company_name}:{posting.job_title}:{category}"
+
+
 def text_overlap_score(left: str, right: str) -> int:
-    left_tokens = {
-        normalize_company_text(token)
-        for token in re.split(r"[\s,;/|()\\[\\]{}]+", left or "")
-        if len(normalize_company_text(token)) >= 2
-    }
+    left_tokens = {normalize_company_text(token) for token in re.split(r"[\s,;/|()\\[\\]{}]+", left or "") if len(normalize_company_text(token)) >= 2}
     right_text = normalize_company_text(right or "")
     return sum(1 for token in left_tokens if token in right_text)
 
@@ -394,9 +390,7 @@ def find_standard_workplace_match(
     if not normalized_name:
         return StandardWorkplaceMatch(is_match=False)
 
-    candidates = (
-        db.query(PdKepadStandardWorkplace).filter(PdKepadStandardWorkplace.comp_name.isnot(None)).limit(10000).all()
-    )
+    candidates = db.query(PdKepadStandardWorkplace).filter(PdKepadStandardWorkplace.comp_name.isnot(None)).limit(10000).all()
     exact_matches = []
     partial_matches = []
     for row in candidates:
@@ -405,11 +399,7 @@ def find_standard_workplace_match(
         row_name = normalize_company_text(row.comp_name)
         if row_name == normalized_name:
             exact_matches.append(row)
-        elif (
-            len(row_name) >= 4
-            and len(normalized_name) >= 4
-            and (row_name in normalized_name or normalized_name in row_name)
-        ):
+        elif len(row_name) >= 4 and len(normalized_name) >= 4 and (row_name in normalized_name or normalized_name in row_name):
             partial_matches.append(row)
 
     if exact_matches:
@@ -420,13 +410,7 @@ def find_standard_workplace_match(
 
     if address and len(address.strip()) >= 12:
         short_address = address[:12]
-        row = (
-            db.query(PdKepadStandardWorkplace)
-            .filter(PdKepadStandardWorkplace.comp_name.isnot(None))
-            .filter(PdKepadStandardWorkplace.address.contains(short_address))
-            .filter(PdKepadStandardWorkplace.comp_name.contains(company_name[:2]))
-            .first()
-        )
+        row = db.query(PdKepadStandardWorkplace).filter(PdKepadStandardWorkplace.comp_name.isnot(None)).filter(PdKepadStandardWorkplace.address.contains(short_address)).filter(PdKepadStandardWorkplace.comp_name.contains(company_name[:2])).first()
         if row and is_active_standard_workplace(row):
             return to_standard_workplace_match(row)
 
@@ -440,9 +424,7 @@ def find_standard_workplace_matches(
     if not postings:
         return {}
 
-    candidates = (
-        db.query(PdKepadStandardWorkplace).filter(PdKepadStandardWorkplace.comp_name.isnot(None)).limit(10000).all()
-    )
+    candidates = db.query(PdKepadStandardWorkplace).filter(PdKepadStandardWorkplace.comp_name.isnot(None)).limit(10000).all()
     return {posting.job_post_id: match_standard_workplace_from_candidates(posting, candidates) for posting in postings}
 
 
@@ -462,11 +444,7 @@ def match_standard_workplace_from_candidates(
         row_name = normalize_company_text(row.comp_name)
         if row_name == normalized_name:
             exact_matches.append(row)
-        elif (
-            len(row_name) >= 4
-            and len(normalized_name) >= 4
-            and (row_name in normalized_name or normalized_name in row_name)
-        ):
+        elif len(row_name) >= 4 and len(normalized_name) >= 4 and (row_name in normalized_name or normalized_name in row_name):
             partial_matches.append(row)
 
     if exact_matches:
@@ -478,19 +456,9 @@ def match_standard_workplace_from_candidates(
     address = posting.work_address
     if address and len(address.strip()) >= 12:
         short_address = address[:12]
-        address_matches = [
-            row
-            for row in candidates
-            if row.address
-            and row.comp_name
-            and is_active_standard_workplace(row)
-            and short_address in row.address
-            and posting.company_name[:2] in row.comp_name
-        ]
+        address_matches = [row for row in candidates if row.address and row.comp_name and is_active_standard_workplace(row) and short_address in row.address and posting.company_name[:2] in row.comp_name]
         if address_matches:
-            return to_standard_workplace_match(
-                sorted(address_matches, key=_standard_workplace_priority_key, reverse=True)[0]
-            )
+            return to_standard_workplace_match(sorted(address_matches, key=_standard_workplace_priority_key, reverse=True)[0])
 
     return StandardWorkplaceMatch(is_match=False)
 
@@ -732,18 +700,10 @@ def find_accessibility_evidence(
     for source_type, rows in generic_gis_features.items():
         source_counts[source_type] = source_counts.get(source_type, 0) + len(rows)
 
-    transport_support_vehicle_count = sum(
-        (row.lift_vhcle_co or 0) + (row.slope_vhcle_co or 0) + (row.car_hold_co or 0) for row, _ in centers
-    )
+    transport_support_vehicle_count = sum((row.lift_vhcle_co or 0) + (row.slope_vhcle_co or 0) + (row.car_hold_co or 0) for row, _ in centers)
     transport_support_inside_area_count = sum(1 for row, _ in centers if row.inside_oprat_area)
     transport_support_service_detail_score = sum(calculate_transport_support_detail_score(row) for row, _ in centers)
-    traffic_light_accessible_signal_count = sum(
-        int(is_yes_like(row.fnctng_sgngnr_yn))
-        + int(is_yes_like(row.sond_sgngnr_yn))
-        + int(is_yes_like(row.remndr_idct_yn))
-        + int(is_yes_like(row.opratn_yn))
-        for row, _ in traffic_lights
-    )
+    traffic_light_accessible_signal_count = sum(int(is_yes_like(row.fnctng_sgngnr_yn)) + int(is_yes_like(row.sond_sgngnr_yn)) + int(is_yes_like(row.remndr_idct_yn)) + int(is_yes_like(row.opratn_yn)) for row, _ in traffic_lights)
     crosswalk_accessible_feature_count = sum(
         int(is_yes_like(row.ftpth_lower_yn))
         + int(is_yes_like(row.brll_blck_yn))
@@ -756,17 +716,8 @@ def find_accessibility_evidence(
         for row, _ in crosswalks
     )
     walking_network_crosswalk_count = sum(1 for row, _ in walking_links if is_yes_like(row.crswk))
-    walking_network_favorable_count = sum(
-        int(is_yes_like(row.park)) + int(is_yes_like(row.bldg)) + int(is_yes_like(row.sbwy_ntw))
-        for row, _ in walking_links
-    )
-    walking_network_barrier_count = sum(
-        int(is_yes_like(row.ovrp))
-        + int(is_yes_like(row.tnl))
-        + int(is_yes_like(row.brg))
-        + int(is_yes_like(row.expn_car_rd))
-        for row, _ in walking_links
-    )
+    walking_network_favorable_count = sum(int(is_yes_like(row.park)) + int(is_yes_like(row.bldg)) + int(is_yes_like(row.sbwy_ntw)) for row, _ in walking_links)
+    walking_network_barrier_count = sum(int(is_yes_like(row.ovrp)) + int(is_yes_like(row.tnl)) + int(is_yes_like(row.brg)) + int(is_yes_like(row.expn_car_rd)) for row, _ in walking_links)
     generic_quality_score = calculate_generic_accessibility_quality_score(generic_gis_features)
     low_floor_bus_quality_score = calculate_low_floor_bus_quality_score(generic_gis_features)
 
@@ -1088,14 +1039,7 @@ def _postgis_nearby_wkt_rows(db: Session, model, column, *, lat: float, lng: flo
     point = func.ST_SetSRID(func.ST_MakePoint(lng, lat), 4326)
     row_geom = func.ST_SetSRID(func.ST_GeomFromText(column), 4326)
     try:
-        return (
-            db.query(model)
-            .filter(column.isnot(None))
-            .filter(func.ST_DWithin(func.Geography(row_geom), func.Geography(point), radius_meters))
-            .order_by(func.ST_Distance(func.Geography(row_geom), func.Geography(point)))
-            .limit(200)
-            .all()
-        )
+        return db.query(model).filter(column.isnot(None)).filter(func.ST_DWithin(func.Geography(row_geom), func.Geography(point), radius_meters)).order_by(func.ST_Distance(func.Geography(row_geom), func.Geography(point))).limit(200).all()
     except SQLAlchemyError:
         db.rollback()
         logger.exception("PostGIS nearby WKT query failed for %s.%s", model.__tablename__, column.key)
@@ -1110,11 +1054,7 @@ def _nearby_accessibility_gis_features(
     radius_meters: float,
     limit_per_source: int,
 ) -> dict[str, list[tuple[AccessibilityGisFeature, float]]]:
-    source_types = [
-        source_type
-        for source_type in SPEC_ACCESSIBILITY_SOURCE_TYPES
-        if source_type not in NORMALIZED_ACCESSIBILITY_SOURCE_TYPES
-    ]
+    source_types = [source_type for source_type in SPEC_ACCESSIBILITY_SOURCE_TYPES if source_type not in NORMALIZED_ACCESSIBILITY_SOURCE_TYPES]
     if not source_types:
         return {}
 
