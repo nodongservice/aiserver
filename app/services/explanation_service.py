@@ -182,11 +182,7 @@ def collect_missing_data_risks(
     if "accessible_restroom" in user.required_supports and gis_feature.has_accessible_restroom_nearby is None:
         append_check_needed_risk(risks, "장애인 화장실 정보가 아직 확인되지 않았습니다.")
 
-    if (
-        "elevator" in user.required_supports
-        and gis_feature.has_station_elevator is None
-        and gis_feature.has_wheelchair_lift is None
-    ):
+    if "elevator" in user.required_supports and gis_feature.has_station_elevator is None and gis_feature.has_wheelchair_lift is None:
         append_check_needed_risk(
             risks,
             "주변 역 또는 출입구의 엘리베이터·리프트 정보가 충분하지 않습니다.",
@@ -349,11 +345,7 @@ def build_risk_factors(
     if "accessible_restroom" in user.required_supports and gis_feature.has_accessible_restroom_nearby is None:
         append_check_needed_risk(factors, "장애인 화장실 정보가 아직 확인되지 않았습니다.")
 
-    if (
-        "elevator" in user.required_supports
-        and not gis_feature.has_station_elevator
-        and not gis_feature.has_wheelchair_lift
-    ):
+    if "elevator" in user.required_supports and not gis_feature.has_station_elevator and not gis_feature.has_wheelchair_lift:
         append_check_needed_risk(
             factors,
             "주변 역 또는 출입구의 엘리베이터·리프트 정보가 충분하지 않습니다.",

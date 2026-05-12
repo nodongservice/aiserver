@@ -69,10 +69,7 @@ def log_database_exception(request: Request, exc: SQLAlchemyError) -> None:
     orig = getattr(exc, "orig", None)
 
     logger.error(
-        (
-            "데이터베이스 처리 중 오류가 발생했습니다. status_code=503 error_code=DATABASE_ERROR "
-            "exception_type=%s reason=%r dbapi_exception_type=%s dbapi_reason=%r statement=%r params=%r %s"
-        ),
+        ("데이터베이스 처리 중 오류가 발생했습니다. status_code=503 error_code=DATABASE_ERROR exception_type=%s reason=%r dbapi_exception_type=%s dbapi_reason=%r statement=%r params=%r %s"),
         exc.__class__.__name__,
         str(exc),
         orig.__class__.__name__ if orig is not None else "-",

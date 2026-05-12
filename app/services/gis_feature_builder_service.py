@@ -728,14 +728,7 @@ def build_accessibility_gis_features_by_source_type(
     - SEOUL_WALKING_NETWORK
     """
 
-    records = (
-        db.query(PublicDataRecord)
-        .filter(PublicDataRecord.source_type == source_type)
-        .filter(PublicDataRecord.is_active.is_(True))
-        .order_by(PublicDataRecord.id.asc())
-        .limit(limit)
-        .all()
-    )
+    records = db.query(PublicDataRecord).filter(PublicDataRecord.source_type == source_type).filter(PublicDataRecord.is_active.is_(True)).order_by(PublicDataRecord.id.asc()).limit(limit).all()
 
     created_count = 0
     skipped_count = 0

@@ -9,12 +9,7 @@ def calculate_work_environment_score(profile: ScoreProfile, posting: JobPosting)
     if contains_any(environment_text, keywords=["무관", "가능", "일상적 활동", "작은 물품", "가벼운"]):
         score += 15
 
-    disability_text = " ".join(
-        profile.disability_types
-        + profile.assistive_devices
-        + profile.required_supports
-        + [profile.disability_description or "", profile.disability_severity or ""]
-    )
+    disability_text = " ".join(profile.disability_types + profile.assistive_devices + profile.required_supports + [profile.disability_description or "", profile.disability_severity or ""])
     if contains_any(disability_text, keywords=["wheelchair", "휠체어", "지체", "mobility"]):
         if contains_any(environment_text, keywords=["오랫동안", "서거나", "걷기", "드는힘", "무거운"]):
             score -= 22

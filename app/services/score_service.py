@@ -336,9 +336,7 @@ def build_job_context_evidence_items(posting: JobPosting) -> list[ScoreEvidenceI
                 source_table=str(item.get("source_table")),
                 record_id=item.get("record_id") if isinstance(item.get("record_id"), int) else None,
                 description="직무 보완 또는 취업역량 강화에 활용 가능한 공공 프로그램 데이터입니다.",
-                fields={
-                    key: value for key, value in item.items() if key not in {"source_type", "source_table", "record_id"}
-                },
+                fields={key: value for key, value in item.items() if key not in {"source_type", "source_table", "record_id"}},
             )
         )
     return evidence_items
@@ -431,10 +429,7 @@ def build_map_risks(
         risks.append("대중교통 예상 통근시간 조회에 실패하여 기존 거리/주변시설 기반 접근성 평가를 사용했습니다.")
     elif profile.commute_limit_minutes is not None and transit_time.duration_minutes is not None:
         if transit_time.duration_minutes > profile.commute_limit_minutes:
-            risks.append(
-                f"대중교통 예상 통근시간이 {transit_time.duration_minutes}분으로 희망 통근시간 "
-                f"{profile.commute_limit_minutes}분을 초과합니다."
-            )
+            risks.append(f"대중교통 예상 통근시간이 {transit_time.duration_minutes}분으로 희망 통근시간 {profile.commute_limit_minutes}분을 초과합니다.")
     return risks
 
 
