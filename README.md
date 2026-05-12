@@ -6,7 +6,6 @@ BridgeWork 전체 서비스에서 이 레포는 Spring Backend가 내부 API로 
 
 ## 전체 구조
 
-![BridgeWork system architecture](images/architect.jpeg)
 
 ```text
 React Frontend
@@ -53,8 +52,54 @@ React Frontend
 - AI 토글 OFF 시 Spring Backend가 최신 공고만 조회
 
 ### 3. 지역 접근성 지도 추천
+```mermaid
+flowchart LR
+    A["React Frontend<br/>지역 접근성 지도"] -->|프로필 선택, aiEnabled=true| B["Spring Backend<br/>/api/v1/recommend/map"]
+    B -->|선택 프로필 1개 전달| C["FastAPI AI/GIS<br/>POST /api/v1/score/map"]
 
-![Map scoring flow](images/image3.png)
+    C --> D["ScoreRequest 검증<br/>profile, limit, offset"]
+    D --> E["공고 후보 조회<br/>pd_kepad_recruitment<br/>ACTIVE 공고"]
+    E --> F["공고 컨텍스트 보강<br/>직무분류, 직업훈련, 취업역량 프로그램"]
+
+    F --> G["표준사업장 매칭<br/>pd_kepad_standard_workplace"]
+    F --> H["PostGIS 접근성 근거 조회<br/>ST_DWithin / ST_Distance"]
+    F --> I["거주지-근무지<br/>대중교통 시간 조회"]
+
+    G --> J["6개 항목 AI 점수 계산"]
+    H --> J
+    I --> J
+
+    J --> J1["직무 적합도"]
+    J --> J2["근무조건 적합도"]
+    J --> J3["장애 지원 적합도"]
+    J --> J4["업무환경 적합도"]
+    J --> J5["기업 안정성/채용 친화도"]
+    J --> J6["접근성 요약 점수"]
+
+    J1 --> K["동일 비중 총점 계산<br/>round(sum / 6)"]
+    J2 --> K
+    J3 --> K
+    J4 --> K
+    J5 --> K
+    J6 --> K
+
+    K --> L["추천 사유 생성<br/>reasons"]
+    K --> M["위험요소 생성<br/>risk_factors"]
+    K --> N["근거 생성<br/>evidence_items"]
+
+    L --> O["총점 내림차순 정렬"]
+    M --> O
+    N --> O
+
+    O --> P["limit / offset 적용"]
+    P --> Q["MapScoreResponse 반환<br/>job, score_detail, total_score,<br/>transit_time, reasons, risk_factors, evidence_items"]
+
+    Q --> B
+    B --> A
+
+    R["근로지원인 수행기관 마커<br/>/api/v1/map/support-agencies"] -. "점수 미반영<br/>지도 레이어 전용" .-> A
+```
+
 
 지도 추천은 공고의 근무지 주변 접근성 공공데이터와 사용자 프로필을 함께 분석해 종합 점수를 계산합니다. 점수는 LLM이 직접 결정하지 않고, FastAPI의 룰 기반 스코어링 모듈이 계산합니다.
 
