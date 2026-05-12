@@ -89,6 +89,8 @@ def test_recommendation_explanation_contract_response_keys_are_stable(client):
         "recommendation_reasons",
         "caution_points",
         "checklist",
+        "next_step_summary",
+        "recommended_programs",
         "used_llm",
     }
 
