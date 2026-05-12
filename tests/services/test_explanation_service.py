@@ -157,9 +157,7 @@ def test_build_risk_factors_returns_check_needed_when_data_is_missing():
         gis_feature=gis_feature,
     )
 
-    wheelchair_station_message = (
-        "휠체어 이동에 필요한 역 엘리베이터 또는 리프트 정보가 충분하지 않습니다. 지원 전 확인을 권장합니다."
-    )
+    wheelchair_station_message = "휠체어 이동에 필요한 역 엘리베이터 또는 리프트 정보가 충분하지 않습니다. 지원 전 확인을 권장합니다."
     step_free_message = "근무지 출입구의 계단 없는 접근 가능 여부는 아직 확인되지 않았습니다. 지원 전 확인을 권장합니다."
     restroom_message = "장애인 화장실 정보가 아직 확인되지 않았습니다. 지원 전 확인을 권장합니다."
     elevator_message = "주변 역 또는 출입구의 엘리베이터·리프트 정보가 충분하지 않습니다. 지원 전 확인을 권장합니다."

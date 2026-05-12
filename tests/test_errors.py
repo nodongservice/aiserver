@@ -124,9 +124,7 @@ def test_runtime_error_logs_detailed_context(client, caplog):
 
     assert response.status_code == 500
 
-    records = [
-        record for record in caplog.records if record.name == "app.core.exceptions" and record.levelno == logging.ERROR
-    ]
+    records = [record for record in caplog.records if record.name == "app.core.exceptions" and record.levelno == logging.ERROR]
     assert records
 
     log_message = records[-1].getMessage()
@@ -157,9 +155,7 @@ def test_database_error_logs_sqlalchemy_details(client, caplog):
 
     assert response.status_code == 503
 
-    records = [
-        record for record in caplog.records if record.name == "app.core.exceptions" and record.levelno == logging.ERROR
-    ]
+    records = [record for record in caplog.records if record.name == "app.core.exceptions" and record.levelno == logging.ERROR]
     assert records
 
     log_message = records[-1].getMessage()

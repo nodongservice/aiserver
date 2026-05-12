@@ -89,6 +89,8 @@ def test_recommendation_explanation_contract_response_keys_are_stable(client):
         "recommendation_reasons",
         "caution_points",
         "checklist",
+        "next_step_summary",
+        "recommended_programs",
         "used_llm",
     }
 
@@ -123,17 +125,9 @@ def test_openapi_documents_common_api_response_contract(client):
     assert "errorCode" not in error_response_properties
 
     score_quick_responses = schema["paths"]["/api/v1/score/quick"]["post"]["responses"]
-    assert score_quick_responses["200"]["content"]["application/json"]["schema"]["$ref"] == (
-        "#/components/schemas/ApiResponse_QuickScoreResponse_"
-    )
-    assert score_quick_responses["422"]["content"]["application/json"]["schema"]["$ref"] == (
-        "#/components/schemas/ErrorResponse"
-    )
-    assert score_quick_responses["500"]["content"]["application/json"]["schema"]["$ref"] == (
-        "#/components/schemas/ErrorResponse"
-    )
+    assert score_quick_responses["200"]["content"]["application/json"]["schema"]["$ref"] == ("#/components/schemas/ApiResponse_QuickScoreResponse_")
+    assert score_quick_responses["422"]["content"]["application/json"]["schema"]["$ref"] == ("#/components/schemas/ErrorResponse")
+    assert score_quick_responses["500"]["content"]["application/json"]["schema"]["$ref"] == ("#/components/schemas/ErrorResponse")
 
     health_responses = schema["paths"]["/health"]["get"]["responses"]
-    assert health_responses["200"]["content"]["application/json"]["schema"]["$ref"] == (
-        "#/components/schemas/ApiResponse_HealthResult_"
-    )
+    assert health_responses["200"]["content"]["application/json"]["schema"]["$ref"] == ("#/components/schemas/ApiResponse_HealthResult_")

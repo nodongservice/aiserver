@@ -18,15 +18,7 @@ def get_records_by_source_type(
     기본적으로 is_active=True인 데이터만 반환합니다.
     """
 
-    return (
-        db.query(PublicDataRecord)
-        .filter(PublicDataRecord.source_type == source_type)
-        .filter(PublicDataRecord.is_active.is_(True))
-        .order_by(PublicDataRecord.id.desc())
-        .offset(offset)
-        .limit(limit)
-        .all()
-    )
+    return db.query(PublicDataRecord).filter(PublicDataRecord.source_type == source_type).filter(PublicDataRecord.is_active.is_(True)).order_by(PublicDataRecord.id.desc()).offset(offset).limit(limit).all()
 
 
 def get_record_by_id(
@@ -40,12 +32,7 @@ def get_record_by_id(
     추적할 때 사용할 수 있습니다.
     """
 
-    return (
-        db.query(PublicDataRecord)
-        .filter(PublicDataRecord.id == record_id)
-        .filter(PublicDataRecord.is_active.is_(True))
-        .first()
-    )
+    return db.query(PublicDataRecord).filter(PublicDataRecord.id == record_id).filter(PublicDataRecord.is_active.is_(True)).first()
 
 
 def get_fields_by_record_id(
@@ -56,12 +43,7 @@ def get_fields_by_record_id(
     특정 public_data_record에 연결된 펼친 필드 목록을 조회합니다.
     """
 
-    return (
-        db.query(PublicDataRecordField)
-        .filter(PublicDataRecordField.record_id == record_id)
-        .order_by(PublicDataRecordField.field_path.asc())
-        .all()
-    )
+    return db.query(PublicDataRecordField).filter(PublicDataRecordField.record_id == record_id).order_by(PublicDataRecordField.field_path.asc()).all()
 
 
 def find_fields_by_source_and_path(
@@ -81,11 +63,7 @@ def find_fields_by_source_and_path(
     - field_value=ABC복지센터
     """
 
-    query = (
-        db.query(PublicDataRecordField)
-        .filter(PublicDataRecordField.source_type == source_type)
-        .filter(PublicDataRecordField.field_path == field_path)
-    )
+    query = db.query(PublicDataRecordField).filter(PublicDataRecordField.source_type == source_type).filter(PublicDataRecordField.field_path == field_path)
 
     if field_value is not None:
         query = query.filter(PublicDataRecordField.field_value == field_value)
@@ -126,11 +104,4 @@ def get_records_with_fields_by_source_type(
     데이터가 많아지면 반드시 PostGIS ST_DWithin 기반 쿼리로 교체해야 합니다.
     """
 
-    return (
-        db.query(PublicDataRecord)
-        .filter(PublicDataRecord.source_type == source_type)
-        .filter(PublicDataRecord.is_active.is_(True))
-        .order_by(PublicDataRecord.id.desc())
-        .limit(limit)
-        .all()
-    )
+    return db.query(PublicDataRecord).filter(PublicDataRecord.source_type == source_type).filter(PublicDataRecord.is_active.is_(True)).order_by(PublicDataRecord.id.desc()).limit(limit).all()

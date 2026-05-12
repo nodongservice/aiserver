@@ -82,9 +82,7 @@ def verify_required_postgis() -> None:
         logger.info("PostGIS 확인 완료: %s", version)
     except DBAPIError as exc:
         logger.exception("REQUIRE_POSTGIS=true 이지만 PostGIS를 사용할 수 없습니다.")
-        raise RuntimeError(
-            "REQUIRE_POSTGIS=true 이지만 대상 DB에 PostGIS extension이 없거나 사용할 수 없습니다."
-        ) from exc
+        raise RuntimeError("REQUIRE_POSTGIS=true 이지만 대상 DB에 PostGIS extension이 없거나 사용할 수 없습니다.") from exc
 
 
 def verify_required_profile_draft_ocr_dependencies() -> None:

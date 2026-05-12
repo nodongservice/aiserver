@@ -230,9 +230,7 @@ def build_gis_feature_from_public_data_records(
         nearest_bus_stop_distance = nearby_bus_stops[0].distance_meters
 
     station_access_candidates = nearby_station_elevators + nearby_wheelchair_lifts
-    station_access_candidates.sort(
-        key=lambda item: item.distance_meters if item.distance_meters is not None else float("inf")
-    )
+    station_access_candidates.sort(key=lambda item: item.distance_meters if item.distance_meters is not None else float("inf"))
 
     nearest_station_access_distance = None
     if station_access_candidates:
@@ -371,10 +369,7 @@ def summarize_crosswalk_accessibility(
 
     has_pedestrian_traffic_light = any(is_yes_value(item.field_map.get("tfclghtYn")) for item in nearby_crosswalks)
 
-    has_accessible_pedestrian_signal = any(
-        is_yes_value(item.field_map.get("fnctngSgngnrYn")) or is_yes_value(item.field_map.get("sondSgngnrYn"))
-        for item in nearby_crosswalks
-    )
+    has_accessible_pedestrian_signal = any(is_yes_value(item.field_map.get("fnctngSgngnrYn")) or is_yes_value(item.field_map.get("sondSgngnrYn")) for item in nearby_crosswalks)
 
     has_curb_cut = any(is_yes_value(item.field_map.get("ftpthLowerYn")) for item in nearby_crosswalks)
 
@@ -405,9 +400,7 @@ def summarize_traffic_light_accessibility(
             "has_remaining_time_indicator": None,
         }
 
-    has_functioning_pedestrian_signal = any(
-        is_yes_value(item.field_map.get("fnctngSgngnrYn")) for item in nearby_traffic_lights
-    )
+    has_functioning_pedestrian_signal = any(is_yes_value(item.field_map.get("fnctngSgngnrYn")) for item in nearby_traffic_lights)
 
     has_audible_signal = any(is_yes_value(item.field_map.get("sondSgngnrYn")) for item in nearby_traffic_lights)
 

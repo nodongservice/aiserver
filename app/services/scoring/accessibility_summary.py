@@ -90,12 +90,7 @@ def calculate_accessibility_score(
         if transit_time.walk_distance_meters is not None and transit_time.walk_distance_meters >= 1200:
             score -= 4
 
-    accessibility_needs_text = " ".join(
-        profile.disability_types
-        + profile.assistive_devices
-        + profile.required_supports
-        + [profile.disability_description or ""]
-    )
+    accessibility_needs_text = " ".join(profile.disability_types + profile.assistive_devices + profile.required_supports + [profile.disability_description or ""])
     has_explicit_wheelchair_need = contains_any(accessibility_needs_text, keywords=["wheelchair", "휠체어"])
     has_mobility_support_need = contains_any(
         accessibility_needs_text,
