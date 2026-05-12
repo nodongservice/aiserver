@@ -216,7 +216,7 @@ class OpenAIExplanationProvider(ExplanationProvider):
                                     "detail_explanation": ("왜 추천되었는지에 해당하는 2~3개 근거를 한 문단으로 작성한다. 나열식 과잉 설명, risk penalty 같은 내부 계산 용어, API명 노출은 피한다."),
                                     "check_points": ("지원 전에 확인하면 좋은 실제 행동 2~3개. 집에서 근무지까지의 이동 시간, 정류장·횡단보도 동선, 출입구·엘리베이터·경사로 등 편의시설처럼 구체적으로 쓴다."),
                                     "next_step_summary": ("next_step_candidates가 있으면 '이런 준비가 도움이 될 수 있어요' 섹션의 요약 문장 1~2개를 작성한다. 후보가 없으면 빈 문자열을 반환한다."),
-                                    "recommended_programs": ("next_step_candidates에 있는 프로그램만 0~3개 고른다. 후보에 없는 프로그램명은 절대 만들지 않는다. title, source_type, record_id 등 식별 필드는 후보 값을 그대로 보존한다."),
+                                    "recommended_programs": ("next_step_candidates에 있는 프로그램만 0~2개 고른다. 후보에 없는 프로그램명은 절대 만들지 않는다. title, source_type, record_id 등 식별 필드는 후보 값을 그대로 보존한다."),
                                 },
                             },
                             ensure_ascii=False,

@@ -117,9 +117,9 @@ def select_recommended_programs(
             selected.append(program)
 
     if selected:
-        return selected[:3]
+        return selected[:2]
 
-    return fallback_programs[:3]
+    return fallback_programs[:2]
 
 
 def build_recommendation_reasons(

@@ -116,4 +116,4 @@ def sanitize_recommended_programs(values: Any) -> List[RecommendedProgram]:
             )
         )
 
-    return programs[:3]
+    return programs[:2]

@@ -1,5 +1,6 @@
 import logging
 import math
+import random
 import re
 from dataclasses import dataclass, field
 from datetime import datetime
@@ -171,8 +172,8 @@ def enrich_job_postings_with_public_data(db: Session, postings: list[JobPosting]
             }
 
         posting.development_context = [
-            *_matching_training_context(posting, trainings, limit=5),
-            *_matching_program_context(posting, programs, limit=3),
+            *_matching_training_context(posting, trainings, limit=2),
+            *_matching_program_context(posting, programs, limit=2),
         ]
 
     return postings
@@ -283,7 +284,7 @@ def _matching_training_context(
     *,
     limit: int,
 ) -> list[dict[str, object]]:
-    matches: list[tuple[int, PdVocationalTraining]] = []
+    matches: list[PdVocationalTraining] = []
     target = " ".join([posting.job_title, posting.required_licenses or "", posting.required_major or ""])
     for row in trainings:
         haystack = " ".join(
@@ -301,8 +302,8 @@ def _matching_training_context(
         )
         score = text_overlap_score(target, haystack)
         if score > 0:
-            matches.append((score, row))
-    matches.sort(key=lambda item: (item[0], item[1].stdg_scor or "", item[1].ei_empl_rate6 or ""), reverse=True)
+            matches.append(row)
+    random.Random(_posting_seed(posting, "training")).shuffle(matches)
     return [
         {
             "source_type": VOCATIONAL_TRAINING,
@@ -323,7 +324,7 @@ def _matching_training_context(
             "real_man": row.real_man,
             "yard_man": row.yard_man,
         }
-        for _, row in matches[:limit]
+        for row in matches[:limit]
     ]
 
 
@@ -333,7 +334,7 @@ def _matching_program_context(
     *,
     limit: int,
 ) -> list[dict[str, object]]:
-    matches: list[tuple[int, PdJobseekerCompetencyProgram]] = []
+    matches: list[PdJobseekerCompetencyProgram] = []
     for row in programs:
         haystack = " ".join(
             value
@@ -348,8 +349,8 @@ def _matching_program_context(
         )
         score = text_overlap_score(posting.job_title, haystack)
         if score > 0 or any(keyword in haystack for keyword in ["구직", "취업", "역량"]):
-            matches.append((score, row))
-    matches.sort(key=lambda item: (item[0], item[1].pgm_stdt or ""), reverse=True)
+            matches.append(row)
+    random.Random(_posting_seed(posting, "program")).shuffle(matches)
     return [
         {
             "source_type": JOBSEEKER_COMPETENCY_PROGRAM,
@@ -366,8 +367,12 @@ def _matching_program_context(
             "operation_time": row.operation_time,
             "open_plc_cont": row.open_plc_cont,
         }
-        for _, row in matches[:limit]
+        for row in matches[:limit]
     ]
+
+
+def _posting_seed(posting: JobPosting, category: str) -> str:
+    return f"{posting.job_post_id}:{posting.company_name}:{posting.job_title}:{category}"
 
 
 def text_overlap_score(left: str, right: str) -> int:
