@@ -6,6 +6,12 @@ on:
     branches:
       - main
   workflow_dispatch:
+    inputs:
+      run_ocr_runtime_smoke:
+        description: Run OCR runtime smoke during Docker build
+        required: false
+        default: false
+        type: boolean
 
 permissions:
   contents: read
@@ -54,6 +60,12 @@ jobs:
       - name: Install dependencies
         run: uv sync --dev
 
+      - name: Run lint
+        run: uv run ruff check .
+
+      - name: Check formatting
+        run: uv run ruff format --check .
+
       - name: Run tests
         run: uv run pytest -q
 
@@ -66,8 +78,9 @@ jobs:
       cancel-in-progress: false
 
     env:
-      IMAGE_PLATFORMS: linux/amd64,linux/arm64
+      IMAGE_PLATFORMS: linux/arm64
       REMOTE_APP_ROOT: ~/bridgework/aiserver
+      OCR_RUNTIME_SMOKE: ${{ github.event_name == 'workflow_dispatch' && inputs.run_ocr_runtime_smoke || false }}
 
     steps:
       - name: Checkout
@@ -81,6 +94,57 @@ jobs:
           echo "IMAGE_URI=$image_uri" >> "$GITHUB_ENV"
           echo "image_uri=$image_uri" >> "$GITHUB_OUTPUT"
           echo "Resolved image URI: $image_uri"
+
+      - name: Validate production deployment secrets
+        env:
+          PROD_DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          PROD_CORS_ALLOW_ORIGINS: ${{ secrets.CORS_ALLOW_ORIGINS }}
+          PROD_EXPLANATION_PROVIDER: ${{ secrets.EXPLANATION_PROVIDER }}
+          PROD_OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          EC2_HOST: ${{ secrets.EC2_HOST }}
+          EC2_USER: ${{ secrets.EC2_USER }}
+          EC2_SSH_PRIVATE_KEY: ${{ secrets.EC2_SSH_PRIVATE_KEY }}
+          EC2_SSH_KNOWN_HOSTS: ${{ secrets.EC2_SSH_KNOWN_HOSTS }}
+          GHCR_USERNAME: ${{ secrets.GHCR_USERNAME }}
+          GHCR_READ_TOKEN: ${{ secrets.GHCR_READ_TOKEN }}
+        run: |
+          python - <<'PY'
+          import os
+          import sys
+          from urllib.parse import urlsplit
+
+          required = {
+              "DATABASE_URL": "PROD_DATABASE_URL",
+              "CORS_ALLOW_ORIGINS": "PROD_CORS_ALLOW_ORIGINS",
+              "EXPLANATION_PROVIDER": "PROD_EXPLANATION_PROVIDER",
+              "OPENAI_API_KEY": "PROD_OPENAI_API_KEY",
+              "EC2_HOST": "EC2_HOST",
+              "EC2_USER": "EC2_USER",
+              "EC2_SSH_PRIVATE_KEY": "EC2_SSH_PRIVATE_KEY",
+              "EC2_SSH_KNOWN_HOSTS": "EC2_SSH_KNOWN_HOSTS",
+              "GHCR_USERNAME": "GHCR_USERNAME",
+              "GHCR_READ_TOKEN": "GHCR_READ_TOKEN",
+          }
+          missing = [name for name, env_name in required.items() if not os.environ.get(env_name, "").strip()]
+          if missing:
+              print("Missing required production secrets: " + ", ".join(missing))
+              sys.exit(1)
+
+          database_url = os.environ["PROD_DATABASE_URL"].strip()
+          if "\n" in database_url or "\r" in database_url:
+              print("DATABASE_URL secret must be a single line.")
+              sys.exit(1)
+
+          parsed = urlsplit(database_url)
+          if parsed.scheme not in {"postgresql", "postgresql+psycopg2"} or not parsed.netloc:
+              print("DATABASE_URL secret must look like postgresql+psycopg2://user:password@host:5432/dbname.")
+              sys.exit(1)
+
+          provider = os.environ["PROD_EXPLANATION_PROVIDER"].strip()
+          if provider not in {"openai", "rule_fallback"}:
+              print("EXPLANATION_PROVIDER secret must be one of: openai, rule_fallback.")
+              sys.exit(1)
+          PY
 
       - name: Set up QEMU
         uses: docker/setup-qemu-action@v3
@@ -102,26 +166,10 @@ jobs:
           platforms: ${{ env.IMAGE_PLATFORMS }}
           push: true
           tags: ${{ steps.image.outputs.image_uri }}
-
-      - name: Verify OCR runtime dependencies in image (amd64)
-        run: |
-          docker pull --platform linux/amd64 "$IMAGE_URI"
-          docker run --rm --platform linux/amd64 --entrypoint /app/.venv/bin/python "$IMAGE_URI" - <<'PY'
-          from app.services.profile_portfolio_draft_service import verify_profile_draft_ocr_runtime_dependencies
-
-          verify_profile_draft_ocr_runtime_dependencies()
-          print("OCR runtime dependency verification passed (amd64)")
-          PY
-
-      - name: Verify OCR runtime dependencies in image (arm64)
-        run: |
-          docker pull --platform linux/arm64 "$IMAGE_URI"
-          docker run --rm --platform linux/arm64 --entrypoint /app/.venv/bin/python "$IMAGE_URI" - <<'PY'
-          from app.services.profile_portfolio_draft_service import verify_profile_draft_ocr_runtime_dependencies
-
-          verify_profile_draft_ocr_runtime_dependencies()
-          print("OCR runtime dependency verification passed (arm64)")
-          PY
+          build-args: |
+            RUN_OCR_RUNTIME_SMOKE=${{ env.OCR_RUNTIME_SMOKE }}
+          cache-from: type=gha,scope=aiserver-linux-arm64
+          cache-to: type=gha,scope=aiserver-linux-arm64,mode=max
 
       - name: Generate production env file
         env:
@@ -139,14 +187,6 @@ jobs:
           PROD_REQUIRE_POSTGIS: ${{ secrets.REQUIRE_POSTGIS }}
           PROD_REQUIRE_PROFILE_DRAFT_OCR_DEPENDENCIES: ${{ secrets.REQUIRE_PROFILE_DRAFT_OCR_DEPENDENCIES }}
         run: |
-          if [ -n "$PROD_EXPLANATION_PROVIDER" ]; then
-            RESOLVED_EXPLANATION_PROVIDER="$PROD_EXPLANATION_PROVIDER"
-          elif [ -n "$PROD_OPENAI_API_KEY" ]; then
-            RESOLVED_EXPLANATION_PROVIDER="openai"
-          else
-            RESOLVED_EXPLANATION_PROVIDER="rule_fallback"
-          fi
-
           python - <<'PY'
           import os
           import sys
@@ -164,16 +204,25 @@ jobs:
           if parsed.scheme not in {"postgresql", "postgresql+psycopg2"} or not parsed.netloc:
               print("DATABASE_URL secret must look like postgresql+psycopg2://user:password@host:5432/dbname.")
               sys.exit(1)
+
+          explanation_provider = os.environ.get("PROD_EXPLANATION_PROVIDER", "").strip()
+          if explanation_provider not in {"openai", "rule_fallback"}:
+              print("EXPLANATION_PROVIDER secret must be one of: openai, rule_fallback.")
+              sys.exit(1)
+
+          if not os.environ.get("PROD_OPENAI_API_KEY", "").strip():
+              print("OPENAI_API_KEY secret is required for production profile draft and OpenAI-backed explanation flows.")
+              sys.exit(1)
           PY
 
           {
             echo "DATABASE_URL=${PROD_DATABASE_URL}"
-            echo "CORS_ALLOW_ORIGINS=${PROD_CORS_ALLOW_ORIGINS:-}"
-            echo "EXPLANATION_PROVIDER=${RESOLVED_EXPLANATION_PROVIDER}"
+            echo "CORS_ALLOW_ORIGINS=${PROD_CORS_ALLOW_ORIGINS}"
+            echo "EXPLANATION_PROVIDER=${PROD_EXPLANATION_PROVIDER}"
             echo "LLM_BASE_URL=${PROD_LLM_BASE_URL:-}"
             echo "LLM_API_KEY=${PROD_LLM_API_KEY:-}"
             echo "OPENAI_BASE_URL=${PROD_OPENAI_BASE_URL:-https://api.openai.com/v1}"
-            echo "OPENAI_API_KEY=${PROD_OPENAI_API_KEY:-}"
+            echo "OPENAI_API_KEY=${PROD_OPENAI_API_KEY}"
             echo "OPENAI_MODEL=${PROD_OPENAI_MODEL:-gpt-5.4-nano}"
             echo "OPENAI_TIMEOUT_SECONDS=${PROD_OPENAI_TIMEOUT_SECONDS:-8}"
             echo "LOG_LEVEL=${PROD_LOG_LEVEL:-INFO}"
@@ -188,6 +237,7 @@ jobs:
           EC2_PORT: ${{ secrets.EC2_PORT }}
           EC2_USER: ${{ secrets.EC2_USER }}
           EC2_SSH_PRIVATE_KEY: ${{ secrets.EC2_SSH_PRIVATE_KEY }}
+          EC2_SSH_KNOWN_HOSTS: ${{ secrets.EC2_SSH_KNOWN_HOSTS }}
         run: |
           EC2_HOST_TRIMMED="$(printf '%s' "$EC2_HOST" | tr -d '\r\n[:space:]')"
           EC2_PORT_TRIMMED="$(printf '%s' "${EC2_PORT:-22}" | tr -d '\r\n[:space:]')"
@@ -202,6 +252,21 @@ jobs:
             exit 1
           fi
 
+          if [ -z "$(printf '%s' "$EC2_USER" | tr -d '\r\n[:space:]')" ]; then
+            echo "EC2_USER is empty after trimming whitespace."
+            exit 1
+          fi
+
+          if [ -z "$EC2_SSH_PRIVATE_KEY" ]; then
+            echo "EC2_SSH_PRIVATE_KEY is empty."
+            exit 1
+          fi
+
+          if [ -z "$EC2_SSH_KNOWN_HOSTS" ]; then
+            echo "EC2_SSH_KNOWN_HOSTS is empty. Pin the expected SSH host key in this secret instead of keyscanning during deploy."
+            exit 1
+          fi
+
           {
             echo "EC2_HOST_TRIMMED=$EC2_HOST_TRIMMED"
             echo "EC2_PORT_TRIMMED=$EC2_PORT_TRIMMED"
@@ -211,6 +276,19 @@ jobs:
           printf '%s\n' "$EC2_SSH_PRIVATE_KEY" > ~/.ssh/id_ed25519
           chmod 600 ~/.ssh/id_ed25519
           ssh-keygen -y -f ~/.ssh/id_ed25519 > /dev/null
+          printf '%s\n' "$EC2_SSH_KNOWN_HOSTS" > ~/.ssh/known_hosts
+          chmod 600 ~/.ssh/known_hosts
+
+          if [ "$EC2_PORT_TRIMMED" = "22" ]; then
+            if ! ssh-keygen -F "$EC2_HOST_TRIMMED" -f ~/.ssh/known_hosts > /dev/null && \
+               ! ssh-keygen -F "[$EC2_HOST_TRIMMED]:22" -f ~/.ssh/known_hosts > /dev/null; then
+              echo "EC2_SSH_KNOWN_HOSTS does not contain the configured host."
+              exit 1
+            fi
+          elif ! ssh-keygen -F "[$EC2_HOST_TRIMMED]:$EC2_PORT_TRIMMED" -f ~/.ssh/known_hosts > /dev/null; then
+            echo "EC2_SSH_KNOWN_HOSTS does not contain the configured host and port."
+            exit 1
+          fi
 
           export EC2_HOST_TRIMMED EC2_PORT_TRIMMED
           python - <<'PY'
@@ -239,8 +317,6 @@ jobs:
           print("TCP connection ok")
           PY
 
-          echo "Scanning SSH host key for configured EC2 host."
-          ssh-keyscan -T 10 -p "$EC2_PORT_TRIMMED" "$EC2_HOST_TRIMMED" > ~/.ssh/known_hosts
           ssh -i ~/.ssh/id_ed25519 \
             -p "$EC2_PORT_TRIMMED" \
             -o BatchMode=yes \

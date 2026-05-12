@@ -29,11 +29,12 @@ BLUE_PORT="${BLUE_PORT:-19000}"
 GREEN_PORT="${GREEN_PORT:-19001}"
 CONTAINER_PORT="${CONTAINER_PORT:-8000}"
 
-HEALTH_ENDPOINT="${HEALTH_ENDPOINT:-/health}"
 HEALTH_TIMEOUT_SECONDS="${HEALTH_TIMEOUT_SECONDS:-120}"
 HEALTH_INTERVAL_SECONDS="${HEALTH_INTERVAL_SECONDS:-2}"
 HEALTH_CONNECT_TIMEOUT_SECONDS="${HEALTH_CONNECT_TIMEOUT_SECONDS:-2}"
 HEALTH_REQUEST_TIMEOUT_SECONDS="${HEALTH_REQUEST_TIMEOUT_SECONDS:-3}"
+HEALTH_REQUIRE_DB="${HEALTH_REQUIRE_DB:-true}"
+HEALTH_REQUIRE_POSTGIS="${HEALTH_REQUIRE_POSTGIS:-true}"
 
 IMAGE_URI="${IMAGE_URI:-}"
 IMAGE_RETENTION_COUNT="${IMAGE_RETENTION_COUNT:-5}"
@@ -201,22 +202,67 @@ docker run -d \
   "$IMAGE_URI" >/dev/null
 log "새 컨테이너 실행 완료: $(( $(date +%s) - run_started_at ))s"
 
-wait_for_health() {
+fetch_health_body() {
   local url="$1"
+
+  curl \
+    --connect-timeout "$HEALTH_CONNECT_TIMEOUT_SECONDS" \
+    --max-time "$HEALTH_REQUEST_TIMEOUT_SECONDS" \
+    -fsS "$url"
+}
+
+check_readiness() {
+  local base_url="$1"
+  local require_db="$2"
+  local require_postgis="$3"
+  local body
+
+  if ! body="$(fetch_health_body "${base_url}/health" 2>&1)"; then
+    printf '/health request failed: %s\n' "$body" >&2
+    return 1
+  fi
+  if [[ "$body" != *'"code":"SUCCESS"'* || "$body" != *'"status":"ok"'* ]]; then
+    printf '/health returned unexpected body: %s\n' "$body" >&2
+    return 1
+  fi
+
+  if [[ "$require_db" == "true" ]]; then
+    if ! body="$(fetch_health_body "${base_url}/db-health" 2>&1)"; then
+      printf '/db-health request failed: %s\n' "$body" >&2
+      return 1
+    fi
+    if [[ "$body" != *'"code":"SUCCESS"'* || "$body" != *'"status":"ok"'* || "$body" != *'"database":"connected"'* ]]; then
+      printf '/db-health returned unexpected body: %s\n' "$body" >&2
+      return 1
+    fi
+  fi
+
+  if [[ "$require_postgis" == "true" ]]; then
+    if ! body="$(fetch_health_body "${base_url}/postgis-health" 2>&1)"; then
+      printf '/postgis-health request failed: %s\n' "$body" >&2
+      return 1
+    fi
+    if [[ "$body" != *'"code":"SUCCESS"'* || "$body" != *'"status":"ok"'* || "$body" != *'"postgis":"enabled"'* ]]; then
+      printf '/postgis-health returned unexpected body: %s\n' "$body" >&2
+      return 1
+    fi
+  fi
+}
+
+wait_for_readiness() {
+  local base_url="$1"
   local timeout="$2"
   local interval="$3"
   local container_name="$4"
   local waited=0
+  local last_error=""
 
   while (( waited < timeout )); do
     if ! docker ps --format '{{.Names}}' | grep -q "^${container_name}$"; then
       return 2
     fi
 
-    if curl \
-      --connect-timeout "$HEALTH_CONNECT_TIMEOUT_SECONDS" \
-      --max-time "$HEALTH_REQUEST_TIMEOUT_SECONDS" \
-      -fsS "$url" >/dev/null 2>&1; then
+    if last_error="$(check_readiness "$base_url" "$HEALTH_REQUIRE_DB" "$HEALTH_REQUIRE_POSTGIS" 2>&1)"; then
       return 0
     fi
 
@@ -224,20 +270,23 @@ wait_for_health() {
     waited=$((waited + interval))
   done
 
+  if [[ -n "$last_error" ]]; then
+    log "마지막 readiness 실패 사유: $last_error"
+  fi
   return 1
 }
 
-HEALTH_URL="http://127.0.0.1:${TARGET_PORT}${HEALTH_ENDPOINT}"
+READINESS_BASE_URL="http://127.0.0.1:${TARGET_PORT}"
 health_started_at="$(date +%s)"
-log "헬스체크 대기: $HEALTH_URL"
-if ! wait_for_health "$HEALTH_URL" "$HEALTH_TIMEOUT_SECONDS" "$HEALTH_INTERVAL_SECONDS" "$TARGET_CONTAINER"; then
-  log "헬스체크 실패. 새 컨테이너를 제거하고 배포를 중단합니다."
+log "readiness 체크 대기: ${READINESS_BASE_URL} (/health, /db-health, /postgis-health)"
+if ! wait_for_readiness "$READINESS_BASE_URL" "$HEALTH_TIMEOUT_SECONDS" "$HEALTH_INTERVAL_SECONDS" "$TARGET_CONTAINER"; then
+  log "readiness 체크 실패. 새 컨테이너를 제거하고 배포를 중단합니다."
   docker ps -a --filter "name=${TARGET_CONTAINER}" --format 'table {{.Names}}\t{{.Status}}' || true
   docker logs --tail 120 "$TARGET_CONTAINER" || true
   docker rm -f "$TARGET_CONTAINER" >/dev/null 2>&1 || true
   exit 1
 fi
-log "헬스체크 성공: $(( $(date +%s) - health_started_at ))s"
+log "readiness 체크 성공: $(( $(date +%s) - health_started_at ))s"
 
 if [[ ! -f "$UPSTREAM_SWITCH_SCRIPT" ]]; then
   log "공통 인프라 전환 스크립트가 없습니다: $UPSTREAM_SWITCH_SCRIPT"

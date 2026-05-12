@@ -44,6 +44,11 @@ RUN apt-get update \
 COPY --from=builder /app/.venv /app/.venv
 COPY --from=builder /app/app /app/app
 
+ARG RUN_OCR_RUNTIME_SMOKE=false
+RUN if [ "$RUN_OCR_RUNTIME_SMOKE" = "true" ]; then \
+      /app/.venv/bin/python -c "from app.services.profile_portfolio_draft_service import verify_profile_draft_ocr_runtime_dependencies; verify_profile_draft_ocr_runtime_dependencies(); print('OCR runtime dependency verification passed')"; \
+    fi
+
 EXPOSE 8000
 
 CMD ["/app/.venv/bin/python", "-m", "uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]
