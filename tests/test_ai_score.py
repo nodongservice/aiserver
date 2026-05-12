@@ -17,14 +17,27 @@ from app.repositories.scoring_repository import (
     to_standard_workplace_match,
 )
 from app.schemas.explanation import ExplanationGenerateResponse
-from app.schemas.score import JobPosting, MapScoreDetail, RecommendationExplainRequest, ScoreProfile, ScoreRequest
+from app.schemas.score import (
+    JobPosting,
+    MapScoreDetail,
+    RecommendationExplainRequest,
+    ScoreProfile,
+    ScoreRequest,
+)
 from app.services import recommendation_explanation_service, score_service
 from app.services.scoring.accessibility_summary import calculate_accessibility_score
 from app.services.scoring.disability_support import calculate_disability_support_score
 from app.services.scoring.job_fit import calculate_job_fit_score
-from app.services.scoring.work_condition import calculate_work_condition_score, normalize_annual_salary
+from app.services.scoring.work_condition import (
+    calculate_work_condition_score,
+    normalize_annual_salary,
+)
 from app.services.scoring.work_environment import calculate_work_environment_score
-from app.services.transit_time_service import TransitTimeEstimate, calculate_next_weekday_8, parse_odsay_transit_time
+from app.services.transit_time_service import (
+    TransitTimeEstimate,
+    calculate_next_weekday_8,
+    parse_odsay_transit_time,
+)
 
 
 def build_score_payload(**profile_overrides):
@@ -52,14 +65,22 @@ def test_ai_score_quick_contract_accepts_selected_profile(client, override_get_d
     response = client.post("/api/v1/score/quick", json=build_score_payload())
 
     assert response.status_code == 200, response.json()
-    assert response.json() == {"code": "SUCCESS", "message": "성공", "result": {"results": []}}
+    assert response.json() == {
+        "code": "SUCCESS",
+        "message": "성공",
+        "result": {"results": []},
+    }
 
 
 def test_ai_score_map_contract_accepts_selected_profile(client, override_get_db):
     response = client.post("/api/v1/score/map", json=build_score_payload())
 
     assert response.status_code == 200, response.json()
-    assert response.json() == {"code": "SUCCESS", "message": "성공", "result": {"results": []}}
+    assert response.json() == {
+        "code": "SUCCESS",
+        "message": "성공",
+        "result": {"results": []},
+    }
 
 
 def test_quick_score_accepts_partial_profile_fields(client, override_get_db):
@@ -74,7 +95,11 @@ def test_quick_score_accepts_partial_profile_fields(client, override_get_db):
     )
 
     assert response.status_code == 200, response.json()
-    assert response.json() == {"code": "SUCCESS", "message": "성공", "result": {"results": []}}
+    assert response.json() == {
+        "code": "SUCCESS",
+        "message": "성공",
+        "result": {"results": []},
+    }
 
 
 def test_map_score_accepts_partial_profile_fields(client, override_get_db):
@@ -91,7 +116,11 @@ def test_map_score_accepts_partial_profile_fields(client, override_get_db):
     )
 
     assert response.status_code == 200, response.json()
-    assert response.json() == {"code": "SUCCESS", "message": "성공", "result": {"results": []}}
+    assert response.json() == {
+        "code": "SUCCESS",
+        "message": "성공",
+        "result": {"results": []},
+    }
 
 
 def test_score_profile_null_lists_are_treated_as_empty(client, override_get_db):
@@ -111,7 +140,11 @@ def test_score_profile_null_lists_are_treated_as_empty(client, override_get_db):
     )
 
     assert response.status_code == 200, response.json()
-    assert response.json() == {"code": "SUCCESS", "message": "성공", "result": {"results": []}}
+    assert response.json() == {
+        "code": "SUCCESS",
+        "message": "성공",
+        "result": {"results": []},
+    }
 
 
 def test_score_profile_normalizes_spring_profile_enum_codes_for_scoring():
@@ -266,8 +299,8 @@ def test_recommendation_explanation_uses_configured_provider(monkeypatch):
     assert captured["request"].score_detail.work_environment_score == 0
     assert response.used_llm is True
     assert response.short_summary == "ABC복지센터: LLM 요약"
-    assert response.recommendation_reasons == ["LLM 상세 설명"]
-    assert response.caution_points == ["지원 전 접근성 확인이 필요합니다."]
+    assert response.recommendation_reasons == ["희망 직무와 모집 직종이 겹칩니다."]
+    assert response.caution_points == ["현재 일부 접근성 데이터가 충분하지 않아, 실제 환경은 현장 상황에 따라 다를 수 있어요."]
     assert response.checklist == ["LLM 체크포인트"]
 
 
@@ -375,7 +408,11 @@ def test_quick_score_preserves_latest_order(monkeypatch):
         required_education="무관",
         employment_type="계약직",
     )
-    monkeypatch.setattr(score_service, "get_latest_job_postings", lambda db, limit, offset: [unrelated, matching])
+    monkeypatch.setattr(
+        score_service,
+        "get_latest_job_postings",
+        lambda db, limit, offset: [unrelated, matching],
+    )
 
     response = score_service.score_quick_jobs(
         ScoreRequest(
@@ -445,9 +482,7 @@ def test_accessibility_score_reflects_spec_additional_sources():
         },
     )
 
-    assert calculate_accessibility_score(profile, with_additional_sources, posting) > calculate_accessibility_score(
-        profile, without_additional_sources, posting
-    )
+    assert calculate_accessibility_score(profile, with_additional_sources, posting) > calculate_accessibility_score(profile, without_additional_sources, posting)
 
 
 def test_map_score_uses_equal_weight_average(monkeypatch):
@@ -501,17 +536,7 @@ def test_map_score_uses_equal_weight_average(monkeypatch):
     )
 
     result = response.results[0]
-    expected = round(
-        (
-            result.score_detail.job_fit_score
-            + result.score_detail.work_condition_score
-            + result.score_detail.disability_support_score
-            + result.score_detail.work_environment_score
-            + result.score_detail.company_stability_score
-            + result.score_detail.accessibility_score
-        )
-        / 6
-    )
+    expected = round((result.score_detail.job_fit_score + result.score_detail.work_condition_score + result.score_detail.disability_support_score + result.score_detail.work_environment_score + result.score_detail.company_stability_score + result.score_detail.accessibility_score) / 6)
     assert result.total_score == expected
     assert result.evidence_items[1].source_table == "pd_kepad_standard_workplace"
 
@@ -618,9 +643,7 @@ def test_accessibility_score_penalizes_jobs_outside_mobility_range():
         work_lng=127.1000,
     )
 
-    assert calculate_accessibility_score(profile, evidence, nearby) > calculate_accessibility_score(
-        profile, evidence, far
-    )
+    assert calculate_accessibility_score(profile, evidence, nearby) > calculate_accessibility_score(profile, evidence, far)
 
 
 def test_next_weekday_departure_policy_skips_weekend():
@@ -704,9 +727,7 @@ def test_accessibility_score_reflects_transit_commute_limit():
         requested_departure_at="2026-05-13T08:00:00+09:00",
     )
 
-    assert calculate_accessibility_score(profile, evidence, posting, within_limit) > calculate_accessibility_score(
-        profile, evidence, posting, over_limit
-    )
+    assert calculate_accessibility_score(profile, evidence, posting, within_limit) > calculate_accessibility_score(profile, evidence, posting, over_limit)
 
 
 def test_accessibility_score_uses_more_granular_evidence_buckets():
@@ -744,9 +765,7 @@ def test_accessibility_score_uses_more_granular_evidence_buckets():
     )
 
     assert calculate_accessibility_score(profile, bus_only, posting) != 47
-    assert calculate_accessibility_score(profile, richer, posting) > calculate_accessibility_score(
-        profile, bus_only, posting
-    )
+    assert calculate_accessibility_score(profile, richer, posting) > calculate_accessibility_score(profile, bus_only, posting)
 
 
 def test_accessibility_score_treats_physical_disability_as_mobility_support_need():
@@ -770,9 +789,7 @@ def test_accessibility_score_treats_physical_disability_as_mobility_support_need
     physical_profile = ScoreProfile(disability_types=["PHYSICAL"], disability_severity="중증")
     hearing_profile = ScoreProfile(disability_types=["HEARING"], disability_severity="중증")
 
-    assert calculate_accessibility_score(
-        physical_profile, evidence_without_mobility_support, posting
-    ) < calculate_accessibility_score(
+    assert calculate_accessibility_score(physical_profile, evidence_without_mobility_support, posting) < calculate_accessibility_score(
         hearing_profile,
         evidence_without_mobility_support,
         posting,
@@ -813,9 +830,7 @@ def test_accessibility_score_reflects_detailed_spec_columns():
         work_lng=126.9823,
     )
 
-    assert calculate_accessibility_score(profile, detailed, posting) > calculate_accessibility_score(
-        profile, base, posting
-    )
+    assert calculate_accessibility_score(profile, detailed, posting) > calculate_accessibility_score(profile, base, posting)
 
 
 def test_parse_public_date_handles_non_zero_padded_values():
