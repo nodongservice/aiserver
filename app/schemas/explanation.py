@@ -7,6 +7,21 @@ from pydantic import BaseModel, Field
 from app.schemas.analysis import EvidenceItem, ScoreDetail
 
 
+class RecommendedProgram(BaseModel):
+    """
+    추천 설명과 함께 노출할 다음 단계 프로그램입니다.
+    """
+
+    title: str
+    reason: str
+    source_type: str
+    record_id: Optional[int] = None
+    provider_name: Optional[str] = None
+    start_date: Optional[str] = None
+    location: Optional[str] = None
+    url: Optional[str] = None
+
+
 class ExplanationGenerateRequest(BaseModel):
     """
     접근성 분석 결과를 바탕으로 사용자에게 보여줄 설명 문구를 생성하기 위한 요청입니다.
@@ -76,6 +91,12 @@ class ExplanationGenerateResponse(BaseModel):
 
     # 사용자에게 확인을 권장할 사항
     check_points: List[str] = Field(default_factory=list)
+
+    # 다음 단계 안내 요약
+    next_step_summary: Optional[str] = None
+
+    # 실제 공공데이터 후보에서 추린 추천 프로그램
+    recommended_programs: List[RecommendedProgram] = Field(default_factory=list)
 
     # LLM 사용 여부
     # 현재 Phase 10에서는 False입니다.

@@ -4,6 +4,7 @@ from app.schemas.analysis import EvidenceItem, ScoreDetail
 from app.schemas.explanation import (
     ExplanationGenerateRequest,
     ExplanationGenerateResponse,
+    RecommendedProgram,
 )
 from app.schemas.score import (
     RecommendationExplainRequest,
@@ -11,6 +12,7 @@ from app.schemas.score import (
 )
 from app.services.explanation_provider_service import generate_explanation_with_provider
 from app.services.llm_explanation_service import DEFAULT_NO_RISK_MESSAGE
+from app.services.next_step_program_service import build_next_step_summary, build_recommended_programs
 
 
 def explain_recommendation(
@@ -46,6 +48,8 @@ def build_explanation_generate_request(
                 description=item.description,
                 distance_meters=item.distance_meters,
                 record_id=item.record_id,
+                source_table=item.source_table,
+                fields=item.fields,
             )
             for item in request.evidence_items
         ],
@@ -83,14 +87,39 @@ def to_recommendation_explain_response(
     short_summary = provider_response.short_summary
     if request.job.company_name not in short_summary:
         short_summary = f"{request.job.company_name}: {short_summary}"
+    generate_request = build_explanation_generate_request(request)
+    recommended_programs = select_recommended_programs(
+        provider_response.recommended_programs,
+        build_recommended_programs(generate_request),
+    )
 
     return RecommendationExplainResponse(
         short_summary=short_summary,
         recommendation_reasons=build_recommendation_reasons(request, provider_response),
         caution_points=build_reference_notes(request),
         checklist=provider_response.check_points,
+        next_step_summary=provider_response.next_step_summary or build_next_step_summary(generate_request, recommended_programs),
+        recommended_programs=[program.model_dump() for program in recommended_programs],
         used_llm=provider_response.used_llm,
     )
+
+
+def select_recommended_programs(
+    llm_programs: list[RecommendedProgram],
+    fallback_programs: list[RecommendedProgram],
+) -> list[RecommendedProgram]:
+    allowed = {(program.source_type, program.record_id, program.title) for program in fallback_programs}
+    selected: list[RecommendedProgram] = []
+
+    for program in llm_programs:
+        key = (program.source_type, program.record_id, program.title)
+        if key in allowed:
+            selected.append(program)
+
+    if selected:
+        return selected[:3]
+
+    return fallback_programs[:3]
 
 
 def build_recommendation_reasons(

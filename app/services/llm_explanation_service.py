@@ -4,6 +4,7 @@ from app.schemas.explanation import (
     ExplanationGenerateRequest,
     ExplanationGenerateResponse,
 )
+from app.services.next_step_program_service import build_next_step_summary, build_recommended_programs
 
 EXPLANATION_VERSION = "v1-rule-fallback"
 DEFAULT_NO_RISK_MESSAGE = "현재 확인된 주요 위험 요인은 없습니다."
@@ -38,12 +39,15 @@ def generate_accessibility_explanation(
     short_summary = build_short_summary(request)
     detail_explanation = build_detail_explanation(request)
     check_points = build_check_points(request)
+    recommended_programs = build_recommended_programs(request)
 
     return ExplanationGenerateResponse(
         explanation_version=EXPLANATION_VERSION,
         short_summary=short_summary,
         detail_explanation=detail_explanation,
         check_points=check_points,
+        next_step_summary=build_next_step_summary(request, recommended_programs),
+        recommended_programs=recommended_programs,
         used_llm=False,
     )
 

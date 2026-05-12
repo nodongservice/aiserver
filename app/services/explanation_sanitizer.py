@@ -1,6 +1,6 @@
 from typing import Any, Dict, List
 
-from app.schemas.explanation import ExplanationGenerateResponse
+from app.schemas.explanation import ExplanationGenerateResponse, RecommendedProgram
 from app.services.llm_explanation_service import DEFAULT_CHECK_POINT
 
 DETERMINISTIC_UNSAFE_REPLACEMENTS = {
@@ -27,6 +27,8 @@ def sanitize_explanation_payload(
     short_summary = sanitize_text(payload.get("short_summary", ""))
     detail_explanation = sanitize_text(payload.get("detail_explanation", ""))
     raw_check_points = payload.get("check_points", [])
+    next_step_summary = sanitize_text(payload.get("next_step_summary", ""))
+    recommended_programs = sanitize_recommended_programs(payload.get("recommended_programs", []))
 
     if not short_summary:
         short_summary = "현재 조건 기준 접근성 설명을 생성했지만 일부 내용은 추가 확인이 필요합니다."
@@ -41,6 +43,8 @@ def sanitize_explanation_payload(
         short_summary=short_summary,
         detail_explanation=detail_explanation,
         check_points=check_points,
+        next_step_summary=next_step_summary or None,
+        recommended_programs=recommended_programs,
         used_llm=used_llm,
     )
 
@@ -78,3 +82,38 @@ def sanitize_text(text: Any) -> str:
         normalized = normalized.replace(unsafe_text, safe_text)
 
     return normalized
+
+
+def sanitize_recommended_programs(values: Any) -> List[RecommendedProgram]:
+    if not isinstance(values, list):
+        return []
+
+    programs: List[RecommendedProgram] = []
+    seen_titles: set[str] = set()
+
+    for value in values:
+        if not isinstance(value, dict):
+            continue
+
+        title = sanitize_text(value.get("title"))
+        reason = sanitize_text(value.get("reason"))
+        source_type = sanitize_text(value.get("source_type"))
+
+        if not title or not reason or not source_type or title in seen_titles:
+            continue
+
+        seen_titles.add(title)
+        programs.append(
+            RecommendedProgram(
+                title=title,
+                reason=reason,
+                source_type=source_type,
+                record_id=value.get("record_id") if isinstance(value.get("record_id"), int) else None,
+                provider_name=sanitize_text(value.get("provider_name")) or None,
+                start_date=sanitize_text(value.get("start_date")) or None,
+                location=sanitize_text(value.get("location")) or None,
+                url=sanitize_text(value.get("url")) or None,
+            )
+        )
+
+    return programs[:3]

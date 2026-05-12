@@ -21,6 +21,7 @@ from app.schemas.score import (
     JobPosting,
     MapScoreDetail,
     RecommendationExplainRequest,
+    ScoreEvidenceItem,
     ScoreProfile,
     ScoreRequest,
 )
@@ -302,6 +303,70 @@ def test_recommendation_explanation_uses_configured_provider(monkeypatch):
     assert response.recommendation_reasons == ["희망 직무와 모집 직종이 겹칩니다."]
     assert response.caution_points == ["현재 일부 접근성 데이터가 충분하지 않아, 실제 환경은 현장 상황에 따라 다를 수 있어요."]
     assert response.checklist == ["LLM 체크포인트"]
+
+
+def test_recommendation_explanation_returns_next_step_programs_from_evidence(monkeypatch):
+    def fake_generate(request, provider_name=None):
+        return ExplanationGenerateResponse(
+            explanation_version="v1-test",
+            short_summary="요약",
+            detail_explanation="상세 설명",
+            check_points=["통근 동선을 확인해 주세요."],
+            used_llm=False,
+        )
+
+    monkeypatch.setattr(
+        recommendation_explanation_service,
+        "generate_explanation_with_provider",
+        fake_generate,
+    )
+
+    response = recommendation_explanation_service.explain_recommendation(
+        RecommendationExplainRequest(
+            profile=ScoreProfile(user_id=1, desired_jobs=["환경미화"]),
+            job=JobPosting(
+                job_post_id=1,
+                company_name="ABC복지센터",
+                job_title="환경미화원",
+            ),
+            job_fit_score=70,
+            reasons=["관련 직업훈련 또는 취업역량 프로그램 데이터를 보완 근거로 연결했습니다."],
+            risk_factors=["작업환경 확인이 필요합니다."],
+            evidence_items=[
+                ScoreEvidenceItem(
+                    source_type="VOCATIONAL_TRAINING",
+                    source_name="한국고용정보원_직업훈련_국민내일배움카드 훈련과정",
+                    source_table="pd_vocational_training",
+                    record_id=10,
+                    description="직무 보완 또는 취업역량 강화에 활용 가능한 공공 프로그램 데이터입니다.",
+                    fields={
+                        "title": "청소·환경미화 직무 기초교육",
+                        "tra_start_date": "2026-06-01",
+                        "address": "서울",
+                    },
+                ),
+                ScoreEvidenceItem(
+                    source_type="JOBSEEKER_COMPETENCY_PROGRAM",
+                    source_name="한국고용정보원_구직자취업역량 강화프로그램",
+                    source_table="pd_jobseeker_competency_program",
+                    record_id=11,
+                    description="직무 보완 또는 취업역량 강화에 활용 가능한 공공 프로그램 데이터입니다.",
+                    fields={
+                        "pgm_nm": "취업희망",
+                        "pgm_sub_nm": "직업 적응 훈련 프로그램",
+                        "org_nm": "서울고용센터",
+                        "pgm_stdt": "20260603",
+                    },
+                ),
+            ],
+        )
+    )
+
+    assert response.next_step_summary
+    assert len(response.recommended_programs) == 2
+    titles = [program["title"] for program in response.recommended_programs]
+    assert "직업 적응 훈련 프로그램" in titles
+    assert "청소·환경미화 직무 기초교육" in titles
 
 
 def test_recommendation_explanation_uses_total_score_for_map_provider(monkeypatch):

@@ -247,4 +247,6 @@ class RecommendationExplainResponse(BaseModel):
     recommendation_reasons: List[str] = Field(default_factory=list)
     caution_points: List[str] = Field(default_factory=list)
     checklist: List[str] = Field(default_factory=list)
+    next_step_summary: Optional[str] = None
+    recommended_programs: List[dict[str, Any]] = Field(default_factory=list)
     used_llm: bool = False
