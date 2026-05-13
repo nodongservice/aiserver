@@ -206,6 +206,8 @@ class MapScoreDetail(BaseModel):
     work_environment_score: int
     company_stability_score: int
     accessibility_score: int
+    distance_score: Optional[int] = None
+    commute_score: Optional[int] = None
 
 
 class RecommendationScoreDetail(BaseModel):
@@ -215,6 +217,8 @@ class RecommendationScoreDetail(BaseModel):
     work_environment_score: Optional[int] = None
     company_stability_score: Optional[int] = None
     accessibility_score: Optional[int] = None
+    distance_score: Optional[int] = None
+    commute_score: Optional[int] = None
 
 
 class MapScoreResult(BaseModel):

@@ -15,6 +15,14 @@ from app.services.next_step_program_service import build_next_step_summary, buil
 OPENAI_EXPLANATION_VERSION = "v2-openai-sanitized"
 
 
+def _display_grade_from_score(score: int) -> str:
+    if score >= 80:
+        return "A등급"
+    if score >= 60:
+        return "B등급"
+    return "C등급"
+
+
 class OpenAIExplanationProvider(ExplanationProvider):
     """
     OpenAI Responses API를 사용하는 설명 provider입니다.
@@ -191,7 +199,7 @@ class OpenAIExplanationProvider(ExplanationProvider):
                                 "score_mode": request.score_mode,
                                 "primary_score": request.accessibility_score,
                                 "primary_score_label": "직무 적합도 점수" if request.score_mode == "quick" else "종합 추천 점수",
-                                "grade": request.accessibility_grade,
+                                "grade": _display_grade_from_score(request.accessibility_score),
                                 "score_detail": request.score_detail.model_dump(),
                                 "positive_factors": request.positive_factors[:5],
                                 "risk_factors": request.risk_factors[:5],
@@ -210,6 +218,7 @@ class OpenAIExplanationProvider(ExplanationProvider):
                                     "language": "ko",
                                     "tone": "friendly_accessibility_counselor",
                                     "must_preserve_score_and_grade": True,
+                                    "grade_terms": "GOOD, CAUTION, WARNING, ERROR, RISK 같은 내부 등급명은 쓰지 말고 A등급, B등급, C등급만 쓴다.",
                                     "must_not_add_new_facts": True,
                                     "must_include_check_points": True,
                                     "short_summary": ("추천 요약에 해당하는 2~3문장. 회사명, 직무명, 점수를 자연스럽게 포함하고 부족한 데이터가 있으면 마지막 문장에서 지원 전 확인을 권장한다."),
