@@ -8,6 +8,11 @@ DETERMINISTIC_UNSAFE_REPLACEMENTS = {
     "접근성이 없습니다": "접근성 정보가 충분하지 않습니다",
     "이용할 수 없습니다": "이용 가능 여부는 추가 확인이 필요합니다",
     "불가능합니다": "판단하기 어렵습니다",
+    "GOOD": "A등급",
+    "WARNING": "B등급",
+    "CAUTION": "B등급",
+    "ERROR": "C등급",
+    "RISK": "C등급",
 }
 
 

@@ -44,6 +44,7 @@ from app.services.transit_time_service import (
     TransitTimeEstimate,
     get_transit_time_estimate,
 )
+from app.utils.geo import calculate_haversine_distance_meters
 
 MAP_SCORING_MIN_CANDIDATE_LIMIT = 80
 ACCESSIBILITY_CACHE_TTL_SECONDS = 10 * 60
@@ -106,6 +107,8 @@ def score_map_jobs(request: ScoreRequest, db: Optional[Session] = None) -> MapSc
             work_environment_score=calculate_work_environment_score(request.profile, posting),
             company_stability_score=calculate_company_stability_score(posting, standard_workplace),
             accessibility_score=calculate_accessibility_score(request.profile, accessibility, posting, transit_time),
+            distance_score=calculate_home_work_distance_score(request.profile, posting),
+            commute_score=calculate_commute_score(transit_time),
         )
         total_score = calculate_equal_weight_total_score(score_detail)
         evidence_items = build_score_evidence_items(posting, standard_workplace, accessibility, transit_time)
@@ -372,8 +375,48 @@ def calculate_equal_weight_total_score(score_detail: MapScoreDetail) -> int:
         score_detail.work_environment_score,
         score_detail.company_stability_score,
         score_detail.accessibility_score,
+        score_detail.distance_score,
+        score_detail.commute_score,
     ]
-    return clamp_score(round(sum(values) / len(values)))
+    available_values = [value for value in values if value is not None]
+    return clamp_score(round(sum(available_values) / len(available_values)))
+
+
+def calculate_home_work_distance_score(profile: ScoreProfile, posting: JobPosting) -> Optional[int]:
+    if profile.home_lat is None or profile.home_lng is None or posting.work_lat is None or posting.work_lng is None:
+        return None
+
+    distance_meters = calculate_haversine_distance_meters(
+        profile.home_lat,
+        profile.home_lng,
+        posting.work_lat,
+        posting.work_lng,
+    )
+    if distance_meters is None:
+        return None
+
+    distance_km = distance_meters / 1000
+    score = 100 - (distance_km**0.9 * 2.4)
+
+    if profile.mobility_range_km is not None and distance_km > profile.mobility_range_km:
+        score -= min(20, (distance_km - profile.mobility_range_km) * 1.5)
+
+    return clamp_score(round(score))
+
+
+def calculate_commute_score(transit_time: Optional[TransitTimeEstimate]) -> Optional[int]:
+    if transit_time is None or transit_time.duration_minutes is None or transit_time.error_reason:
+        return None
+
+    duration = transit_time.duration_minutes
+    score = 104 - (duration**0.92 * 1.3)
+
+    if transit_time.transfer_count is not None:
+        score -= min(14, transit_time.transfer_count * 3.5)
+    if transit_time.walk_distance_meters is not None:
+        score -= min(12, transit_time.walk_distance_meters / 120)
+
+    return clamp_score(round(score))
 
 
 def build_job_fit_reasons(profile: ScoreProfile, posting: JobPosting, score: int) -> list[str]:

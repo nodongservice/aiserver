@@ -601,8 +601,20 @@ def test_map_score_uses_equal_weight_average(monkeypatch):
     )
 
     result = response.results[0]
-    expected = round((result.score_detail.job_fit_score + result.score_detail.work_condition_score + result.score_detail.disability_support_score + result.score_detail.work_environment_score + result.score_detail.company_stability_score + result.score_detail.accessibility_score) / 6)
+    expected_values = [
+        result.score_detail.job_fit_score,
+        result.score_detail.work_condition_score,
+        result.score_detail.disability_support_score,
+        result.score_detail.work_environment_score,
+        result.score_detail.company_stability_score,
+        result.score_detail.accessibility_score,
+        result.score_detail.distance_score,
+        result.score_detail.commute_score,
+    ]
+    expected_values = [value for value in expected_values if value is not None]
+    expected = round(sum(expected_values) / len(expected_values))
     assert result.total_score == expected
+    assert result.score_detail.distance_score is not None
     assert result.evidence_items[1].source_table == "pd_kepad_standard_workplace"
 
 
@@ -793,6 +805,43 @@ def test_accessibility_score_reflects_transit_commute_limit():
     )
 
     assert calculate_accessibility_score(profile, evidence, posting, within_limit) > calculate_accessibility_score(profile, evidence, posting, over_limit)
+
+
+def test_distance_and_commute_scores_make_map_total_more_granular():
+    near_posting = JobPosting(
+        job_post_id=1,
+        company_name="NEAR",
+        job_title="사무보조",
+        work_lat=37.5700,
+        work_lng=126.9820,
+    )
+    far_posting = JobPosting(
+        job_post_id=2,
+        company_name="FAR",
+        job_title="사무보조",
+        work_lat=37.7000,
+        work_lng=127.2000,
+    )
+    profile = ScoreProfile(
+        home_lat=37.5665,
+        home_lng=126.9780,
+        mobility_range_km=8,
+    )
+    short_commute = TransitTimeEstimate(
+        duration_minutes=35,
+        transfer_count=1,
+        walk_distance_meters=500,
+        requested_departure_at="2026-05-13T08:00:00+09:00",
+    )
+    long_commute = TransitTimeEstimate(
+        duration_minutes=95,
+        transfer_count=3,
+        walk_distance_meters=1600,
+        requested_departure_at="2026-05-13T08:00:00+09:00",
+    )
+
+    assert score_service.calculate_home_work_distance_score(profile, near_posting) > score_service.calculate_home_work_distance_score(profile, far_posting)
+    assert score_service.calculate_commute_score(short_commute) > score_service.calculate_commute_score(long_commute)
 
 
 def test_accessibility_score_uses_more_granular_evidence_buckets():

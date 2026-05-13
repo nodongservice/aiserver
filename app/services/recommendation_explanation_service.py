@@ -206,6 +206,8 @@ def any_score_detail_value(score_detail, *, exclude_job_fit: bool = False) -> bo
         score_detail.work_environment_score,
         score_detail.company_stability_score,
         score_detail.accessibility_score,
+        score_detail.distance_score,
+        score_detail.commute_score,
     ]
     if not exclude_job_fit:
         values.append(score_detail.job_fit_score)
