@@ -7,6 +7,20 @@ from app.services.transit_time_service import TransitTimeEstimate
 from app.utils.geo import calculate_haversine_distance_meters
 
 
+def has_accessibility_evidence(accessibility: AccessibilityEvidence) -> bool:
+    if accessibility.evidence_items:
+        return True
+    return any(count > 0 for count in accessibility.source_counts.values())
+
+
+def calibrate_accessibility_score(raw_score: int, accessibility: AccessibilityEvidence) -> int:
+    if not has_accessibility_evidence(accessibility):
+        return clamp_score(raw_score)
+
+    calibrated_score = round(45 + raw_score * 0.55)
+    return clamp_score(max(raw_score, calibrated_score))
+
+
 def calculate_accessibility_score(
     profile: ScoreProfile,
     accessibility: AccessibilityEvidence,
@@ -116,7 +130,7 @@ def calculate_accessibility_score(
     if not accessibility.evidence_items:
         score = max(score, 35)
 
-    return clamp_score(score)
+    return calibrate_accessibility_score(score, accessibility)
 
 
 def calculate_home_to_work_distance_meters(profile: ScoreProfile, posting: JobPosting) -> Optional[float]:
