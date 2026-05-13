@@ -1,4 +1,5 @@
 from collections import OrderedDict
+from datetime import datetime
 from threading import RLock
 from time import monotonic
 from typing import Optional
@@ -29,6 +30,7 @@ from app.schemas.score import (
     ScoreRequest,
     TransitTimeResult,
 )
+from app.services.cache_expiry import SEOUL_TZ, get_next_daily_cache_expiry_at
 from app.services.scoring.accessibility_summary import calculate_accessibility_score
 from app.services.scoring.common import clamp_score, token_overlap_count
 from app.services.scoring.company_stability import calculate_company_stability_score
@@ -49,6 +51,7 @@ ACCESSIBILITY_CACHE_MAX_SIZE = 1000
 
 _accessibility_cache: OrderedDict[tuple[float, float, int], tuple[float, AccessibilityEvidence]] = OrderedDict()
 _accessibility_cache_lock = RLock()
+_accessibility_cache_expires_at: Optional[datetime] = None
 
 
 def score_quick_jobs(request: ScoreRequest, db: Optional[Session] = None) -> QuickScoreResponse:
@@ -220,6 +223,7 @@ def build_accessibility_cache_key(
 def get_cached_accessibility(cache_key: tuple[float, float, int]) -> Optional[AccessibilityEvidence]:
     now = monotonic()
     with _accessibility_cache_lock:
+        evict_accessibility_cache_if_daily_expired()
         cached = _accessibility_cache.get(cache_key)
         if cached is None:
             return None
@@ -238,6 +242,7 @@ def set_cached_accessibility(
     accessibility: AccessibilityEvidence,
 ) -> None:
     with _accessibility_cache_lock:
+        evict_accessibility_cache_if_daily_expired()
         _accessibility_cache[cache_key] = (monotonic(), accessibility)
         _accessibility_cache.move_to_end(cache_key)
         while len(_accessibility_cache) > ACCESSIBILITY_CACHE_MAX_SIZE:
@@ -245,8 +250,25 @@ def set_cached_accessibility(
 
 
 def clear_accessibility_cache() -> None:
+    global _accessibility_cache_expires_at
     with _accessibility_cache_lock:
         _accessibility_cache.clear()
+        _accessibility_cache_expires_at = None
+
+
+def evict_accessibility_cache_if_daily_expired(now: Optional[datetime] = None) -> None:
+    global _accessibility_cache_expires_at
+    current = now.astimezone(SEOUL_TZ) if now else datetime.now(SEOUL_TZ)
+    with _accessibility_cache_lock:
+        if _accessibility_cache_expires_at is None:
+            _accessibility_cache_expires_at = get_next_daily_cache_expiry_at(current)
+            return
+
+        if current < _accessibility_cache_expires_at:
+            return
+
+        _accessibility_cache.clear()
+        _accessibility_cache_expires_at = get_next_daily_cache_expiry_at(current)
 
 
 def validate_score_request(request: ScoreRequest, *, mode: str) -> None:

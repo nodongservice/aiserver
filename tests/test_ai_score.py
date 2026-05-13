@@ -833,6 +833,61 @@ def test_accessibility_score_uses_more_granular_evidence_buckets():
     assert calculate_accessibility_score(profile, richer, posting) > calculate_accessibility_score(profile, bus_only, posting)
 
 
+def test_accessibility_score_calibrates_evidence_backed_scores_to_use_full_range():
+    profile = ScoreProfile(disability_types=["청각장애"], disability_severity="경증")
+    posting = JobPosting(
+        job_post_id=1,
+        company_name="ABC",
+        job_title="사무보조",
+        work_lat=37.5701,
+        work_lng=126.9823,
+    )
+    moderate_evidence = AccessibilityEvidence(
+        bus_stop_count=2,
+        crosswalk_count=2,
+        traffic_light_count=1,
+        transport_support_center_count=0,
+        subway_entrance_lift_count=0,
+        walking_network_count=0,
+        evidence_items=[],
+        source_counts={
+            "NATIONWIDE_BUS_STOP": 2,
+            "NATIONWIDE_CROSSWALK": 2,
+            "NATIONWIDE_TRAFFIC_LIGHT": 1,
+        },
+    )
+
+    assert calculate_accessibility_score(profile, moderate_evidence, posting) >= 70
+
+
+def test_accessibility_score_does_not_calibrate_missing_evidence_or_coordinates():
+    profile = ScoreProfile(disability_types=["wheelchair"], disability_severity="중증")
+    posting = JobPosting(
+        job_post_id=1,
+        company_name="ABC",
+        job_title="사무보조",
+        work_lat=37.5701,
+        work_lng=126.9823,
+    )
+    posting_without_coordinates = JobPosting(
+        job_post_id=2,
+        company_name="NOCOORD",
+        job_title="사무보조",
+    )
+    no_evidence = AccessibilityEvidence(
+        bus_stop_count=0,
+        crosswalk_count=0,
+        traffic_light_count=0,
+        transport_support_center_count=0,
+        subway_entrance_lift_count=0,
+        walking_network_count=0,
+        evidence_items=[],
+    )
+
+    assert calculate_accessibility_score(profile, no_evidence, posting) == 35
+    assert calculate_accessibility_score(profile, no_evidence, posting_without_coordinates) == 45
+
+
 def test_accessibility_score_treats_physical_disability_as_mobility_support_need():
     posting = JobPosting(
         job_post_id=1,
