@@ -2,19 +2,19 @@ from collections import OrderedDict
 from datetime import datetime, time, timedelta
 from threading import RLock
 from typing import Any, Optional
-from zoneinfo import ZoneInfo
 
 import httpx
 from pydantic import BaseModel
 
 from app.core.config import settings
+from app.services.cache_expiry import SEOUL_TZ, get_next_daily_cache_expiry_at
 
-SEOUL_TZ = ZoneInfo("Asia/Seoul")
 ODSAY_SOURCE_TYPE = "ODSAY_TRANSIT_ROUTE"
 ODSAY_SOURCE_NAME = "ODsay 대중교통 길찾기"
 _CACHE_MAX_SIZE = 1000
 _cache: OrderedDict[tuple[float, float, float, float], tuple[float, "TransitTimeEstimate"]] = OrderedDict()
 _cache_lock = RLock()
+_cache_expires_at: Optional[datetime] = None
 
 
 class TransitTimeEstimate(BaseModel):
@@ -158,8 +158,10 @@ def parse_odsay_transit_time(payload: dict[str, Any], *, requested_departure_at:
 
 
 def clear_transit_time_cache() -> None:
+    global _cache_expires_at
     with _cache_lock:
         _cache.clear()
+        _cache_expires_at = None
 
 
 def _cache_key(
@@ -174,6 +176,7 @@ def _cache_key(
 def _get_cached(cache_key: tuple[float, float, float, float]) -> Optional[TransitTimeEstimate]:
     now = datetime.now().timestamp()
     with _cache_lock:
+        evict_transit_time_cache_if_daily_expired()
         cached = _cache.get(cache_key)
         if cached is None:
             return None
@@ -187,10 +190,26 @@ def _get_cached(cache_key: tuple[float, float, float, float]) -> Optional[Transi
 
 def _set_cached(cache_key: tuple[float, float, float, float], estimate: TransitTimeEstimate) -> None:
     with _cache_lock:
+        evict_transit_time_cache_if_daily_expired()
         _cache[cache_key] = (datetime.now().timestamp(), estimate)
         _cache.move_to_end(cache_key)
         while len(_cache) > _CACHE_MAX_SIZE:
             _cache.popitem(last=False)
+
+
+def evict_transit_time_cache_if_daily_expired(now: Optional[datetime] = None) -> None:
+    global _cache_expires_at
+    current = now.astimezone(SEOUL_TZ) if now else datetime.now(SEOUL_TZ)
+    with _cache_lock:
+        if _cache_expires_at is None:
+            _cache_expires_at = get_next_daily_cache_expiry_at(current)
+            return
+
+        if current < _cache_expires_at:
+            return
+
+        _cache.clear()
+        _cache_expires_at = get_next_daily_cache_expiry_at(current)
 
 
 def _number(value: Any, *, default: float) -> float:
