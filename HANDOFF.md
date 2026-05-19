@@ -24,6 +24,8 @@ uv sync --dev
 | 변수 | 설명 |
 | --- | --- |
 | `DATABASE_URL` | PostgreSQL/PostGIS 접속 URL |
+| `INTERNAL_API_KEY` 또는 `BRIDGEWORK_FASTAPI_INTERNAL_API_KEY` | Spring이 FastAPI 내부 API 호출 시 보내는 shared secret |
+| `INTERNAL_API_KEY_HEADER` | 내부 API 키 헤더명, 기본값 `X-Internal-Api-Key` |
 | `CORS_ALLOW_ORIGINS` | 허용할 CORS origin 목록 |
 | `OPENAI_API_KEY` | OpenAI API 키 |
 | `OPENAI_MODEL` | 설명 생성 기본 모델 |

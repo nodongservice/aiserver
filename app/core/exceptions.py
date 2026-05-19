@@ -1,5 +1,6 @@
 # 파일: app/core/exceptions.py
 import logging
+import re
 from typing import Any, Optional
 
 from fastapi import Request
@@ -9,6 +10,43 @@ from sqlalchemy.exc import SQLAlchemyError
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
 logger = logging.getLogger(__name__)
+
+REDACTED_VALUE = "[REDACTED]"
+SENSITIVE_TEXT_PATTERNS = (
+    (
+        re.compile(r"\b(bearer|basic)\s+[a-z0-9._~+/=-]+", re.IGNORECASE),
+        lambda match: f"{match.group(1)} {REDACTED_VALUE}",
+    ),
+    (
+        re.compile(
+            r"([?&](?:code|token|access_token|refresh_token|signupToken|withdrawalCancelToken|serviceKey|apiKey|apikey|key|secret|password)=)[^&\s]+",
+            re.IGNORECASE,
+        ),
+        lambda match: f"{match.group(1)}{REDACTED_VALUE}",
+    ),
+    (
+        re.compile(r"(//[^/\s:@]+:)[^@\s/]+(@)"),
+        lambda match: f"{match.group(1)}{REDACTED_VALUE}{match.group(2)}",
+    ),
+    (
+        re.compile(r"\beyJ[a-zA-Z0-9_-]+\.[a-zA-Z0-9_-]+\.[a-zA-Z0-9_-]+\b"),
+        lambda _match: REDACTED_VALUE,
+    ),
+    (
+        re.compile(
+            r"\b(password|passwd|token|accessToken|refreshToken|signupToken|withdrawalCancelToken|secret|credential|api[-_]?key|serviceKey|session|jwt)\s*[:=]\s*([^\s,;]+)",
+            re.IGNORECASE,
+        ),
+        lambda match: f"{match.group(1)}={REDACTED_VALUE}",
+    ),
+)
+
+
+def sanitize_log_value(value: Any) -> str:
+    text = str(value)
+    for pattern, replacement in SENSITIVE_TEXT_PATTERNS:
+        text = pattern.sub(replacement, text)
+    return text.replace("\n", " ").replace("\r", " ").strip()
 
 
 def get_request_id(request: Request) -> Optional[str]:
@@ -50,34 +88,28 @@ def log_handled_exception(
         status_code,
         error_code,
         exc.__class__.__name__,
-        str(exc),
+        sanitize_log_value(exc),
         get_request_log_context(request),
     )
     if include_traceback:
-        logger.error(log_message, exc_info=(type(exc), exc, exc.__traceback__))
+        logger.error(log_message)
     else:
         logger.warning(log_message)
 
 
 def log_database_exception(request: Request, exc: SQLAlchemyError) -> None:
     """
-    SQLAlchemy 예외는 기본 traceback만으로 SQL/파라미터가 잘리지 않도록
-    statement, params, DBAPI 원본 예외를 별도 로그 필드로 남깁니다.
+    SQLAlchemy 예외는 운영 로그에 SQL 파라미터나 사용자 입력값이 남지 않도록
+    예외 유형과 요청 문맥만 기록합니다.
     """
-    statement = getattr(exc, "statement", None)
-    params = getattr(exc, "params", None)
     orig = getattr(exc, "orig", None)
 
     logger.error(
-        ("데이터베이스 처리 중 오류가 발생했습니다. status_code=503 error_code=DATABASE_ERROR exception_type=%s reason=%r dbapi_exception_type=%s dbapi_reason=%r statement=%r params=%r %s"),
+        ("데이터베이스 처리 중 오류가 발생했습니다. status_code=503 error_code=DATABASE_ERROR exception_type=%s dbapi_exception_type=%s reason=%r %s"),
         exc.__class__.__name__,
-        str(exc),
         orig.__class__.__name__ if orig is not None else "-",
-        str(orig) if orig is not None else "-",
-        statement,
-        params,
+        sanitize_log_value(orig or exc),
         get_request_log_context(request),
-        exc_info=(type(exc), exc, exc.__traceback__),
     )
 
 
@@ -117,6 +149,24 @@ def build_error_response(
     )
 
 
+def build_safe_error_detail(
+    exc: Exception,
+    *,
+    include_reason: bool = False,
+) -> dict[str, str]:
+    detail = {"exception_type": exc.__class__.__name__}
+    if include_reason:
+        detail["reason"] = sanitize_log_value(exc)
+    return detail
+
+
+def build_safe_validation_errors(exc: RequestValidationError) -> list[dict[str, Any]]:
+    safe_errors = []
+    for error in exc.errors():
+        safe_errors.append({key: value for key, value in error.items() if key not in {"input", "ctx"}})
+    return safe_errors
+
+
 async def validation_exception_handler(
     request: Request,
     exc: RequestValidationError,
@@ -134,14 +184,14 @@ async def validation_exception_handler(
     """
     logger.warning(
         "요청 값 검증에 실패했습니다. status_code=422 error_code=VALIDATION_ERROR errors=%s %s",
-        exc.errors(),
+        build_safe_validation_errors(exc),
         get_request_log_context(request),
     )
     return build_error_response(
         status_code=422,
         error_code="VALIDATION_ERROR",
         message="요청 값 검증에 실패했습니다.",
-        detail=exc.errors(),
+        detail=build_safe_validation_errors(exc),
         request_id=get_request_id(request),
     )
 
@@ -181,7 +231,7 @@ async def http_exception_handler(
         message,
         status_code,
         error_code,
-        exc.detail,
+        sanitize_log_value(exc.detail),
         get_request_log_context(request),
     )
     return build_error_response(
@@ -211,7 +261,7 @@ async def value_error_handler(
         status_code=400,
         error_code="BAD_REQUEST",
         message="요청 값을 처리할 수 없습니다.",
-        detail={"exception_type": exc.__class__.__name__, "reason": str(exc)},
+        detail=build_safe_error_detail(exc),
         request_id=get_request_id(request),
     )
 
@@ -251,7 +301,7 @@ async def runtime_exception_handler(
         status_code=500,
         error_code="AI_SERVICE_RUNTIME_ERROR",
         message="FastAPI AI/GIS 서비스 실행 중 오류가 발생했습니다.",
-        detail={"exception_type": exc.__class__.__name__, "reason": str(exc)},
+        detail=build_safe_error_detail(exc),
         request_id=get_request_id(request),
     )
 

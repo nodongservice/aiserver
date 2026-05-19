@@ -113,6 +113,18 @@ def test_score_quick_validation_error_contract_includes_request_id(client):
     assert isinstance(data["result"]["detail"], list)
 
 
+def test_internal_api_rejects_missing_internal_api_key(client):
+    response = client.post(
+        "/api/v1/score/quick",
+        json={"limit": 10},
+        headers={"X-Internal-Api-Key": ""},
+    )
+
+    assert response.status_code == 401
+    data = response.json()
+    assert data["code"] == "UNAUTHORIZED_INTERNAL_API"
+
+
 def test_openapi_documents_common_api_response_contract(client):
     response = client.get("/openapi.json")
 

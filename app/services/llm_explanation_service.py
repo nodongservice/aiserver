@@ -61,7 +61,7 @@ def build_short_summary(request: ExplanationGenerateRequest) -> str:
     if request.score_mode == "quick":
         if request.accessibility_grade == "GOOD":
             if has_real_risk:
-                return f"{request.company_name}의 {request.job_title} 공고는 현재 프로필 기준으로 비교적 잘 맞는 일자리예요. 다만 일부 조건은 지원 전 한 번 더 확인해보시는 걸 권장드려요."
+                return f"{request.company_name}의 {request.job_title} 공고는 현재 프로필 기준으로 비교적 잘 맞는 일자리예요. 확인이 필요한 조건은 체크리스트에서 따로 안내드릴게요."
 
             return f"{request.company_name}의 {request.job_title} 공고는 현재 프로필 기준으로 비교적 잘 맞는 일자리예요. 직무 적합도 점수 {request.accessibility_score}점으로 분석되었어요."
 
@@ -83,7 +83,7 @@ def build_short_summary(request: ExplanationGenerateRequest) -> str:
         if has_real_risk:
             return f"{request.company_name}의 {request.job_title} 공고는 일부 조건이 맞지만 확인이 필요한 항목도 있어요. 실제 출퇴근 동선과 주변 이동 환경을 지원 전 확인해 주세요."
 
-        return f"{request.company_name}의 {request.job_title} 공고는 현재 조건 기준으로 검토해볼 수 있는 일자리예요. 다만 접근성 정보 일부는 추가 확인이 필요해요."
+        return f"{request.company_name}의 {request.job_title} 공고는 현재 조건 기준으로 검토해볼 수 있는 일자리예요. 접근성 정보 일부는 추가 확인이 필요해요."
 
     return f"{request.company_name}의 {request.job_title} 공고는 현재 조건과 맞지 않을 수 있는 항목이 있어요. 지원 전 이동 환경과 업무 조건을 충분히 확인해 주세요."
 
@@ -196,7 +196,7 @@ def build_risk_sentence(request: ExplanationGenerateRequest) -> str:
     if not has_real_risk_factors(request.risk_factors):
         return "현재 확인된 주요 위험 요인은 크지 않아요."
 
-    return f"다만 {join_factors(request.risk_factors, limit=2, exclude_default_risk=True)} 항목은 지원 전 추가 확인이 필요해요."
+    return f"{join_factors(request.risk_factors, limit=2, exclude_default_risk=True)} 항목은 지원 전 추가 확인이 필요해요."
 
 
 def join_factors(

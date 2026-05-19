@@ -179,9 +179,11 @@ images/                README 및 제출 문서용 다이어그램
 
 - 워크플로우: `.github/workflows/cicd-main-ec2.yml`
 - 컨테이너 이미지: `ghcr.io/<owner>/bridgework-aiserver:<commit-sha>`
-- Blue/Green 포트: `19000`, `19001`
+- Blue/Green 포트: `127.0.0.1:19000`, `127.0.0.1:19001`
 - 트래픽 전환: `../backend-infra/deploy/fastapi_blue_green_switch.sh`
 - 운영 모니터링: `../backend-infra/monitoring`
+
+FastAPI `/api/v1/*`는 Spring 내부 호출 전용이며 `INTERNAL_API_KEY` 또는 `BRIDGEWORK_FASTAPI_INTERNAL_API_KEY` 값으로 shared secret 검증을 수행합니다. CORS는 브라우저 편의 설정일 뿐 접근 제어 장벽으로 보지 않습니다.
 
 배포 대상 EC2에는 Git 저장소를 clone하지 않습니다. GitHub hosted runner가 이미지를 빌드/게시하고, EC2는 GHCR 이미지와 배포 스크립트만 사용합니다.
 

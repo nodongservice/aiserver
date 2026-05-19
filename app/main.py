@@ -1,11 +1,12 @@
 # app/main.py
 # app/main.py
 
+import hmac
 import logging
 import os
 
 from dotenv import load_dotenv
-from fastapi import Depends, FastAPI
+from fastapi import Depends, FastAPI, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.openapi.utils import get_openapi
@@ -14,6 +15,7 @@ from sqlalchemy import text
 from sqlalchemy.exc import DBAPIError, SQLAlchemyError
 from sqlalchemy.orm import Session
 from starlette.exceptions import HTTPException as StarletteHTTPException
+from starlette.responses import JSONResponse
 
 from app.api.v1.routers import api_router
 from app.core.exceptions import (
@@ -58,12 +60,24 @@ def should_auto_create_db_schema() -> bool:
     return os.getenv("AUTO_CREATE_DB_SCHEMA", "false").lower() == "true"
 
 
+def should_enable_debug() -> bool:
+    return os.getenv("DEBUG", "false").lower() == "true"
+
+
 def should_require_postgis() -> bool:
     return os.getenv("REQUIRE_POSTGIS", "true").lower() == "true"
 
 
 def should_require_profile_draft_ocr_dependencies() -> bool:
     return os.getenv("REQUIRE_PROFILE_DRAFT_OCR_DEPENDENCIES", "true").lower() == "true"
+
+
+def get_internal_api_key() -> str:
+    return (os.getenv("INTERNAL_API_KEY") or os.getenv("BRIDGEWORK_FASTAPI_INTERNAL_API_KEY") or "").strip()
+
+
+def get_internal_api_key_header() -> str:
+    return os.getenv("INTERNAL_API_KEY_HEADER", "X-Internal-Api-Key").strip() or "X-Internal-Api-Key"
 
 
 def get_postgis_version(db: Session) -> str:
@@ -101,6 +115,7 @@ def verify_required_profile_draft_ocr_dependencies() -> None:
 app = FastAPI(
     title="BridgeWork AI Server",
     version="0.1.0",
+    debug=should_enable_debug(),
     root_path=get_root_path(),
     root_path_in_servers=False,
 )
@@ -126,6 +141,51 @@ app.add_exception_handler(Exception, unhandled_exception_handler)
 
 cors_origins = os.getenv("CORS_ALLOW_ORIGINS", "")
 origins = [origin.strip() for origin in cors_origins.split(",") if origin.strip()]
+if "*" in origins:
+    raise RuntimeError("CORS_ALLOW_ORIGINS must not contain '*' when credentials are enabled.")
+
+
+@app.middleware("http")
+async def add_security_headers(request, call_next):
+    response = await call_next(request)
+    response.headers.setdefault("Content-Security-Policy", "frame-ancestors 'none'")
+    response.headers.setdefault("X-Frame-Options", "DENY")
+    response.headers.setdefault("X-Content-Type-Options", "nosniff")
+    response.headers.setdefault("Referrer-Policy", "strict-origin-when-cross-origin")
+    response.headers.setdefault("Permissions-Policy", "camera=(), microphone=(), payment=(), geolocation=()")
+    return response
+
+
+@app.middleware("http")
+async def verify_internal_api_key(request: Request, call_next):
+    if not request.url.path.startswith("/api/v1/"):
+        return await call_next(request)
+
+    expected_key = get_internal_api_key()
+    request_id = request.headers.get("X-Request-Id")
+    if not expected_key:
+        return JSONResponse(
+            status_code=503,
+            content={
+                "code": "INTERNAL_API_KEY_NOT_CONFIGURED",
+                "message": "FastAPI 내부 API 인증 설정이 없습니다.",
+                "result": {"requestId": request_id},
+            },
+        )
+
+    provided_key = request.headers.get(get_internal_api_key_header(), "")
+    if not hmac.compare_digest(provided_key, expected_key):
+        return JSONResponse(
+            status_code=401,
+            content={
+                "code": "UNAUTHORIZED_INTERNAL_API",
+                "message": "FastAPI 내부 API 인증에 실패했습니다.",
+                "result": {"requestId": request_id},
+            },
+        )
+
+    return await call_next(request)
+
 
 app.add_middleware(
     CORSMiddleware,

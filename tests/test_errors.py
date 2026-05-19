@@ -133,7 +133,29 @@ def test_runtime_error_logs_detailed_context(client, caplog):
     assert "error_code=AI_SERVICE_RUNTIME_ERROR" in log_message
     assert "exception_type=RuntimeError" in log_message
     assert "runtime log detail" in log_message
-    assert records[-1].exc_info is not None
+    assert records[-1].exc_info is None
+
+
+def test_runtime_error_logs_redact_sensitive_values(client, caplog):
+    @client.app.get("/test/errors/runtime-error-secret-log")
+    def raise_runtime_error_with_secret_for_log():
+        raise RuntimeError("Authorization: Bearer secret-token refreshToken=refresh-secret")
+
+    caplog.set_level(logging.ERROR, logger="app.core.exceptions")
+
+    response = client.get("/test/errors/runtime-error-secret-log")
+
+    assert response.status_code == 500
+
+    records = [record for record in caplog.records if record.name == "app.core.exceptions" and record.levelno == logging.ERROR]
+    assert records
+
+    log_message = records[-1].getMessage()
+    assert "Bearer [REDACTED]" in log_message
+    assert "refreshToken=[REDACTED]" in log_message
+    assert "secret-token" not in log_message
+    assert "refresh-secret" not in log_message
+    assert records[-1].exc_info is None
 
 
 def test_database_error_logs_sqlalchemy_details(client, caplog):
@@ -165,6 +187,6 @@ def test_database_error_logs_sqlalchemy_details(client, caplog):
     assert "exception_type=StatementError" in log_message
     assert "dbapi_exception_type=RuntimeError" in log_message
     assert "invalid geometry" in log_message
-    assert "SELECT * FROM pd_seoul_walking_network" in log_message
-    assert "{'id': 10}" in log_message
-    assert records[-1].exc_info is not None
+    assert "SELECT * FROM pd_seoul_walking_network" not in log_message
+    assert "{'id': 10}" not in log_message
+    assert records[-1].exc_info is None

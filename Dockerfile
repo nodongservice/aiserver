@@ -41,6 +41,8 @@ RUN apt-get update \
         libxrender1 \
     && rm -rf /var/lib/apt/lists/*
 
+RUN groupadd -r bridgework && useradd -r -g bridgework bridgework
+
 COPY --from=builder /app/.venv /app/.venv
 COPY --from=builder /app/app /app/app
 
@@ -50,5 +52,8 @@ RUN if [ "$RUN_OCR_RUNTIME_SMOKE" = "true" ]; then \
     fi
 
 EXPOSE 8000
+
+RUN chown -R bridgework:bridgework /app
+USER bridgework
 
 CMD ["/app/.venv/bin/python", "-m", "uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]
