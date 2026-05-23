@@ -1,6 +1,7 @@
 from datetime import datetime
 
-from app.repositories.scoring_repository import AccessibilityEvidence
+from app.repositories import scoring_repository
+from app.repositories.scoring_repository import AccessibilityEvidence, PublicDataEnrichmentContext
 from app.services import score_service, transit_time_service
 from app.services.cache_expiry import SEOUL_TZ, get_next_daily_cache_expiry_at
 from app.services.transit_time_service import TransitTimeEstimate
@@ -54,3 +55,59 @@ def test_transit_time_cache_is_evicted_after_two_am_boundary():
 
     assert cache_key not in transit_time_service._cache
     transit_time_service.clear_transit_time_cache()
+
+
+def test_public_data_reference_cache_is_reused_for_repeated_reads():
+    class FakeQuery:
+        def __init__(self, db):
+            self.db = db
+
+        def filter(self, *args):
+            return self
+
+        def limit(self, value):
+            return self
+
+        def all(self):
+            self.db.query_count += 1
+            return []
+
+    class FakeDb:
+        query_count = 0
+
+        def query(self, model):
+            return FakeQuery(self)
+
+    scoring_repository.clear_public_data_reference_cache()
+    db = FakeDb()
+
+    first_context = scoring_repository.get_public_data_enrichment_context(db)
+    second_context = scoring_repository.get_public_data_enrichment_context(db)
+    first_standard_workplaces = scoring_repository.get_standard_workplace_candidates(db)
+    second_standard_workplaces = scoring_repository.get_standard_workplace_candidates(db)
+
+    assert first_context is second_context
+    assert first_standard_workplaces is second_standard_workplaces
+    assert db.query_count == 4
+    scoring_repository.clear_public_data_reference_cache()
+
+
+def test_public_data_reference_cache_is_evicted_after_two_am_boundary():
+    scoring_repository.clear_public_data_reference_cache()
+    context = PublicDataEnrichmentContext(job_categories=[], trainings=[], programs=[])
+    standard_workplaces = []
+
+    scoring_repository._public_data_enrichment_context_cache = (0, context)
+    scoring_repository._standard_workplace_candidates_cache = (0, standard_workplaces)
+    scoring_repository._public_data_reference_cache_expires_at = datetime(2026, 5, 14, 2, 0, tzinfo=SEOUL_TZ)
+
+    scoring_repository.evict_public_data_reference_cache_if_daily_expired(datetime(2026, 5, 14, 1, 59, tzinfo=SEOUL_TZ))
+
+    assert scoring_repository._public_data_enrichment_context_cache[1] is context
+    assert scoring_repository._standard_workplace_candidates_cache[1] is standard_workplaces
+
+    scoring_repository.evict_public_data_reference_cache_if_daily_expired(datetime(2026, 5, 14, 2, 0, tzinfo=SEOUL_TZ))
+
+    assert scoring_repository._public_data_enrichment_context_cache is None
+    assert scoring_repository._standard_workplace_candidates_cache is None
+    scoring_repository.clear_public_data_reference_cache()
