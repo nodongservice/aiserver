@@ -4,6 +4,8 @@ import random
 import re
 from dataclasses import dataclass, field
 from datetime import datetime
+from threading import RLock
+from time import monotonic
 from typing import Optional
 
 from sqlalchemy import func, or_
@@ -43,6 +45,7 @@ from app.db.models import (
     PdVocationalTraining,
 )
 from app.schemas.score import JobPosting, ScoreEvidenceItem
+from app.services.cache_expiry import SEOUL_TZ, get_next_daily_cache_expiry_at
 from app.utils.geo import calculate_haversine_distance_meters
 
 logger = logging.getLogger(__name__)
@@ -77,6 +80,7 @@ SEOUL_LAT_MIN = 37.40
 SEOUL_LAT_MAX = 37.72
 SEOUL_LNG_MIN = 126.73
 SEOUL_LNG_MAX = 127.27
+PUBLIC_DATA_REFERENCE_CACHE_TTL_SECONDS = 24 * 60 * 60
 
 
 @dataclass(frozen=True)
@@ -112,6 +116,19 @@ class AccessibilityEvidence:
     transport_support_service_detail_score: int = 0
     low_floor_bus_quality_score: int = 0
     generic_accessibility_quality_score: int = 0
+
+
+@dataclass(frozen=True)
+class PublicDataEnrichmentContext:
+    job_categories: list[PdKepadJobCategory]
+    trainings: list[PdVocationalTraining]
+    programs: list[PdJobseekerCompetencyProgram]
+
+
+_public_data_reference_cache_lock = RLock()
+_public_data_enrichment_context_cache: Optional[tuple[float, PublicDataEnrichmentContext]] = None
+_standard_workplace_candidates_cache: Optional[tuple[float, list[PdKepadStandardWorkplace]]] = None
+_public_data_reference_cache_expires_at: Optional[datetime] = None
 
 
 def find_latest_recruitments(db: Session, limit: int, offset: int = 0) -> list[PdKepadRecruitment]:
@@ -152,9 +169,10 @@ def enrich_job_postings_with_public_data(db: Session, postings: list[JobPosting]
     if not postings:
         return postings
 
-    job_categories = db.query(PdKepadJobCategory).filter(PdKepadJobCategory.job_cd_nm.isnot(None)).limit(5000).all()
-    trainings = db.query(PdVocationalTraining).filter(PdVocationalTraining.title.isnot(None)).limit(5000).all()
-    programs = db.query(PdJobseekerCompetencyProgram).filter(or_(PdJobseekerCompetencyProgram.pgm_nm.isnot(None), PdJobseekerCompetencyProgram.pgm_sub_nm.isnot(None))).limit(1000).all()
+    context = get_public_data_enrichment_context(db)
+    job_categories = context.job_categories
+    trainings = context.trainings
+    programs = context.programs
 
     for posting in postings:
         category = _best_job_category_match(posting, job_categories)
@@ -177,6 +195,66 @@ def enrich_job_postings_with_public_data(db: Session, postings: list[JobPosting]
         ]
 
     return postings
+
+
+def get_public_data_enrichment_context(db: Session) -> PublicDataEnrichmentContext:
+    global _public_data_enrichment_context_cache
+    now = monotonic()
+    with _public_data_reference_cache_lock:
+        evict_public_data_reference_cache_if_daily_expired()
+        if _public_data_enrichment_context_cache is not None:
+            cached_at, cached_context = _public_data_enrichment_context_cache
+            if now - cached_at <= PUBLIC_DATA_REFERENCE_CACHE_TTL_SECONDS:
+                return cached_context
+            _public_data_enrichment_context_cache = None
+
+        context = PublicDataEnrichmentContext(
+            job_categories=db.query(PdKepadJobCategory).filter(PdKepadJobCategory.job_cd_nm.isnot(None)).limit(5000).all(),
+            trainings=db.query(PdVocationalTraining).filter(PdVocationalTraining.title.isnot(None)).limit(5000).all(),
+            programs=db.query(PdJobseekerCompetencyProgram).filter(or_(PdJobseekerCompetencyProgram.pgm_nm.isnot(None), PdJobseekerCompetencyProgram.pgm_sub_nm.isnot(None))).limit(1000).all(),
+        )
+        _public_data_enrichment_context_cache = (now, context)
+        return context
+
+
+def get_standard_workplace_candidates(db: Session) -> list[PdKepadStandardWorkplace]:
+    global _standard_workplace_candidates_cache
+    now = monotonic()
+    with _public_data_reference_cache_lock:
+        evict_public_data_reference_cache_if_daily_expired()
+        if _standard_workplace_candidates_cache is not None:
+            cached_at, cached_candidates = _standard_workplace_candidates_cache
+            if now - cached_at <= PUBLIC_DATA_REFERENCE_CACHE_TTL_SECONDS:
+                return cached_candidates
+            _standard_workplace_candidates_cache = None
+
+        candidates = db.query(PdKepadStandardWorkplace).filter(PdKepadStandardWorkplace.comp_name.isnot(None)).limit(10000).all()
+        _standard_workplace_candidates_cache = (now, candidates)
+        return candidates
+
+
+def clear_public_data_reference_cache() -> None:
+    global _public_data_enrichment_context_cache, _standard_workplace_candidates_cache, _public_data_reference_cache_expires_at
+    with _public_data_reference_cache_lock:
+        _public_data_enrichment_context_cache = None
+        _standard_workplace_candidates_cache = None
+        _public_data_reference_cache_expires_at = None
+
+
+def evict_public_data_reference_cache_if_daily_expired(now: Optional[datetime] = None) -> None:
+    global _public_data_enrichment_context_cache, _standard_workplace_candidates_cache, _public_data_reference_cache_expires_at
+    current = now.astimezone(SEOUL_TZ) if now else datetime.now(SEOUL_TZ)
+    with _public_data_reference_cache_lock:
+        if _public_data_reference_cache_expires_at is None:
+            _public_data_reference_cache_expires_at = get_next_daily_cache_expiry_at(current)
+            return
+
+        if current < _public_data_reference_cache_expires_at:
+            return
+
+        _public_data_enrichment_context_cache = None
+        _standard_workplace_candidates_cache = None
+        _public_data_reference_cache_expires_at = get_next_daily_cache_expiry_at(current)
 
 
 def to_job_posting(row: PdKepadRecruitment) -> Optional[JobPosting]:
@@ -390,7 +468,7 @@ def find_standard_workplace_match(
     if not normalized_name:
         return StandardWorkplaceMatch(is_match=False)
 
-    candidates = db.query(PdKepadStandardWorkplace).filter(PdKepadStandardWorkplace.comp_name.isnot(None)).limit(10000).all()
+    candidates = get_standard_workplace_candidates(db)
     exact_matches = []
     partial_matches = []
     for row in candidates:
@@ -410,9 +488,9 @@ def find_standard_workplace_match(
 
     if address and len(address.strip()) >= 12:
         short_address = address[:12]
-        row = db.query(PdKepadStandardWorkplace).filter(PdKepadStandardWorkplace.comp_name.isnot(None)).filter(PdKepadStandardWorkplace.address.contains(short_address)).filter(PdKepadStandardWorkplace.comp_name.contains(company_name[:2])).first()
-        if row and is_active_standard_workplace(row):
-            return to_standard_workplace_match(row)
+        address_matches = [row for row in candidates if row.address and row.comp_name and is_active_standard_workplace(row) and short_address in row.address and company_name[:2] in row.comp_name]
+        if address_matches:
+            return to_standard_workplace_match(sorted(address_matches, key=_standard_workplace_priority_key, reverse=True)[0])
 
     return StandardWorkplaceMatch(is_match=False)
 
@@ -424,7 +502,7 @@ def find_standard_workplace_matches(
     if not postings:
         return {}
 
-    candidates = db.query(PdKepadStandardWorkplace).filter(PdKepadStandardWorkplace.comp_name.isnot(None)).limit(10000).all()
+    candidates = get_standard_workplace_candidates(db)
     return {posting.job_post_id: match_standard_workplace_from_candidates(posting, candidates) for posting in postings}
 
 
