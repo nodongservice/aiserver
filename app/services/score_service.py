@@ -14,7 +14,6 @@ from app.repositories.scoring_repository import (
     find_accessibility_evidence,
     find_all_recruitments_for_scoring,
     find_latest_recruitments,
-    find_standard_workplace_match,
     find_standard_workplace_matches,
     to_job_posting,
 )
@@ -139,16 +138,6 @@ def get_latest_job_postings(db: Optional[Session], limit: int, offset: int = 0) 
     return enrich_job_postings_with_public_data(db, postings)
 
 
-def get_all_job_postings(db: Optional[Session]) -> list[JobPosting]:
-    if db is None:
-        return []
-    if not hasattr(db, "query"):
-        raise RuntimeError("스코어링 공고 조회에는 SQLAlchemy Session이 필요합니다.")
-    rows = find_all_recruitments_for_scoring(db)
-    postings = [posting for row in rows if (posting := to_job_posting(row)) is not None]
-    return enrich_job_postings_with_public_data(db, postings)
-
-
 def get_map_candidate_job_postings(db: Optional[Session], limit: int) -> list[JobPosting]:
     if db is None:
         return []
@@ -157,14 +146,6 @@ def get_map_candidate_job_postings(db: Optional[Session], limit: int) -> list[Jo
     rows = find_all_recruitments_for_scoring(db, limit=limit)
     postings = [posting for row in rows if (posting := to_job_posting(row)) is not None]
     return enrich_job_postings_with_public_data(db, postings)
-
-
-def get_standard_workplace(posting: JobPosting, db: Optional[Session]) -> StandardWorkplaceMatch:
-    if db is None:
-        return StandardWorkplaceMatch(is_match=False)
-    if not hasattr(db, "query"):
-        raise RuntimeError("표준사업장 조회에는 SQLAlchemy Session이 필요합니다.")
-    return find_standard_workplace_match(db, posting.company_name, posting.work_address)
 
 
 def get_standard_workplaces(

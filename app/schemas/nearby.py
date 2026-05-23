@@ -46,17 +46,3 @@ class NearbyFeatureItem(BaseModel):
     external_id: Optional[str] = None
     distance_meters: Optional[float] = None
     field_map: Dict[str, str] = Field(default_factory=dict)
-
-
-class NearbyFeaturesResponse(BaseModel):
-    """
-    GIS 근거 조회 API 응답입니다.
-    """
-
-    lat: float
-    lng: float
-    radius_meters: float
-    source_type: Optional[str] = None
-    limit: int
-    count: int
-    items: list[NearbyFeatureItem] = Field(default_factory=list)

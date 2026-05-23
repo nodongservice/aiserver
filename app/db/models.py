@@ -8,14 +8,6 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 from app.db.session import Base
 
 
-class TestItem(Base):
-    __tablename__ = "test_items"
-
-    id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
-    name: Mapped[str] = mapped_column(String(100), nullable=False)
-    is_active: Mapped[bool] = mapped_column(Boolean, default=True)
-
-
 class PublicDataRecord(Base):
     """
     Spring이 공공데이터 원본을 동기화해서 저장하는 테이블입니다.
