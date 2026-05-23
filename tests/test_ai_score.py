@@ -266,7 +266,7 @@ def test_recommendation_explanation_uses_configured_provider(monkeypatch):
         captured["request"] = request
         captured["provider_name"] = provider_name
         return ExplanationGenerateResponse(
-            explanation_version="v2-openai-sanitized",
+            explanation_version="v3-openai-sanitized",
             short_summary="LLM 요약",
             detail_explanation="LLM 상세 설명",
             check_points=["LLM 체크포인트"],

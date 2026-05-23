@@ -13,7 +13,7 @@ def test_sanitize_explanation_payload_replaces_deterministic_unsafe_phrases():
                 "추가 확인 필요",
             ],
         },
-        explanation_version="v2-openai-sanitized",
+        explanation_version="v3-openai-sanitized",
         used_llm=True,
     )
 
@@ -32,7 +32,7 @@ def test_sanitize_explanation_payload_uses_default_check_point_when_missing():
             "detail_explanation": "",
             "check_points": [],
         },
-        explanation_version="v2-openai-sanitized",
+        explanation_version="v3-openai-sanitized",
         used_llm=True,
     )
 
