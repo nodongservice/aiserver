@@ -2,7 +2,7 @@ from collections import OrderedDict
 from datetime import datetime
 from threading import RLock
 from time import monotonic
-from typing import Optional
+from typing import Optional, Union
 
 from sqlalchemy.orm import Session
 
@@ -48,6 +48,18 @@ from app.utils.geo import calculate_haversine_distance_meters
 MAP_SCORING_MIN_CANDIDATE_LIMIT = 80
 ACCESSIBILITY_CACHE_TTL_SECONDS = 10 * 60
 ACCESSIBILITY_CACHE_MAX_SIZE = 1000
+SCORE_BREAKDOWN_SOURCE_TYPE = "BRIDGEWORK_SCORE_BREAKDOWN"
+SCORE_BREAKDOWN_SOURCE_NAME = "BridgeWork 점수 산정"
+MAP_SCORE_COMPONENT_LABELS = {
+    "job_fit_score": "직무 적합도",
+    "work_condition_score": "근무 조건",
+    "disability_support_score": "장애 지원",
+    "work_environment_score": "근무 환경",
+    "company_stability_score": "기업 안정성",
+    "accessibility_score": "근무지 접근성",
+    "distance_score": "거주지-근무지 거리",
+    "commute_score": "대중교통 통근",
+}
 
 _accessibility_cache: OrderedDict[tuple[float, float, int], tuple[float, AccessibilityEvidence]] = OrderedDict()
 _accessibility_cache_lock = RLock()
@@ -110,7 +122,14 @@ def score_map_jobs(request: ScoreRequest, db: Optional[Session] = None) -> MapSc
             commute_score=calculate_commute_score(transit_time),
         )
         total_score = calculate_equal_weight_total_score(score_detail)
-        evidence_items = build_score_evidence_items(posting, standard_workplace, accessibility, transit_time)
+        evidence_items = build_score_evidence_items(
+            posting,
+            standard_workplace,
+            accessibility,
+            transit_time,
+            score_detail,
+            total_score,
+        )
 
         results.append(
             MapScoreResult(
@@ -264,6 +283,8 @@ def build_score_evidence_items(
     standard_workplace: StandardWorkplaceMatch,
     accessibility: AccessibilityEvidence,
     transit_time: Optional[TransitTimeEstimate] = None,
+    score_detail: Optional[MapScoreDetail] = None,
+    total_score: Optional[int] = None,
 ) -> list[ScoreEvidenceItem]:
     evidence_items = [
         ScoreEvidenceItem(
@@ -299,7 +320,48 @@ def build_score_evidence_items(
     transit_evidence = build_transit_time_evidence_item(transit_time)
     if transit_evidence is not None:
         evidence_items.append(transit_evidence)
+    score_breakdown_evidence = build_score_breakdown_evidence_item(score_detail, total_score)
+    if score_breakdown_evidence is not None:
+        evidence_items.append(score_breakdown_evidence)
     return evidence_items
+
+
+def build_score_breakdown_evidence_item(
+    score_detail: Optional[MapScoreDetail],
+    total_score: Optional[int],
+) -> Optional[ScoreEvidenceItem]:
+    if score_detail is None or total_score is None:
+        return None
+
+    components = list(iter_map_score_components(score_detail))
+    if not components:
+        return None
+
+    strong_components = sorted(
+        [component for component in components if component["score"] >= 80],
+        key=lambda component: component["score"],
+        reverse=True,
+    )[:3]
+    caution_components = sorted(
+        [component for component in components if component["score"] < 60],
+        key=lambda component: component["score"],
+    )[:3]
+    top_text = ", ".join(f"{item['label']} {item['score']}점" for item in strong_components) or "뚜렷한 고득점 항목 없음"
+    caution_text = ", ".join(f"{item['label']} {item['score']}점" for item in caution_components) or "낮은 점수 항목 없음"
+
+    return ScoreEvidenceItem(
+        source_type=SCORE_BREAKDOWN_SOURCE_TYPE,
+        source_name=SCORE_BREAKDOWN_SOURCE_NAME,
+        description=f"총점 {total_score}점은 계산 가능한 {len(components)}개 항목을 동일 비중 평균으로 산정했습니다. 강점: {top_text}. 확인 필요: {caution_text}.",
+        fields={
+            "total_score": total_score,
+            "aggregation": "equal_weight_average",
+            "component_count": len(components),
+            "components": components,
+            "strong_components": strong_components,
+            "caution_components": caution_components,
+        },
+    )
 
 
 def build_transit_time_evidence_item(transit_time: Optional[TransitTimeEstimate]) -> Optional[ScoreEvidenceItem]:
@@ -349,18 +411,18 @@ def build_job_context_evidence_items(posting: JobPosting) -> list[ScoreEvidenceI
 
 
 def calculate_equal_weight_total_score(score_detail: MapScoreDetail) -> int:
-    values = [
-        score_detail.job_fit_score,
-        score_detail.work_condition_score,
-        score_detail.disability_support_score,
-        score_detail.work_environment_score,
-        score_detail.company_stability_score,
-        score_detail.accessibility_score,
-        score_detail.distance_score,
-        score_detail.commute_score,
-    ]
-    available_values = [value for value in values if value is not None]
+    available_values = [component["score"] for component in iter_map_score_components(score_detail)]
     return clamp_score(round(sum(available_values) / len(available_values)))
+
+
+def iter_map_score_components(score_detail: MapScoreDetail) -> list[dict[str, Union[int, str]]]:
+    components: list[dict[str, Union[int, str]]] = []
+    for key, label in MAP_SCORE_COMPONENT_LABELS.items():
+        value = getattr(score_detail, key)
+        if value is None:
+            continue
+        components.append({"key": key, "label": label, "score": value})
+    return components
 
 
 def calculate_home_work_distance_score(profile: ScoreProfile, posting: JobPosting) -> Optional[int]:
@@ -428,7 +490,16 @@ def build_map_reasons(
     accessibility: AccessibilityEvidence,
     transit_time: Optional[TransitTimeEstimate] = None,
 ) -> list[str]:
-    reasons = ["6개 항목을 동일 비중으로 계산했습니다."]
+    components = iter_map_score_components(score_detail)
+    reasons = [f"{len(components)}개 점수 항목을 동일 비중 평균으로 계산했습니다."]
+    strong_components = [component for component in components if component["score"] >= 80]
+    caution_components = [component for component in components if component["score"] < 60]
+    if strong_components:
+        top_components = sorted(strong_components, key=lambda component: component["score"], reverse=True)[:2]
+        reasons.append("강점 항목은 " + ", ".join(f"{component['label']} {component['score']}점" for component in top_components) + "입니다.")
+    if caution_components:
+        lowest_components = sorted(caution_components, key=lambda component: component["score"])[:2]
+        reasons.append("확인 필요 항목은 " + ", ".join(f"{component['label']} {component['score']}점" for component in lowest_components) + "입니다.")
     if score_detail.job_fit_score >= 80:
         reasons.append("직무 적합도 점수가 높습니다.")
     if standard_workplace.is_match:
@@ -441,6 +512,10 @@ def build_map_reasons(
             reasons.append(f"접근성 산정에 {used_source_count}개 공공데이터 소스가 반영되었습니다.")
     if transit_time is not None and transit_time.duration_minutes is not None and not transit_time.error_reason:
         reasons.append(f"대중교통 예상 통근시간 {transit_time.duration_minutes}분을 접근성 점수에 반영했습니다.")
+    if score_detail.distance_score is not None:
+        reasons.append(f"거주지-근무지 거리 점수 {score_detail.distance_score}점을 총점에 반영했습니다.")
+    if score_detail.commute_score is not None:
+        reasons.append(f"대중교통 통근 점수 {score_detail.commute_score}점을 총점에 반영했습니다.")
     return reasons
 
 

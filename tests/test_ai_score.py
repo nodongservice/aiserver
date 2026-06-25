@@ -618,6 +618,68 @@ def test_map_score_uses_equal_weight_average(monkeypatch):
     assert result.evidence_items[1].source_table == "pd_kepad_standard_workplace"
 
 
+def test_map_score_includes_score_breakdown_evidence_and_reasons(monkeypatch):
+    posting = JobPosting(
+        job_post_id=1,
+        company_name="ABC",
+        job_title="사무보조",
+        required_career="신입",
+        required_education="고졸",
+        required_licenses="엑셀",
+        employment_type="정규직",
+        work_lat=37.5701,
+        work_lng=126.9823,
+    )
+    monkeypatch.setattr(score_service, "get_map_candidate_job_postings", lambda db, limit: [posting])
+    monkeypatch.setattr(score_service, "get_standard_workplaces", lambda postings, db: {})
+    monkeypatch.setattr(
+        score_service,
+        "get_accessibility",
+        lambda profile, posting, db: AccessibilityEvidence(
+            bus_stop_count=0,
+            crosswalk_count=0,
+            traffic_light_count=0,
+            transport_support_center_count=0,
+            subway_entrance_lift_count=0,
+            walking_network_count=0,
+            evidence_items=[],
+        ),
+    )
+
+    response = score_service.score_map_jobs(
+        ScoreRequest(
+            profile=ScoreProfile(
+                desired_jobs=["사무보조"],
+                skills=["엑셀"],
+                education="고졸",
+                career="신입",
+                available_employment_types=["정규직"],
+                disability_types=["wheelchair"],
+                disability_severity="중증",
+                is_registered_disabled=True,
+                home_lat=37.5665,
+                home_lng=126.978,
+            )
+        )
+    )
+
+    result = response.results[0]
+    breakdown = next(item for item in result.evidence_items if item.source_type == score_service.SCORE_BREAKDOWN_SOURCE_TYPE)
+
+    assert "점수 항목을 동일 비중 평균으로 계산했습니다." in result.reasons[0]
+    assert any("강점 항목" in reason for reason in result.reasons)
+    assert any("확인 필요 항목" in reason for reason in result.reasons)
+    assert breakdown.source_name == "BridgeWork 점수 산정"
+    assert breakdown.fields["total_score"] == result.total_score
+    assert breakdown.fields["aggregation"] == "equal_weight_average"
+    assert breakdown.fields["component_count"] == len(breakdown.fields["components"])
+    assert {component["key"] for component in breakdown.fields["components"]} >= {
+        "job_fit_score",
+        "accessibility_score",
+        "distance_score",
+    }
+
+
 def test_map_score_sorts_all_candidates_before_pagination(monkeypatch):
     low_score_latest = JobPosting(
         job_post_id=1,
