@@ -132,23 +132,12 @@ _public_data_reference_cache_expires_at: Optional[datetime] = None
 
 
 def find_latest_recruitments(db: Session, limit: int, offset: int = 0) -> list[PdKepadRecruitment]:
-    rows = (
-        db.query(PdKepadRecruitment)
-        .filter(*active_recruitment_filters())
-        .order_by(*recruitment_candidate_ordering())
-        .offset(offset)
-        .limit(limit)
-        .all()
-    )
+    rows = db.query(PdKepadRecruitment).filter(*active_recruitment_filters()).order_by(*recruitment_candidate_ordering()).offset(offset).limit(limit).all()
     return sort_recruitments_by_latest(rows)
 
 
 def find_all_recruitments_for_scoring(db: Session, limit: Optional[int] = None) -> list[PdKepadRecruitment]:
-    query = (
-        db.query(PdKepadRecruitment)
-        .filter(*active_recruitment_filters())
-        .order_by(*recruitment_candidate_ordering())
-    )
+    query = db.query(PdKepadRecruitment).filter(*active_recruitment_filters()).order_by(*recruitment_candidate_ordering())
     if limit is not None:
         query = query.limit(limit)
     return sort_recruitments_by_latest(query.all())
