@@ -8,7 +8,7 @@ from threading import RLock
 from time import monotonic
 from typing import Optional
 
-from sqlalchemy import func, or_
+from sqlalchemy import case, func, or_
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
 
@@ -134,10 +134,8 @@ _public_data_reference_cache_expires_at: Optional[datetime] = None
 def find_latest_recruitments(db: Session, limit: int, offset: int = 0) -> list[PdKepadRecruitment]:
     rows = (
         db.query(PdKepadRecruitment)
-        .filter(or_(PdKepadRecruitment.posting_status == "ACTIVE", PdKepadRecruitment.posting_status.is_(None)))
-        .filter(PdKepadRecruitment.job_nm.isnot(None))
-        .filter(PdKepadRecruitment.buspla_name.isnot(None))
-        .order_by(PdKepadRecruitment.raw_fetched_at.desc().nullslast(), PdKepadRecruitment.id.desc())
+        .filter(*active_recruitment_filters())
+        .order_by(*recruitment_candidate_ordering())
         .offset(offset)
         .limit(limit)
         .all()
@@ -148,14 +146,43 @@ def find_latest_recruitments(db: Session, limit: int, offset: int = 0) -> list[P
 def find_all_recruitments_for_scoring(db: Session, limit: Optional[int] = None) -> list[PdKepadRecruitment]:
     query = (
         db.query(PdKepadRecruitment)
-        .filter(or_(PdKepadRecruitment.posting_status == "ACTIVE", PdKepadRecruitment.posting_status.is_(None)))
-        .filter(PdKepadRecruitment.job_nm.isnot(None))
-        .filter(PdKepadRecruitment.buspla_name.isnot(None))
-        .order_by(PdKepadRecruitment.raw_fetched_at.desc().nullslast(), PdKepadRecruitment.id.desc())
+        .filter(*active_recruitment_filters())
+        .order_by(*recruitment_candidate_ordering())
     )
     if limit is not None:
         query = query.limit(limit)
     return sort_recruitments_by_latest(query.all())
+
+
+def active_recruitment_filters():
+    deadline_digits = recruitment_deadline_digits_expr()
+    return (
+        or_(PdKepadRecruitment.posting_status == "ACTIVE", PdKepadRecruitment.posting_status.is_(None)),
+        PdKepadRecruitment.job_nm.isnot(None),
+        PdKepadRecruitment.buspla_name.isnot(None),
+        or_(
+            func.length(deadline_digits) < 8,
+            func.right(deadline_digits, 8) >= func.to_char(func.current_date(), "YYYYMMDD"),
+        ),
+    )
+
+
+def recruitment_deadline_digits_expr():
+    return func.regexp_replace(func.coalesce(PdKepadRecruitment.term_date, ""), r"[^0-9]", "", "g")
+
+
+def recruitment_candidate_ordering():
+    return (
+        case(
+            (
+                PdKepadRecruitment.geo_latitude.isnot(None) & PdKepadRecruitment.geo_longitude.isnot(None),
+                0,
+            ),
+            else_=1,
+        ).asc(),
+        PdKepadRecruitment.raw_fetched_at.desc().nullslast(),
+        PdKepadRecruitment.id.desc(),
+    )
 
 
 def enrich_job_postings_with_public_data(db: Session, postings: list[JobPosting]) -> list[JobPosting]:
@@ -861,13 +888,18 @@ def sort_recruitments_by_latest(rows: list[PdKepadRecruitment]) -> list[PdKepadR
     return sorted(rows, key=_recruitment_latest_sort_key, reverse=True)
 
 
-def _recruitment_latest_sort_key(row: PdKepadRecruitment) -> tuple[datetime, datetime, datetime, int]:
+def _recruitment_latest_sort_key(row: PdKepadRecruitment) -> tuple[int, datetime, datetime, datetime, int]:
     return (
+        1 if has_recruitment_coordinates(row) else 0,
         parse_public_date(row.offerreg_dt),
         parse_public_date(row.reg_dt),
         row.raw_fetched_at or datetime.min,
         row.id or 0,
     )
+
+
+def has_recruitment_coordinates(row: PdKepadRecruitment) -> bool:
+    return getattr(row, "geo_latitude", None) is not None and getattr(row, "geo_longitude", None) is not None
 
 
 def parse_public_date(value: Optional[str]) -> datetime:

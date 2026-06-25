@@ -1013,6 +1013,13 @@ def test_recruitment_latest_sort_uses_parsed_dates_not_string_order():
     assert [row.id for row in sort_recruitments_by_latest([may, december])] == [2, 1]
 
 
+def test_recruitment_latest_sort_prioritizes_geocoded_rows():
+    geocoded = SimpleNamespace(id=1, offerreg_dt="2026-05-01", reg_dt=None, raw_fetched_at=None, geo_latitude=37.5, geo_longitude=127.0)
+    ungeocoded = SimpleNamespace(id=2, offerreg_dt="2026-12-01", reg_dt=None, raw_fetched_at=None, geo_latitude=None, geo_longitude=None)
+
+    assert [row.id for row in sort_recruitments_by_latest([ungeocoded, geocoded])] == [1, 2]
+
+
 def test_cancelled_standard_workplace_is_not_scoring_match():
     cancelled = SimpleNamespace(
         id=10,
