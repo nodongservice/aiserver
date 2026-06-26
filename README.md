@@ -44,9 +44,11 @@ React Frontend
 
 ![Quick recommendation flow](images/image2.png)
 
-퀵 추천은 최신 공고를 빠르게 확인하는 흐름입니다. AI 직무 적합도 토글이 켜져 있으면 Spring Backend가 선택된 프로필 1개를 FastAPI로 전달하고, FastAPI가 최신 공고별 직무 적합도와 근거를 계산합니다.
+퀵 추천은 별도 퀵공고 화면에서 최신 공고를 빠르게 확인하는 흐름입니다. AI 직무 적합도 토글이 켜져 있으면 Spring Backend가 선택된 프로필 1개를 FastAPI로 전달하고, FastAPI가 최신 공고별 직무 적합도와 근거를 계산합니다.
 
-- 최신 장애인 구인 공고 조회
+- 모집 중이고 마감일이 지나지 않은 장애인 구인 공고 조회
+- 좌표가 있는 공고 우선 정렬
+- `limit`/`offset` 기반 페이지네이션
 - 사용자 지원 직무, 기술, 학력, 경력과 공고 조건 비교
 - `job_fit_score`, 추천 근거, 위험요소 반환
 - AI 토글 OFF 시 Spring Backend가 최신 공고만 조회
@@ -58,7 +60,7 @@ flowchart LR
     B -->|선택 프로필 1개 전달| C["FastAPI AI/GIS<br/>POST /api/v1/score/map"]
 
     C --> D["ScoreRequest 검증<br/>profile, limit, offset"]
-    D --> E["공고 후보 조회<br/>pd_kepad_recruitment<br/>ACTIVE 공고"]
+    D --> E["공고 후보 조회<br/>pd_kepad_recruitment<br/>모집중/마감 전/좌표 우선"]
     E --> F["공고 컨텍스트 보강<br/>직무분류, 직업훈련, 취업역량 프로그램"]
 
     F --> G["표준사업장 매칭<br/>pd_kepad_standard_workplace"]
@@ -143,6 +145,15 @@ flowchart LR
 | `POST` | `/api/v1/score/quick` | 최신 공고 대상 직무 적합도 계산 |
 | `POST` | `/api/v1/score/map` | 지도 추천용 6개 항목 종합 점수 계산 |
 | `POST` | `/api/v1/explain/recommendation` | 추천 사유/주의사항/체크리스트 생성 |
+
+### 추천 점수 API 규칙
+
+- `limit`: 1~100
+- `offset`: 0 이상
+- 후보 공고는 `posting_status=ACTIVE` 또는 상태값 없음, 직무명/사업장명 존재, 마감일이 지나지 않은 공고를 기준으로 조회합니다.
+- 좌표(`geo_latitude`, `geo_longitude`)가 있는 공고를 먼저 정렬한 뒤 최신 수집/등록 기준으로 정렬합니다.
+- 지도 추천은 전체 후보를 점수 계산한 뒤 점수 기준 정렬 후 `limit`/`offset`을 적용합니다.
+- Spring Backend가 AI ON 20개 배치 요청을 1개 단위로 나눠 호출할 수 있으므로, FastAPI는 `limit=1` 요청도 일반 요청과 동일하게 안정적으로 처리해야 합니다.
 
 ## 기술 스택
 

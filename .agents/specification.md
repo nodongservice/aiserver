@@ -15,10 +15,10 @@
 
 ## 3. 수집 및 가공 데이터
 
-1. 한국장애인고용공단_장애인 구인 실시간 현황https://www.data.go.kr/data/15117692/openapi.do + 지오코딩(카카오 지오코더)
+1. 한국장애인고용공단_장애인 구인 실시간 현황https://www.data.go.kr/data/15117692/openapi.do + 지오코딩(네이버 NCP Geocoding API)
 2. 한국장애인고용공단_장애인 고용직무분류https://www.data.go.kr/data/15157071/openapi.do
 3. 한국장애인고용공단_장애인 표준사업장 실시간 조회https://www.data.go.kr/data/15119304/openapi.do
-4. 한국장애인고용공단_근로지원인 수행기관 실시간 정보https://www.data.go.kr/data/15131282/openapi.do + 지오코딩(카카오 지오코더)
+4. 한국장애인고용공단_근로지원인 수행기관 실시간 정보https://www.data.go.kr/data/15131282/openapi.do + 지오코딩(네이버 NCP Geocoding API)
 5. 한국철도공사_편의시설정보[https://www.data.go.kr/data/15125774/openapi.do#/API 목록/weekPersonFacilities](https://www.data.go.kr/data/15125774/openapi.do#/API%20%EB%AA%A9%EB%A1%9D/weekPersonFacilities)
 6. 서울교통공사_교통약자이용정보(휠체어리프트)https://www.data.go.kr/data/15143843/openapi.do#/
 7. 전국교통약자이동지원센터정보표준데이터https://www.data.go.kr/tcs/dss/selectStdDataDetailView.do?publicDataPk=15028207
@@ -93,6 +93,11 @@
 
 ### 기능 2. 퀵 맞춤 일자리 추천 (최신 + 직무 적합)
 
+- 프론트는 별도 퀵공고 페이지에서 Spring Backend만 호출한다.
+- Spring Backend는 AI ON 추천을 비동기 task로 관리하고, 20개 배치를 1개 단위 FastAPI 요청으로 나눠 부분 결과를 누적할 수 있다.
+- FastAPI는 `limit`/`offset`을 안정적으로 처리하고, `limit=1` 요청도 일반 요청과 동일한 응답 구조로 반환한다.
+- 후보 공고는 모집 중이고 마감일이 지나지 않은 공고를 기준으로 하며 좌표가 있는 공고를 우선한다.
+
 1. AI 직무 적합도 토글 ON
     - 프론트에서 프로필 1개 선택(기본 프로필 최상단 노출)
     - Spring → FastAPI: 사용자 선택 프로필만 전달
@@ -117,6 +122,9 @@
     - FastAPI → Spring: 항목별 점수 + 총점 + 내림차순 결과 반환
     - Spring → 프론트: 결과 전달
     - 프론트: 화면 필터 적용
+    - 지도 추천은 후보 점수 계산 후 정렬하고 `limit`/`offset`을 적용한다.
+    - Spring Backend가 20개 배치를 1개 단위 FastAPI 요청으로 나눠 부분 결과를 누적할 수 있다.
+    - 프론트는 부분 결과를 1개씩 반영하고 최대 100개까지만 표시한다.
 2. AI 스코어링 토글 OFF
     - FastAPI 호출 없음
     - Spring이 DB 공고 반환
@@ -206,16 +214,16 @@
 # FastAPI 구현 리스트
 
 1. 스코어링 API
-    - `POST /ai/v1/score/quick`
+    - `POST /api/v1/score/quick`
         - 입력: 선택 프로필 1개
-        - 처리: 최신 공고 조회 + 직무 적합도 계산
+        - 처리: 모집 중/마감 전/좌표 우선 공고 조회 + 직무 적합도 계산
         - 출력: 공고 + `job_fit_score` + 근거
-    - `POST /ai/v1/score/map`
+    - `POST /api/v1/score/map`
         - 입력: 선택 프로필 1개
-        - 처리: 공고/공공데이터 조회 + 6항목 동일비중 종합점수 계산
+        - 처리: 공고/공공데이터 조회 + 6항목 동일비중 종합점수 계산 + 점수 정렬 후 페이지네이션
         - 출력: 공고 + 항목별 점수 + 총점 + 근거
 2. 설명 생성 API(선택)
-    - `POST /ai/v1/explain/recommendation`
+    - `POST /api/v1/explain/recommendation`
         - 입력: 공고/점수/프로필
         - 출력: 추천 사유/주의사항/체크리스트
 3. 내부 모듈
