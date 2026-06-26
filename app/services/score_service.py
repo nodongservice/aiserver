@@ -98,8 +98,23 @@ def score_quick_jobs(request: ScoreRequest, db: Optional[Session] = None) -> Qui
 
 def score_map_jobs(request: ScoreRequest, db: Optional[Session] = None) -> MapScoreResponse:
     validate_score_request(request, mode="map")
+    if request.stream_mode:
+        postings = get_map_candidate_job_postings(db=db, limit=request.limit, offset=request.offset)
+        return MapScoreResponse(results=score_map_postings(request, postings, db, sort_results=False))
+
     candidate_limit = max(request.offset + request.limit, MAP_SCORING_MIN_CANDIDATE_LIMIT)
     postings = get_map_candidate_job_postings(db=db, limit=candidate_limit)
+    results = score_map_postings(request, postings, db, sort_results=True)
+    return MapScoreResponse(results=results[request.offset : request.offset + request.limit])
+
+
+def score_map_postings(
+    request: ScoreRequest,
+    postings: list[JobPosting],
+    db: Optional[Session] = None,
+    *,
+    sort_results: bool,
+) -> list[MapScoreResult]:
     standard_workplaces = get_standard_workplaces(postings, db)
     results: list[MapScoreResult] = []
 
@@ -143,8 +158,9 @@ def score_map_jobs(request: ScoreRequest, db: Optional[Session] = None) -> MapSc
             )
         )
 
-    results.sort(key=lambda result: result.total_score, reverse=True)
-    return MapScoreResponse(results=results[request.offset : request.offset + request.limit])
+    if sort_results:
+        results.sort(key=lambda result: result.total_score, reverse=True)
+    return results
 
 
 def get_latest_job_postings(db: Optional[Session], limit: int, offset: int = 0) -> list[JobPosting]:
@@ -157,12 +173,12 @@ def get_latest_job_postings(db: Optional[Session], limit: int, offset: int = 0) 
     return enrich_job_postings_with_public_data(db, postings)
 
 
-def get_map_candidate_job_postings(db: Optional[Session], limit: int) -> list[JobPosting]:
+def get_map_candidate_job_postings(db: Optional[Session], limit: int, offset: int = 0) -> list[JobPosting]:
     if db is None:
         return []
     if not hasattr(db, "query"):
         raise RuntimeError("스코어링 공고 조회에는 SQLAlchemy Session이 필요합니다.")
-    rows = find_all_recruitments_for_scoring(db, limit=limit)
+    rows = find_all_recruitments_for_scoring(db, limit=limit, offset=offset)
     postings = [posting for row in rows if (posting := to_job_posting(row)) is not None]
     return enrich_job_postings_with_public_data(db, postings)
 
