@@ -136,8 +136,14 @@ def find_latest_recruitments(db: Session, limit: int, offset: int = 0) -> list[P
     return sort_recruitments_by_latest(rows)
 
 
-def find_all_recruitments_for_scoring(db: Session, limit: Optional[int] = None) -> list[PdKepadRecruitment]:
+def find_all_recruitments_for_scoring(
+    db: Session,
+    limit: Optional[int] = None,
+    offset: int = 0,
+) -> list[PdKepadRecruitment]:
     query = db.query(PdKepadRecruitment).filter(*active_recruitment_filters()).order_by(*recruitment_candidate_ordering())
+    if offset > 0:
+        query = query.offset(offset)
     if limit is not None:
         query = query.limit(limit)
     return sort_recruitments_by_latest(query.all())

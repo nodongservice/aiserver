@@ -1,6 +1,6 @@
 from typing import Any, List, Optional, Union
 
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 PROFILE_VALUE_LABELS = {
     "BACHELOR": "대졸",
@@ -125,9 +125,12 @@ def normalize_profile_value(value: Any) -> Any:
 
 
 class ScoreRequest(BaseModel):
+    model_config = ConfigDict(populate_by_name=True)
+
     profile: ScoreProfile
     limit: int = Field(default=20, ge=1, le=100)
     offset: int = Field(default=0, ge=0)
+    stream_mode: bool = Field(default=False, alias="streamMode")
 
 
 class JobPosting(BaseModel):
