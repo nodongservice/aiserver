@@ -66,6 +66,16 @@ MAP_SCORE_COMPONENT_LABELS = {
     "distance_score": "거주지-근무지 거리",
     "commute_score": "대중교통 통근",
 }
+MAP_SCORE_COMPONENT_WEIGHTS = {
+    "job_fit_score": 0.24,
+    "work_condition_score": 0.12,
+    "disability_support_score": 0.10,
+    "work_environment_score": 0.12,
+    "company_stability_score": 0.08,
+    "accessibility_score": 0.20,
+    "distance_score": 0.07,
+    "commute_score": 0.07,
+}
 
 _accessibility_cache: OrderedDict[tuple[float, float, int], tuple[float, AccessibilityEvidence]] = OrderedDict()
 _accessibility_cache_lock = RLock()
@@ -252,10 +262,10 @@ def calculate_candidate_preference_score(profile: ScoreProfile, posting: JobPost
     distance_component = distance_score if distance_score is not None else (58 if posting.work_lat is not None and posting.work_lng is not None else 35)
 
     if mode == "quick":
-        score = round(job_fit_score * 0.55 + work_condition_score * 0.15 + distance_component * 0.30)
+        score = round(job_fit_score * 0.68 + work_condition_score * 0.12 + distance_component * 0.20 + 5)
     else:
         work_environment_score = calculate_work_environment_score(profile, posting)
-        score = round(job_fit_score * 0.40 + work_condition_score * 0.18 + work_environment_score * 0.17 + distance_component * 0.25)
+        score = round(job_fit_score * 0.46 + work_condition_score * 0.14 + work_environment_score * 0.12 + distance_component * 0.28 + 4)
 
     if posting.work_lat is None or posting.work_lng is None:
         score -= 12
@@ -272,7 +282,7 @@ def calculate_quick_recommendation_score(
     posting: JobPosting,
 ) -> int:
     distance_component = distance_score if distance_score is not None else (58 if posting.work_lat is not None and posting.work_lng is not None else 35)
-    score = round(job_fit_score * 0.55 + work_condition_score * 0.15 + distance_component * 0.30)
+    score = round(job_fit_score * 0.68 + work_condition_score * 0.12 + distance_component * 0.20 + 5)
     if posting.work_lat is None or posting.work_lng is None:
         score -= 10
     return clamp_score(apply_distance_penalty(score, profile, posting))
@@ -546,12 +556,13 @@ def build_score_breakdown_evidence_item(
     return ScoreEvidenceItem(
         source_type=SCORE_BREAKDOWN_SOURCE_TYPE,
         source_name=SCORE_BREAKDOWN_SOURCE_NAME,
-        description=f"총점 {total_score}점은 계산 가능한 {len(components)}개 항목을 동일 비중 평균으로 산정했습니다. 강점: {top_text}. 확인 필요: {caution_text}.",
+        description=f"총점 {total_score}점은 계산 가능한 {len(components)}개 항목을 추천 영향도에 따라 가중 평균한 뒤 상위 매칭 보정을 적용했습니다. 강점: {top_text}. 확인 필요: {caution_text}.",
         fields={
             "total_score": total_score,
-            "aggregation": "equal_weight_average",
+            "aggregation": "weighted_calibrated_average",
             "component_count": len(components),
             "components": components,
+            "weights": {component["key"]: MAP_SCORE_COMPONENT_WEIGHTS.get(str(component["key"]), 0) for component in components},
             "strong_components": strong_components,
             "caution_components": caution_components,
         },
@@ -605,8 +616,15 @@ def build_job_context_evidence_items(posting: JobPosting) -> list[ScoreEvidenceI
 
 
 def calculate_equal_weight_total_score(score_detail: MapScoreDetail) -> int:
-    available_values = [component["score"] for component in iter_map_score_components(score_detail)]
-    return clamp_score(round(sum(available_values) / len(available_values)))
+    components = iter_map_score_components(score_detail)
+    total_weight = sum(MAP_SCORE_COMPONENT_WEIGHTS.get(str(component["key"]), 0) for component in components)
+    if total_weight <= 0:
+        available_values = [component["score"] for component in components]
+        return clamp_score(round(sum(available_values) / len(available_values)))
+
+    weighted_score = sum(component["score"] * MAP_SCORE_COMPONENT_WEIGHTS.get(str(component["key"]), 0) for component in components) / total_weight
+    calibrated_score = weighted_score * 1.08 + 4
+    return clamp_score(round(calibrated_score))
 
 
 def iter_map_score_components(score_detail: MapScoreDetail) -> list[dict[str, Union[int, str]]]:
@@ -739,7 +757,7 @@ def build_map_reasons(
     transit_time: Optional[TransitTimeEstimate] = None,
 ) -> list[str]:
     components = iter_map_score_components(score_detail)
-    reasons = [f"{len(components)}개 점수 항목을 동일 비중 평균으로 계산했습니다."]
+    reasons = [f"{len(components)}개 점수 항목을 추천 영향도 기반 가중 평균으로 계산했습니다."]
     strong_components = [component for component in components if component["score"] >= 80]
     caution_components = [component for component in components if component["score"] < 60]
     if strong_components:
