@@ -35,9 +35,10 @@ from app.services.scoring.work_condition import (
 )
 from app.services.scoring.work_environment import calculate_work_environment_score
 from app.services.transit_time_service import (
+    TRANSIT_ESTIMATE_SOURCE_TYPE,
     TransitTimeEstimate,
     calculate_next_weekday_8,
-    parse_odsay_transit_time,
+    estimate_transit_time,
 )
 
 
@@ -653,7 +654,7 @@ def test_quick_score_prioritizes_profile_ranked_candidates(monkeypatch):
     assert response.results[0].job_fit_score > response.results[1].job_fit_score
 
 
-def test_quick_score_includes_odsay_transit_time(monkeypatch):
+def test_quick_score_includes_bridgework_transit_estimate(monkeypatch):
     posting = JobPosting(
         job_post_id=1,
         company_name="ABC",
@@ -694,7 +695,7 @@ def test_quick_score_includes_odsay_transit_time(monkeypatch):
     assert response.results[0].transit_time is not None
     assert response.results[0].transit_time.duration_minutes == 42
     assert response.results[0].transit_time.transfer_count == 1
-    assert any(item.source_type == "ODSAY_TRANSIT_ROUTE" for item in response.results[0].evidence_items)
+    assert any(item.source_type == TRANSIT_ESTIMATE_SOURCE_TYPE for item in response.results[0].evidence_items)
 
 
 def test_score_posting_query_failure_is_not_hidden(monkeypatch):
@@ -988,44 +989,27 @@ def test_next_weekday_departure_policy_skips_weekend():
     assert departure.isoformat() == "2026-05-18T08:00:00+09:00"
 
 
-def test_parse_odsay_transit_time_selects_shortest_path():
-    estimate = parse_odsay_transit_time(
-        {
-            "result": {
-                "path": [
-                    {
-                        "pathType": 3,
-                        "info": {
-                            "totalTime": 55,
-                            "totalWalk": 900,
-                            "totalDistance": 18000,
-                            "payment": 1450,
-                            "busTransitCount": 1,
-                            "subwayTransitCount": 1,
-                            "firstStartStation": "시청",
-                            "lastEndStation": "강남",
-                        },
-                    },
-                    {
-                        "pathType": 2,
-                        "info": {
-                            "totalTime": 42,
-                            "totalWalk": 700,
-                            "totalDistance": 15000,
-                            "payment": 1450,
-                            "busTransitCount": 1,
-                            "subwayTransitCount": 0,
-                        },
-                    },
-                ]
-            }
-        },
+def test_bridgework_transit_estimate_scales_by_distance():
+    short_route = estimate_transit_time(
+        origin_lat=37.5665,
+        origin_lng=126.978,
+        destination_lat=37.5700,
+        destination_lng=126.9820,
+        requested_departure_at="2026-05-13T08:00:00+09:00",
+    )
+    long_route = estimate_transit_time(
+        origin_lat=37.5665,
+        origin_lng=126.978,
+        destination_lat=37.7000,
+        destination_lng=127.2000,
         requested_departure_at="2026-05-13T08:00:00+09:00",
     )
 
-    assert estimate.duration_minutes == 42
-    assert estimate.walk_distance_meters == 700
-    assert estimate.transfer_count == 1
+    assert short_route.provider == "bridgework"
+    assert short_route.duration_minutes is not None
+    assert long_route.duration_minutes is not None
+    assert long_route.duration_minutes > short_route.duration_minutes
+    assert long_route.transfer_count >= short_route.transfer_count
 
 
 def test_accessibility_score_reflects_transit_commute_limit():

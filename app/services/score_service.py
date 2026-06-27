@@ -41,8 +41,8 @@ from app.services.scoring.job_fit import calculate_job_fit_score
 from app.services.scoring.work_condition import calculate_work_condition_score
 from app.services.scoring.work_environment import calculate_work_environment_score
 from app.services.transit_time_service import (
-    ODSAY_SOURCE_NAME,
-    ODSAY_SOURCE_TYPE,
+    TRANSIT_ESTIMATE_SOURCE_NAME,
+    TRANSIT_ESTIMATE_SOURCE_TYPE,
     TransitTimeEstimate,
     get_transit_time_estimate,
 )
@@ -587,12 +587,12 @@ def build_score_breakdown_evidence_item(
 def build_transit_time_evidence_item(transit_time: Optional[TransitTimeEstimate]) -> Optional[ScoreEvidenceItem]:
     if transit_time is None:
         return None
-    description = "ODsay 대중교통 길찾기 예상 소요시간을 조회했습니다."
+    description = "좌표 거리와 지역별 대중교통 보정 계수로 예상 통근시간을 추정했습니다."
     if transit_time.error_reason:
-        description = "ODsay 대중교통 길찾기 예상 소요시간 조회에 실패했습니다."
+        description = "대중교통 예상 통근시간 추정에 실패했습니다."
     return ScoreEvidenceItem(
-        source_type=ODSAY_SOURCE_TYPE,
-        source_name=ODSAY_SOURCE_NAME,
+        source_type=TRANSIT_ESTIMATE_SOURCE_TYPE,
+        source_name=TRANSIT_ESTIMATE_SOURCE_NAME,
         source_table=None,
         record_id=None,
         distance_meters=transit_time.distance_meters,

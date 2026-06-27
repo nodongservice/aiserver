@@ -101,7 +101,6 @@ jobs:
           PROD_CORS_ALLOW_ORIGINS: ${{ secrets.CORS_ALLOW_ORIGINS }}
           PROD_EXPLANATION_PROVIDER: ${{ secrets.EXPLANATION_PROVIDER }}
           PROD_OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
-          PROD_ODSAY_API_KEY: ${{ secrets.ODSAY_API_KEY }}
           EC2_HOST: ${{ secrets.EC2_HOST }}
           EC2_USER: ${{ secrets.EC2_USER }}
           EC2_SSH_PRIVATE_KEY: ${{ secrets.EC2_SSH_PRIVATE_KEY }}
@@ -118,7 +117,6 @@ jobs:
               "CORS_ALLOW_ORIGINS": "PROD_CORS_ALLOW_ORIGINS",
               "EXPLANATION_PROVIDER": "PROD_EXPLANATION_PROVIDER",
               "OPENAI_API_KEY": "PROD_OPENAI_API_KEY",
-              "ODSAY_API_KEY": "PROD_ODSAY_API_KEY",
               "EC2_HOST": "EC2_HOST",
               "EC2_USER": "EC2_USER",
               "EC2_SSH_PRIVATE_KEY": "EC2_SSH_PRIVATE_KEY",
@@ -182,9 +180,6 @@ jobs:
           PROD_OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
           PROD_OPENAI_MODEL: ${{ secrets.OPENAI_MODEL }}
           PROD_OPENAI_TIMEOUT_SECONDS: ${{ secrets.OPENAI_TIMEOUT_SECONDS }}
-          PROD_ODSAY_API_KEY: ${{ secrets.ODSAY_API_KEY }}
-          PROD_ODSAY_BASE_URL: ${{ secrets.ODSAY_BASE_URL }}
-          PROD_ODSAY_TIMEOUT_SECONDS: ${{ secrets.ODSAY_TIMEOUT_SECONDS }}
           PROD_TRANSIT_TIME_CACHE_TTL_SECONDS: ${{ secrets.TRANSIT_TIME_CACHE_TTL_SECONDS }}
           PROD_LOG_LEVEL: ${{ secrets.LOG_LEVEL }}
           PROD_AUTO_CREATE_DB_SCHEMA: ${{ secrets.AUTO_CREATE_DB_SCHEMA }}
@@ -217,9 +212,6 @@ jobs:
           if not os.environ.get("PROD_OPENAI_API_KEY", "").strip():
               print("OPENAI_API_KEY secret is required for production profile draft and OpenAI-backed explanation flows.")
               sys.exit(1)
-          if not os.environ.get("PROD_ODSAY_API_KEY", "").strip():
-              print("ODSAY_API_KEY secret is required for production transit time scoring.")
-              sys.exit(1)
           PY
 
           {
@@ -232,9 +224,6 @@ jobs:
             echo "OPENAI_API_KEY=${PROD_OPENAI_API_KEY}"
             echo "OPENAI_MODEL=${PROD_OPENAI_MODEL:-gpt-5.4-nano}"
             echo "OPENAI_TIMEOUT_SECONDS=${PROD_OPENAI_TIMEOUT_SECONDS:-8}"
-            echo "ODSAY_API_KEY=${PROD_ODSAY_API_KEY}"
-            echo "ODSAY_BASE_URL=${PROD_ODSAY_BASE_URL:-https://api.odsay.com/v1/api}"
-            echo "ODSAY_TIMEOUT_SECONDS=${PROD_ODSAY_TIMEOUT_SECONDS:-5}"
             echo "TRANSIT_TIME_CACHE_TTL_SECONDS=${PROD_TRANSIT_TIME_CACHE_TTL_SECONDS:-21600}"
             echo "LOG_LEVEL=${PROD_LOG_LEVEL:-INFO}"
             echo "SQLALCHEMY_ECHO=false"
