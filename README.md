@@ -142,7 +142,7 @@ flowchart LR
 | `GET` | `/postgis-health` | PostGIS extension 확인 |
 | `GET` | `/metrics` | Prometheus 메트릭 |
 | `POST` | `/api/v1/profile-draft/from-portfolio` | PDF 포트폴리오 기반 프로필 초안 생성 |
-| `POST` | `/api/v1/score/quick` | 최신 공고 대상 직무 적합도 계산 |
+| `POST` | `/api/v1/score/quick` | 전체 후보 랭킹 기반 퀵 추천 점수 계산 |
 | `POST` | `/api/v1/score/map` | 지도 추천용 6개 항목 종합 점수 계산 |
 | `POST` | `/api/v1/explain/recommendation` | 추천 사유/주의사항/체크리스트 생성 |
 
@@ -150,9 +150,10 @@ flowchart LR
 
 - `limit`: 1~100
 - `offset`: 0 이상
-- 후보 공고는 `posting_status=ACTIVE` 또는 상태값 없음, 직무명/사업장명 존재, 마감일이 지나지 않은 공고를 기준으로 조회합니다.
-- 좌표(`geo_latitude`, `geo_longitude`)가 있는 공고를 먼저 정렬한 뒤 최신 수집/등록 기준으로 정렬합니다.
-- 지도 추천은 전체 후보를 점수 계산한 뒤 점수 기준 정렬 후 `limit`/`offset`을 적용합니다.
+- 후보 공고는 `posting_status=ACTIVE` 또는 상태값 없음, 직무명/사업장명 존재, 마감일이 지나지 않은 공고 전체를 기준으로 조회합니다.
+- FastAPI는 전체 후보를 빠른 프로필 기반 점수로 먼저 랭킹하고, 상위 100개 안에서 `limit`/`offset`을 적용합니다. 후보 랭킹은 같은 프로필/모드에서 짧게 재사용해 1개 단위 스트리밍 호출의 반복 조회 비용을 줄입니다.
+- 퀵 추천 점수는 직무 적합도만으로 산정하지 않고 직무 적합도, 근무조건, 거주지-근무지 거리 감점을 함께 반영합니다.
+- 지도 추천은 빠른 후보 랭킹 상위 100개를 대상으로 접근성/통근/공공데이터 정밀 점수를 계산한 뒤 점수 기준 정렬 후 `limit`/`offset`을 적용합니다.
 - Spring Backend가 AI ON 20개 배치 요청을 1개 단위로 나눠 호출할 수 있으므로, FastAPI는 `limit=1` 요청도 일반 요청과 동일하게 안정적으로 처리해야 합니다.
 
 ## 기술 스택
