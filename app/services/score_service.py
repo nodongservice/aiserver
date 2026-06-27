@@ -255,12 +255,7 @@ def calculate_candidate_preference_score(profile: ScoreProfile, posting: JobPost
         score = round(job_fit_score * 0.55 + work_condition_score * 0.15 + distance_component * 0.30)
     else:
         work_environment_score = calculate_work_environment_score(profile, posting)
-        score = round(
-            job_fit_score * 0.40
-            + work_condition_score * 0.18
-            + work_environment_score * 0.17
-            + distance_component * 0.25
-        )
+        score = round(job_fit_score * 0.40 + work_condition_score * 0.18 + work_environment_score * 0.17 + distance_component * 0.25)
 
     if posting.work_lat is None or posting.work_lng is None:
         score -= 12
@@ -694,9 +689,7 @@ def build_quick_recommendation_reasons(
     reasons = build_job_fit_reasons(profile, posting, job_fit_score)
     reasons.insert(
         0,
-        f"직무 적합도 {job_fit_score}점, 근무조건 {work_condition_score}점"
-        + (f", 거리 {distance_score}점" if distance_score is not None else ", 거리 정보 제한")
-        + "을 함께 반영했습니다.",
+        f"직무 적합도 {job_fit_score}점, 근무조건 {work_condition_score}점" + (f", 거리 {distance_score}점" if distance_score is not None else ", 거리 정보 제한") + "을 함께 반영했습니다.",
     )
     if score >= 85 and distance_score is not None and distance_score >= 75:
         reasons.append("직무 조건과 통근 거리 조건이 함께 양호합니다.")
