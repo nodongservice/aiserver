@@ -268,7 +268,8 @@ def calculate_candidate_preference_score(profile: ScoreProfile, posting: JobPost
         score = round(job_fit_score * 0.46 + work_condition_score * 0.14 + work_environment_score * 0.12 + distance_component * 0.28 + 4)
 
     if posting.work_lat is None or posting.work_lng is None:
-        score -= 12
+        # 좌표가 없는 공고는 통근 검증 우선순위만 낮추고, 직무 적합도 자체를 과도하게 깎지 않는다.
+        score -= 4
 
     return clamp_score(apply_distance_penalty(score, profile, posting))
 
@@ -283,8 +284,6 @@ def calculate_quick_recommendation_score(
 ) -> int:
     distance_component = distance_score if distance_score is not None else (58 if posting.work_lat is not None and posting.work_lng is not None else 35)
     score = round(job_fit_score * 0.68 + work_condition_score * 0.12 + distance_component * 0.20 + 5)
-    if posting.work_lat is None or posting.work_lng is None:
-        score -= 10
     return clamp_score(apply_distance_penalty(score, profile, posting))
 
 
