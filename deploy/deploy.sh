@@ -25,6 +25,7 @@ ACTIVE_SLOT_FILE="${ACTIVE_SLOT_FILE:-$STATE_DIR/fastapi_active_slot}"
 ENV_FILE="${ENV_FILE:-$APP_ROOT/.env.prod}"
 UPSTREAM_SWITCH_SCRIPT="${UPSTREAM_SWITCH_SCRIPT:-$HOME/bridgework-infra/deploy/fastapi_blue_green_switch.sh}"
 DOCKER_NETWORK="${DOCKER_NETWORK:-bridgework-network}"
+FASTAPI_NETWORK_ALIAS="${FASTAPI_NETWORK_ALIAS:-bridgework-aiserver}"
 
 BLUE_PORT="${BLUE_PORT:-19000}"
 GREEN_PORT="${GREEN_PORT:-19001}"
@@ -203,10 +204,11 @@ docker run -d \
   --name "$TARGET_CONTAINER" \
   --restart no \
   --network "$DOCKER_NETWORK" \
+  --network-alias "$FASTAPI_NETWORK_ALIAS" \
   --add-host host.docker.internal:host-gateway \
   --env-file "$ENV_FILE" \
   -e TZ="${TZ:-Asia/Seoul}" \
-  -e UVICORN_WORKERS="${UVICORN_WORKERS:-2}" \
+  -e UVICORN_WORKERS="${UVICORN_WORKERS:-1}" \
   -p "${TARGET_PORT}:${CONTAINER_PORT}" \
   "$IMAGE_URI" >/dev/null
 log "새 컨테이너 실행 완료: $(( $(date +%s) - run_started_at ))s"
