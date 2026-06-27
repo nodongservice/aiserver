@@ -51,4 +51,4 @@ RUN if [ "$RUN_OCR_RUNTIME_SMOKE" = "true" ]; then \
 
 EXPOSE 8000
 
-CMD ["/app/.venv/bin/python", "-m", "uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]
+CMD ["/bin/sh", "-c", "exec /app/.venv/bin/python -m uvicorn app.main:app --host 0.0.0.0 --port 8000 --workers ${UVICORN_WORKERS:-2}"]

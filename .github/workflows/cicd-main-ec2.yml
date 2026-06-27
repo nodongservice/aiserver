@@ -224,6 +224,8 @@ jobs:
             echo "OPENAI_MODEL=${PROD_OPENAI_MODEL:-gpt-5.4-nano}"
             echo "OPENAI_TIMEOUT_SECONDS=${PROD_OPENAI_TIMEOUT_SECONDS:-8}"
             echo "LOG_LEVEL=${PROD_LOG_LEVEL:-INFO}"
+            echo "SQLALCHEMY_ECHO=false"
+            echo "UVICORN_WORKERS=2"
             echo "AUTO_CREATE_DB_SCHEMA=${PROD_AUTO_CREATE_DB_SCHEMA:-false}"
             echo "REQUIRE_POSTGIS=${PROD_REQUIRE_POSTGIS:-true}"
             echo "REQUIRE_PROFILE_DRAFT_OCR_DEPENDENCIES=${PROD_REQUIRE_PROFILE_DRAFT_OCR_DEPENDENCIES:-true}"
