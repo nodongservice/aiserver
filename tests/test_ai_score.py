@@ -251,6 +251,35 @@ def test_quick_recommendation_score_penalizes_unreasonable_distance():
     assert near_score - far_score >= 25
 
 
+def test_quick_recommendation_score_keeps_strong_match_above_a_grade_without_coordinates():
+    profile = ScoreProfile(
+        desired_jobs=["사무보조"],
+        skills=["엑셀"],
+        education="고졸",
+        career="신입",
+        available_employment_types=["정규직"],
+    )
+    posting = JobPosting(
+        job_post_id=1,
+        company_name="좌표미확인회사",
+        job_title="사무보조",
+        required_career="신입",
+        required_education="고졸",
+        required_licenses="엑셀",
+        employment_type="정규직",
+    )
+
+    score = score_service.calculate_quick_recommendation_score(
+        job_fit_score=calculate_job_fit_score(profile, posting),
+        work_condition_score=calculate_work_condition_score(profile, posting),
+        distance_score=score_service.calculate_home_work_distance_score(profile, posting),
+        profile=profile,
+        posting=posting,
+    )
+
+    assert score >= 85
+
+
 def test_candidate_ranking_promotes_profile_fit_before_latest_order():
     profile = ScoreProfile(
         home_lat=37.5665,
