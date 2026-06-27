@@ -1,3 +1,6 @@
+import hashlib
+import json
+import re
 from collections import OrderedDict
 from datetime import datetime
 from threading import RLock
@@ -46,6 +49,9 @@ from app.services.transit_time_service import (
 from app.utils.geo import calculate_haversine_distance_meters
 
 MAP_SCORING_MIN_CANDIDATE_LIMIT = 80
+MAX_RECOMMENDATION_CANDIDATE_LIMIT = 100
+CANDIDATE_RANKING_CACHE_TTL_SECONDS = 5 * 60
+CANDIDATE_RANKING_CACHE_MAX_SIZE = 128
 ACCESSIBILITY_CACHE_TTL_SECONDS = 10 * 60
 ACCESSIBILITY_CACHE_MAX_SIZE = 1000
 SCORE_BREAKDOWN_SOURCE_TYPE = "BRIDGEWORK_SCORE_BREAKDOWN"
@@ -64,21 +70,39 @@ MAP_SCORE_COMPONENT_LABELS = {
 _accessibility_cache: OrderedDict[tuple[float, float, int], tuple[float, AccessibilityEvidence]] = OrderedDict()
 _accessibility_cache_lock = RLock()
 _accessibility_cache_expires_at: Optional[datetime] = None
+_candidate_ranking_cache: OrderedDict[str, tuple[float, list[JobPosting]]] = OrderedDict()
+_candidate_ranking_cache_lock = RLock()
 
 
 def score_quick_jobs(request: ScoreRequest, db: Optional[Session] = None) -> QuickScoreResponse:
     validate_score_request(request, mode="quick")
-    postings = get_latest_job_postings(db=db, limit=request.limit, offset=request.offset)
+    postings = get_ranked_candidate_job_postings(db=db, request=request, mode="quick")
     results: list[QuickScoreResult] = []
 
     for posting in postings:
-        score = calculate_job_fit_score(request.profile, posting)
+        job_fit_score = calculate_job_fit_score(request.profile, posting)
+        work_condition_score = calculate_work_condition_score(request.profile, posting)
+        distance_score = calculate_home_work_distance_score(request.profile, posting)
+        score = calculate_quick_recommendation_score(
+            job_fit_score=job_fit_score,
+            work_condition_score=work_condition_score,
+            distance_score=distance_score,
+            profile=request.profile,
+            posting=posting,
+        )
         results.append(
             QuickScoreResult(
                 job=posting,
                 job_fit_score=score,
-                reasons=build_job_fit_reasons(request.profile, posting, score),
-                risk_factors=build_common_job_risks(posting),
+                reasons=build_quick_recommendation_reasons(
+                    request.profile,
+                    posting,
+                    score,
+                    job_fit_score,
+                    work_condition_score,
+                    distance_score,
+                ),
+                risk_factors=build_quick_recommendation_risks(request.profile, posting, distance_score),
                 evidence_items=[
                     ScoreEvidenceItem(
                         source_type=KEPAD_RECRUITMENT,
@@ -99,11 +123,15 @@ def score_quick_jobs(request: ScoreRequest, db: Optional[Session] = None) -> Qui
 def score_map_jobs(request: ScoreRequest, db: Optional[Session] = None) -> MapScoreResponse:
     validate_score_request(request, mode="map")
     if request.stream_mode:
-        postings = get_map_candidate_job_postings(db=db, limit=request.limit, offset=request.offset)
+        postings = get_ranked_candidate_job_postings(db=db, request=request, mode="map")
         return MapScoreResponse(results=score_map_postings(request, postings, db, sort_results=False))
 
-    candidate_limit = max(request.offset + request.limit, MAP_SCORING_MIN_CANDIDATE_LIMIT)
-    postings = get_map_candidate_job_postings(db=db, limit=candidate_limit)
+    candidate_limit = min(
+        MAX_RECOMMENDATION_CANDIDATE_LIMIT,
+        max(request.offset + request.limit, MAP_SCORING_MIN_CANDIDATE_LIMIT),
+    )
+    ranked_request = request.model_copy(update={"limit": candidate_limit, "offset": 0})
+    postings = get_ranked_candidate_job_postings(db=db, request=ranked_request, mode="map")
     results = score_map_postings(request, postings, db, sort_results=True)
     return MapScoreResponse(results=results[request.offset : request.offset + request.limit])
 
@@ -173,6 +201,26 @@ def get_latest_job_postings(db: Optional[Session], limit: int, offset: int = 0) 
     return enrich_job_postings_with_public_data(db, postings)
 
 
+def get_ranked_candidate_job_postings(db: Optional[Session], request: ScoreRequest, mode: str) -> list[JobPosting]:
+    if db is None:
+        return []
+    if not hasattr(db, "query"):
+        raise RuntimeError("스코어링 공고 조회에는 SQLAlchemy Session이 필요합니다.")
+
+    cache_key = build_candidate_ranking_cache_key(request.profile, mode=mode)
+    cached_ranked_postings = get_cached_candidate_rankings(cache_key)
+    if cached_ranked_postings is not None:
+        selected_postings = cached_ranked_postings[request.offset : min(request.offset + request.limit, MAX_RECOMMENDATION_CANDIDATE_LIMIT)]
+        return enrich_job_postings_with_public_data(db, selected_postings)
+
+    rows = find_all_recruitments_for_scoring(db)
+    postings = [posting for row in rows if (posting := to_job_posting(row)) is not None]
+    ranked_postings = rank_candidate_postings(request.profile, postings, mode=mode)
+    set_cached_candidate_rankings(cache_key, ranked_postings)
+    selected_postings = ranked_postings[request.offset : min(request.offset + request.limit, MAX_RECOMMENDATION_CANDIDATE_LIMIT)]
+    return enrich_job_postings_with_public_data(db, selected_postings)
+
+
 def get_map_candidate_job_postings(db: Optional[Session], limit: int, offset: int = 0) -> list[JobPosting]:
     if db is None:
         return []
@@ -181,6 +229,136 @@ def get_map_candidate_job_postings(db: Optional[Session], limit: int, offset: in
     rows = find_all_recruitments_for_scoring(db, limit=limit, offset=offset)
     postings = [posting for row in rows if (posting := to_job_posting(row)) is not None]
     return enrich_job_postings_with_public_data(db, postings)
+
+
+def rank_candidate_postings(profile: ScoreProfile, postings: list[JobPosting], *, mode: str) -> list[JobPosting]:
+    ranked = sorted(
+        postings,
+        key=lambda posting: (
+            calculate_candidate_preference_score(profile, posting, mode=mode),
+            1 if posting.work_lat is not None and posting.work_lng is not None else 0,
+            parse_latest_date_number(posting),
+            posting.job_post_id,
+        ),
+        reverse=True,
+    )
+    return ranked[:MAX_RECOMMENDATION_CANDIDATE_LIMIT]
+
+
+def calculate_candidate_preference_score(profile: ScoreProfile, posting: JobPosting, *, mode: str) -> int:
+    job_fit_score = calculate_job_fit_score(profile, posting)
+    work_condition_score = calculate_work_condition_score(profile, posting)
+    distance_score = calculate_home_work_distance_score(profile, posting)
+    distance_component = distance_score if distance_score is not None else (58 if posting.work_lat is not None and posting.work_lng is not None else 35)
+
+    if mode == "quick":
+        score = round(job_fit_score * 0.55 + work_condition_score * 0.15 + distance_component * 0.30)
+    else:
+        work_environment_score = calculate_work_environment_score(profile, posting)
+        score = round(job_fit_score * 0.40 + work_condition_score * 0.18 + work_environment_score * 0.17 + distance_component * 0.25)
+
+    if posting.work_lat is None or posting.work_lng is None:
+        score -= 12
+
+    return clamp_score(apply_distance_penalty(score, profile, posting))
+
+
+def calculate_quick_recommendation_score(
+    *,
+    job_fit_score: int,
+    work_condition_score: int,
+    distance_score: Optional[int],
+    profile: ScoreProfile,
+    posting: JobPosting,
+) -> int:
+    distance_component = distance_score if distance_score is not None else (58 if posting.work_lat is not None and posting.work_lng is not None else 35)
+    score = round(job_fit_score * 0.55 + work_condition_score * 0.15 + distance_component * 0.30)
+    if posting.work_lat is None or posting.work_lng is None:
+        score -= 10
+    return clamp_score(apply_distance_penalty(score, profile, posting))
+
+
+def apply_distance_penalty(score: int, profile: ScoreProfile, posting: JobPosting) -> int:
+    distance_km = calculate_home_work_distance_km(profile, posting)
+    if distance_km is None:
+        return score
+
+    if profile.mobility_range_km is not None:
+        over_km = distance_km - profile.mobility_range_km
+        if over_km > 0:
+            if distance_km >= profile.mobility_range_km * 2:
+                score -= 25
+            else:
+                score -= min(22, round(over_km * 2))
+
+    if distance_km >= 60:
+        score -= 28
+    elif distance_km >= 40:
+        score -= 20
+    elif distance_km >= 25:
+        score -= 12
+
+    return score
+
+
+def calculate_home_work_distance_km(profile: ScoreProfile, posting: JobPosting) -> Optional[float]:
+    if profile.home_lat is None or profile.home_lng is None or posting.work_lat is None or posting.work_lng is None:
+        return None
+    distance_meters = calculate_haversine_distance_meters(
+        profile.home_lat,
+        profile.home_lng,
+        posting.work_lat,
+        posting.work_lng,
+    )
+    if distance_meters is None:
+        return None
+    return distance_meters / 1000
+
+
+def parse_latest_date_number(posting: JobPosting) -> int:
+    for value in (posting.registered_at, posting.offer_registered_at, posting.term_date):
+        digits = re.sub(r"[^0-9]", "", str(value or ""))
+        if len(digits) >= 8:
+            return int(digits[-8:])
+    return 0
+
+
+def build_candidate_ranking_cache_key(profile: ScoreProfile, *, mode: str) -> str:
+    payload = {
+        "mode": mode,
+        "profile": profile.model_dump(mode="json", exclude_none=True),
+    }
+    serialized = json.dumps(payload, sort_keys=True, ensure_ascii=False, separators=(",", ":"))
+    return hashlib.sha256(serialized.encode("utf-8")).hexdigest()
+
+
+def get_cached_candidate_rankings(cache_key: str) -> Optional[list[JobPosting]]:
+    now = monotonic()
+    with _candidate_ranking_cache_lock:
+        cached = _candidate_ranking_cache.get(cache_key)
+        if cached is None:
+            return None
+
+        cached_at, postings = cached
+        if now - cached_at > CANDIDATE_RANKING_CACHE_TTL_SECONDS:
+            _candidate_ranking_cache.pop(cache_key, None)
+            return None
+
+        _candidate_ranking_cache.move_to_end(cache_key)
+        return postings
+
+
+def set_cached_candidate_rankings(cache_key: str, postings: list[JobPosting]) -> None:
+    with _candidate_ranking_cache_lock:
+        _candidate_ranking_cache[cache_key] = (monotonic(), postings)
+        _candidate_ranking_cache.move_to_end(cache_key)
+        while len(_candidate_ranking_cache) > CANDIDATE_RANKING_CACHE_MAX_SIZE:
+            _candidate_ranking_cache.popitem(last=False)
+
+
+def clear_candidate_ranking_cache() -> None:
+    with _candidate_ranking_cache_lock:
+        _candidate_ranking_cache.clear()
 
 
 def get_standard_workplaces(
@@ -498,6 +676,60 @@ def build_job_fit_reasons(profile: ScoreProfile, posting: JobPosting, score: int
     if not reasons:
         reasons.append("공고의 직종, 학력, 경력, 자격 요건을 기준으로 직무 적합도를 계산했습니다.")
     return reasons
+
+
+def build_quick_recommendation_reasons(
+    profile: ScoreProfile,
+    posting: JobPosting,
+    score: int,
+    job_fit_score: int,
+    work_condition_score: int,
+    distance_score: Optional[int],
+) -> list[str]:
+    reasons = build_job_fit_reasons(profile, posting, job_fit_score)
+    reasons.insert(
+        0,
+        f"직무 적합도 {job_fit_score}점, 근무조건 {work_condition_score}점" + (f", 거리 {distance_score}점" if distance_score is not None else ", 거리 정보 제한") + "을 함께 반영했습니다.",
+    )
+    if score >= 85 and distance_score is not None and distance_score >= 75:
+        reasons.append("직무 조건과 통근 거리 조건이 함께 양호합니다.")
+    elif distance_score is not None and distance_score < 45:
+        reasons.append("직무 조건은 맞더라도 거주지와의 거리가 점수에 감점으로 반영되었습니다.")
+    if profile.available_employment_types and posting.employment_type:
+        if posting.employment_type in profile.available_employment_types:
+            reasons.append("희망 고용형태와 공고 고용형태가 일치합니다.")
+        else:
+            reasons.append("희망 고용형태와 공고 고용형태 차이를 감점으로 반영했습니다.")
+    return dedupe_texts(reasons)
+
+
+def build_quick_recommendation_risks(
+    profile: ScoreProfile,
+    posting: JobPosting,
+    distance_score: Optional[int],
+) -> list[str]:
+    risks = build_common_job_risks(posting)
+    distance_km = calculate_home_work_distance_km(profile, posting)
+    if distance_km is None:
+        risks.append("거주지 또는 근무지 좌표가 부족해 통근 거리 감점은 제한적으로 반영되었습니다.")
+    else:
+        rounded_distance = round(distance_km, 1)
+        if profile.mobility_range_km is not None and distance_km > profile.mobility_range_km:
+            risks.append(f"거주지에서 약 {rounded_distance}km로 이동 가능 범위 {profile.mobility_range_km:g}km를 초과합니다.")
+        elif distance_score is not None and distance_score < 45:
+            risks.append(f"거주지에서 약 {rounded_distance}km로 통근 부담이 클 수 있습니다.")
+    return dedupe_texts(risks)
+
+
+def dedupe_texts(values: list[str]) -> list[str]:
+    deduped: list[str] = []
+    seen: set[str] = set()
+    for value in values:
+        if value in seen:
+            continue
+        seen.add(value)
+        deduped.append(value)
+    return deduped
 
 
 def build_map_reasons(

@@ -200,6 +200,121 @@ def test_map_component_scores_use_spring_profile_enum_codes():
     assert calculate_work_environment_score(profile, posting) < 65
 
 
+def test_quick_recommendation_score_penalizes_unreasonable_distance():
+    profile = ScoreProfile(
+        home_lat=37.5665,
+        home_lng=126.978,
+        desired_jobs=["사무보조"],
+        skills=["엑셀"],
+        education="고졸",
+        career="신입",
+        available_employment_types=["정규직"],
+        mobility_range_km=10,
+    )
+    near_posting = JobPosting(
+        job_post_id=1,
+        company_name="가까운회사",
+        job_title="사무보조",
+        work_lat=37.5651,
+        work_lng=126.9895,
+        required_career="신입",
+        required_education="고졸",
+        required_licenses="엑셀",
+        employment_type="정규직",
+    )
+    far_posting = near_posting.model_copy(
+        update={
+            "job_post_id": 2,
+            "company_name": "먼회사",
+            "work_lat": 35.1796,
+            "work_lng": 129.0756,
+        }
+    )
+
+    near_score = score_service.calculate_quick_recommendation_score(
+        job_fit_score=calculate_job_fit_score(profile, near_posting),
+        work_condition_score=calculate_work_condition_score(profile, near_posting),
+        distance_score=score_service.calculate_home_work_distance_score(profile, near_posting),
+        profile=profile,
+        posting=near_posting,
+    )
+    far_score = score_service.calculate_quick_recommendation_score(
+        job_fit_score=calculate_job_fit_score(profile, far_posting),
+        work_condition_score=calculate_work_condition_score(profile, far_posting),
+        distance_score=score_service.calculate_home_work_distance_score(profile, far_posting),
+        profile=profile,
+        posting=far_posting,
+    )
+
+    assert near_score >= 85
+    assert far_score <= 60
+    assert near_score - far_score >= 25
+
+
+def test_candidate_ranking_promotes_profile_fit_before_latest_order():
+    profile = ScoreProfile(
+        home_lat=37.5665,
+        home_lng=126.978,
+        desired_jobs=["사무보조"],
+        skills=["엑셀"],
+        education="고졸",
+        career="신입",
+        available_employment_types=["정규직"],
+        mobility_range_km=10,
+    )
+    latest_but_poor_fit = JobPosting(
+        job_post_id=1,
+        company_name="최신공고",
+        job_title="건설 현장 보조",
+        work_lat=35.1796,
+        work_lng=129.0756,
+        employment_type="계약직",
+        registered_at="20260627",
+    )
+    older_but_better_fit = JobPosting(
+        job_post_id=2,
+        company_name="적합공고",
+        job_title="사무보조",
+        work_lat=37.5651,
+        work_lng=126.9895,
+        required_career="신입",
+        required_education="고졸",
+        required_licenses="엑셀",
+        employment_type="정규직",
+        registered_at="20260501",
+    )
+
+    ranked = score_service.rank_candidate_postings(
+        profile,
+        [latest_but_poor_fit, older_but_better_fit],
+        mode="quick",
+    )
+
+    assert ranked[0].job_post_id == older_but_better_fit.job_post_id
+
+
+def test_candidate_ranking_cache_reuses_profile_mode_key():
+    profile = ScoreProfile(
+        desired_jobs=["사무보조"],
+        skills=["엑셀"],
+        education="고졸",
+        career="신입",
+    )
+    posting = JobPosting(
+        job_post_id=1,
+        company_name="캐시회사",
+        job_title="사무보조",
+    )
+
+    score_service.clear_candidate_ranking_cache()
+    cache_key = score_service.build_candidate_ranking_cache_key(profile, mode="quick")
+    score_service.set_cached_candidate_rankings(cache_key, [posting])
+
+    assert score_service.get_cached_candidate_rankings(cache_key) == [posting]
+
+    score_service.clear_candidate_ranking_cache()
+
+
 def test_ai_explain_recommendation_contract(client):
     payload = {
         "profile": build_score_payload()["profile"],
@@ -455,7 +570,7 @@ def test_to_job_posting_from_pd_kepad_recruitment_row():
     assert posting.source_table == "pd_kepad_recruitment"
 
 
-def test_quick_score_preserves_latest_order(monkeypatch):
+def test_quick_score_prioritizes_profile_ranked_candidates(monkeypatch):
     matching = JobPosting(
         job_post_id=1,
         company_name="ABC",
@@ -475,8 +590,8 @@ def test_quick_score_preserves_latest_order(monkeypatch):
     )
     monkeypatch.setattr(
         score_service,
-        "get_latest_job_postings",
-        lambda db, limit, offset: [unrelated, matching],
+        "get_ranked_candidate_job_postings",
+        lambda db, request, mode: [matching, unrelated],
     )
 
     response = score_service.score_quick_jobs(
@@ -490,15 +605,15 @@ def test_quick_score_preserves_latest_order(monkeypatch):
         )
     )
 
-    assert [result.job.job_post_id for result in response.results] == [2, 1]
-    assert response.results[1].job_fit_score > response.results[0].job_fit_score
+    assert [result.job.job_post_id for result in response.results] == [1, 2]
+    assert response.results[0].job_fit_score > response.results[1].job_fit_score
 
 
 def test_score_posting_query_failure_is_not_hidden(monkeypatch):
-    def raise_query_error(db, limit, offset):
+    def raise_query_error(db, limit=None, offset=0):
         raise RuntimeError("database unavailable")
 
-    monkeypatch.setattr(score_service, "find_latest_recruitments", raise_query_error)
+    monkeypatch.setattr(score_service, "find_all_recruitments_for_scoring", raise_query_error)
 
     with pytest.raises(RuntimeError, match="database unavailable"):
         score_service.score_quick_jobs(
@@ -562,7 +677,7 @@ def test_map_score_uses_equal_weight_average(monkeypatch):
         work_lat=37.5701,
         work_lng=126.9823,
     )
-    monkeypatch.setattr(score_service, "get_map_candidate_job_postings", lambda db, limit: [posting])
+    monkeypatch.setattr(score_service, "get_ranked_candidate_job_postings", lambda db, request, mode: [posting])
     monkeypatch.setattr(
         score_service,
         "get_standard_workplaces",
@@ -630,7 +745,7 @@ def test_map_score_includes_score_breakdown_evidence_and_reasons(monkeypatch):
         work_lat=37.5701,
         work_lng=126.9823,
     )
-    monkeypatch.setattr(score_service, "get_map_candidate_job_postings", lambda db, limit: [posting])
+    monkeypatch.setattr(score_service, "get_ranked_candidate_job_postings", lambda db, request, mode: [posting])
     monkeypatch.setattr(score_service, "get_standard_workplaces", lambda postings, db: {})
     monkeypatch.setattr(
         score_service,
@@ -704,8 +819,8 @@ def test_map_score_sorts_all_candidates_before_pagination(monkeypatch):
     )
     monkeypatch.setattr(
         score_service,
-        "get_map_candidate_job_postings",
-        lambda db, limit: [low_score_latest, high_score_older],
+        "get_ranked_candidate_job_postings",
+        lambda db, request, mode: [high_score_older, low_score_latest],
     )
     monkeypatch.setattr(
         score_service,
@@ -1156,7 +1271,7 @@ def test_salary_normalization_uses_salary_type_units():
     assert normalize_annual_salary("100,000", "일급") == 26_000_000
 
 
-def test_map_score_limits_expensive_candidate_scoring(monkeypatch):
+def test_candidate_ranking_keeps_only_top_100_profile_candidates():
     postings = [
         JobPosting(
             job_post_id=index,
@@ -1183,49 +1298,23 @@ def test_map_score_limits_expensive_candidate_scoring(monkeypatch):
             work_lng=126.9823,
         )
     )
-    captured = {}
-
-    def limited_postings(db, limit):
-        captured["limit"] = limit
-        return postings[:limit]
-
-    monkeypatch.setattr(score_service, "get_map_candidate_job_postings", limited_postings)
-    monkeypatch.setattr(score_service, "get_standard_workplaces", lambda postings, db: {})
-    monkeypatch.setattr(
-        score_service,
-        "get_accessibility",
-        lambda profile, posting, db: AccessibilityEvidence(
-            bus_stop_count=0,
-            crosswalk_count=0,
-            traffic_light_count=0,
-            transport_support_center_count=0,
-            subway_entrance_lift_count=0,
-            walking_network_count=0,
-            evidence_items=[],
-        ),
+    profile = ScoreProfile(
+        desired_jobs=["사무보조"],
+        skills=["엑셀"],
+        education="고졸",
+        career="신입",
+        available_employment_types=["정규직"],
+        disability_types=["wheelchair"],
+        disability_severity="중증",
+        is_registered_disabled=True,
+        address="서울특별시 중구 세종대로 110",
+        home_lat=37.5665,
+        home_lng=126.978,
     )
+    ranked = score_service.rank_candidate_postings(profile, postings, mode="map")
 
-    response = score_service.score_map_jobs(
-        ScoreRequest(
-            profile=ScoreProfile(
-                desired_jobs=["사무보조"],
-                skills=["엑셀"],
-                education="고졸",
-                career="신입",
-                available_employment_types=["정규직"],
-                disability_types=["wheelchair"],
-                disability_severity="중증",
-                is_registered_disabled=True,
-                address="서울특별시 중구 세종대로 110",
-                home_lat=37.5665,
-                home_lng=126.978,
-            ),
-            limit=1,
-        )
-    )
-
-    assert captured["limit"] == score_service.MAP_SCORING_MIN_CANDIDATE_LIMIT
-    assert [result.job.job_post_id for result in response.results] != [5000]
+    assert len(ranked) == score_service.MAX_RECOMMENDATION_CANDIDATE_LIMIT
+    assert ranked[0].job_post_id == 5000
 
 
 def test_map_score_allows_missing_home_coordinates_and_returns_risk(monkeypatch):
@@ -1240,7 +1329,7 @@ def test_map_score_allows_missing_home_coordinates_and_returns_risk(monkeypatch)
         work_lat=37.5701,
         work_lng=126.9823,
     )
-    monkeypatch.setattr(score_service, "get_map_candidate_job_postings", lambda db, limit: [posting])
+    monkeypatch.setattr(score_service, "get_ranked_candidate_job_postings", lambda db, request, mode: [posting])
     monkeypatch.setattr(score_service, "get_standard_workplaces", lambda postings, db: {})
     monkeypatch.setattr(
         score_service,
