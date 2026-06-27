@@ -653,6 +653,50 @@ def test_quick_score_prioritizes_profile_ranked_candidates(monkeypatch):
     assert response.results[0].job_fit_score > response.results[1].job_fit_score
 
 
+def test_quick_score_includes_odsay_transit_time(monkeypatch):
+    posting = JobPosting(
+        job_post_id=1,
+        company_name="ABC",
+        job_title="사무보조",
+        work_lat=37.57,
+        work_lng=126.98,
+        required_career="신입",
+        required_education="고졸",
+        employment_type="정규직",
+    )
+    monkeypatch.setattr(
+        score_service,
+        "get_ranked_candidate_job_postings",
+        lambda db, request, mode: [posting],
+    )
+    monkeypatch.setattr(
+        score_service,
+        "get_transit_time",
+        lambda profile, posting: TransitTimeEstimate(
+            duration_minutes=42,
+            transfer_count=1,
+            walk_distance_meters=700,
+            requested_departure_at="2026-05-13T08:00:00+09:00",
+        ),
+    )
+
+    response = score_service.score_quick_jobs(
+        ScoreRequest(
+            profile=ScoreProfile(
+                home_lat=37.5665,
+                home_lng=126.978,
+                desired_jobs=["사무보조"],
+                available_employment_types=["정규직"],
+            )
+        )
+    )
+
+    assert response.results[0].transit_time is not None
+    assert response.results[0].transit_time.duration_minutes == 42
+    assert response.results[0].transit_time.transfer_count == 1
+    assert any(item.source_type == "ODSAY_TRANSIT_ROUTE" for item in response.results[0].evidence_items)
+
+
 def test_score_posting_query_failure_is_not_hidden(monkeypatch):
     def raise_query_error(db, limit=None, offset=0):
         raise RuntimeError("database unavailable")
