@@ -280,6 +280,21 @@ def test_quick_recommendation_score_keeps_strong_match_above_a_grade_without_coo
     assert score >= 85
 
 
+def test_quick_recommendation_score_promotes_upper_mid_match_to_a_grade():
+    profile = ScoreProfile()
+    posting = JobPosting(job_post_id=1, company_name="중상위회사", job_title="사무보조")
+
+    score = score_service.calculate_quick_recommendation_score(
+        job_fit_score=83,
+        work_condition_score=70,
+        distance_score=None,
+        profile=profile,
+        posting=posting,
+    )
+
+    assert score >= 80
+
+
 def test_candidate_ranking_promotes_profile_fit_before_latest_order():
     profile = ScoreProfile(
         home_lat=37.5665,
