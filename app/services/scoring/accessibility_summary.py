@@ -31,6 +31,7 @@ def calculate_accessibility_score(
         return 45
 
     score = 38
+    commute_score_cap: Optional[int] = None
     evidence_source_count = sum(1 for count in accessibility.source_counts.values() if count > 0)
     if not accessibility.source_counts and accessibility.evidence_items:
         evidence_source_count = len({item.source_type for item in accessibility.evidence_items})
@@ -84,6 +85,7 @@ def calculate_accessibility_score(
 
     if transit_time is not None and transit_time.duration_minutes is not None and transit_time.error_reason is None:
         duration = transit_time.duration_minutes
+        commute_score_cap = get_long_commute_accessibility_score_cap(duration)
         if profile.commute_limit_minutes is not None:
             over_minutes = duration - profile.commute_limit_minutes
             if over_minutes <= 0:
@@ -91,13 +93,13 @@ def calculate_accessibility_score(
             elif over_minutes <= 10:
                 score += 2
             else:
-                score -= min(24, 4 * max(1, round(over_minutes / 10)))
+                score -= min(42, 4 * max(1, round(over_minutes / 10)))
         elif duration <= 45:
             score += 6
         elif duration <= 75:
             score += 2
-        elif duration >= 100:
-            score -= 8
+        else:
+            score -= min(42, 8 + round((duration - 75) / 10) * 2)
 
         if transit_time.transfer_count is not None and transit_time.transfer_count >= 2:
             score -= 4
@@ -130,7 +132,11 @@ def calculate_accessibility_score(
     if not accessibility.evidence_items:
         score = max(score, 35)
 
-    return calibrate_accessibility_score(score, accessibility)
+    calibrated_score = calibrate_accessibility_score(score, accessibility)
+    if commute_score_cap is not None:
+        calibrated_score = min(calibrated_score, commute_score_cap)
+
+    return calibrated_score
 
 
 def calculate_home_to_work_distance_meters(profile: ScoreProfile, posting: JobPosting) -> Optional[float]:
@@ -139,3 +145,17 @@ def calculate_home_to_work_distance_meters(profile: ScoreProfile, posting: JobPo
     if posting.work_lat is None or posting.work_lng is None:
         return None
     return calculate_haversine_distance_meters(profile.home_lat, profile.home_lng, posting.work_lat, posting.work_lng)
+
+
+def get_long_commute_accessibility_score_cap(duration_minutes: int) -> Optional[int]:
+    if duration_minutes >= 4 * 60:
+        return 40
+    if duration_minutes >= 3 * 60:
+        return 45
+    if duration_minutes >= 2 * 60:
+        return 55
+    if duration_minutes >= 90:
+        return 65
+    if duration_minutes > 75:
+        return 79
+    return None

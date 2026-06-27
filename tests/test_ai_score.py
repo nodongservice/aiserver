@@ -1150,6 +1150,94 @@ def test_accessibility_score_calibrates_evidence_backed_scores_to_use_full_range
     assert calculate_accessibility_score(profile, moderate_evidence, posting) >= 70
 
 
+def test_accessibility_score_caps_extreme_transit_commute():
+    profile = ScoreProfile(
+        home_lat=37.5665,
+        home_lng=126.978,
+        disability_types=["wheelchair"],
+        disability_severity="중증",
+    )
+    posting = JobPosting(
+        job_post_id=1,
+        company_name="ABC",
+        job_title="사무보조",
+        work_lat=37.5701,
+        work_lng=126.9823,
+    )
+    rich_evidence = AccessibilityEvidence(
+        bus_stop_count=10,
+        crosswalk_count=10,
+        traffic_light_count=10,
+        transport_support_center_count=3,
+        subway_entrance_lift_count=3,
+        walking_network_count=5,
+        evidence_items=[ScoreEvidenceItem(source_type="TEST", source_name="테스트", description="테스트 근거")],
+        source_counts={
+            "NATIONWIDE_BUS_STOP": 10,
+            "NATIONWIDE_CROSSWALK": 10,
+            "NATIONWIDE_TRAFFIC_LIGHT": 10,
+            "SEOUL_SUBWAY_ENTRANCE_LIFT": 3,
+            "SEOUL_WALKING_NETWORK": 5,
+        },
+        crosswalk_accessible_feature_count=5,
+        traffic_light_accessible_signal_count=5,
+        low_floor_bus_quality_score=6,
+        generic_accessibility_quality_score=14,
+    )
+    extreme_commute = TransitTimeEstimate(
+        duration_minutes=22 * 60,
+        transfer_count=4,
+        walk_distance_meters=1600,
+        requested_departure_at="2026-05-13T08:00:00+09:00",
+    )
+
+    assert calculate_accessibility_score(profile, rich_evidence, posting, extreme_commute) <= 40
+
+
+def test_accessibility_score_caps_over_75_minute_commute_below_a_grade():
+    profile = ScoreProfile(
+        home_lat=37.5665,
+        home_lng=126.978,
+        disability_types=["wheelchair"],
+        disability_severity="중증",
+    )
+    posting = JobPosting(
+        job_post_id=1,
+        company_name="ABC",
+        job_title="사무보조",
+        work_lat=37.5701,
+        work_lng=126.9823,
+    )
+    rich_evidence = AccessibilityEvidence(
+        bus_stop_count=10,
+        crosswalk_count=10,
+        traffic_light_count=10,
+        transport_support_center_count=3,
+        subway_entrance_lift_count=3,
+        walking_network_count=5,
+        evidence_items=[ScoreEvidenceItem(source_type="TEST", source_name="테스트", description="테스트 근거")],
+        source_counts={
+            "NATIONWIDE_BUS_STOP": 10,
+            "NATIONWIDE_CROSSWALK": 10,
+            "NATIONWIDE_TRAFFIC_LIGHT": 10,
+            "SEOUL_SUBWAY_ENTRANCE_LIFT": 3,
+            "SEOUL_WALKING_NETWORK": 5,
+        },
+        crosswalk_accessible_feature_count=5,
+        traffic_light_accessible_signal_count=5,
+        low_floor_bus_quality_score=6,
+        generic_accessibility_quality_score=14,
+    )
+    long_commute = TransitTimeEstimate(
+        duration_minutes=76,
+        transfer_count=1,
+        walk_distance_meters=800,
+        requested_departure_at="2026-05-13T08:00:00+09:00",
+    )
+
+    assert calculate_accessibility_score(profile, rich_evidence, posting, long_commute) <= 79
+
+
 def test_accessibility_score_does_not_calibrate_missing_evidence_or_coordinates():
     profile = ScoreProfile(disability_types=["wheelchair"], disability_severity="중증")
     posting = JobPosting(
