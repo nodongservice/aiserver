@@ -665,7 +665,7 @@ def test_accessibility_score_reflects_spec_additional_sources():
     assert calculate_accessibility_score(profile, with_additional_sources, posting) > calculate_accessibility_score(profile, without_additional_sources, posting)
 
 
-def test_map_score_uses_equal_weight_average(monkeypatch):
+def test_map_score_uses_weighted_calibrated_average(monkeypatch):
     posting = JobPosting(
         job_post_id=1,
         company_name="ABC",
@@ -716,18 +716,9 @@ def test_map_score_uses_equal_weight_average(monkeypatch):
     )
 
     result = response.results[0]
-    expected_values = [
-        result.score_detail.job_fit_score,
-        result.score_detail.work_condition_score,
-        result.score_detail.disability_support_score,
-        result.score_detail.work_environment_score,
-        result.score_detail.company_stability_score,
-        result.score_detail.accessibility_score,
-        result.score_detail.distance_score,
-        result.score_detail.commute_score,
-    ]
-    expected_values = [value for value in expected_values if value is not None]
-    expected = round(sum(expected_values) / len(expected_values))
+    components = score_service.iter_map_score_components(result.score_detail)
+    total_weight = sum(score_service.MAP_SCORE_COMPONENT_WEIGHTS[component["key"]] for component in components)
+    expected = round((sum(component["score"] * score_service.MAP_SCORE_COMPONENT_WEIGHTS[component["key"]] for component in components) / total_weight) * 1.08 + 4)
     assert result.total_score == expected
     assert result.score_detail.distance_score is not None
     assert result.evidence_items[1].source_table == "pd_kepad_standard_workplace"
@@ -781,12 +772,13 @@ def test_map_score_includes_score_breakdown_evidence_and_reasons(monkeypatch):
     result = response.results[0]
     breakdown = next(item for item in result.evidence_items if item.source_type == score_service.SCORE_BREAKDOWN_SOURCE_TYPE)
 
-    assert "점수 항목을 동일 비중 평균으로 계산했습니다." in result.reasons[0]
+    assert "점수 항목을 추천 영향도 기반 가중 평균으로 계산했습니다." in result.reasons[0]
     assert any("강점 항목" in reason for reason in result.reasons)
     assert any("확인 필요 항목" in reason for reason in result.reasons)
     assert breakdown.source_name == "BridgeWork 점수 산정"
     assert breakdown.fields["total_score"] == result.total_score
-    assert breakdown.fields["aggregation"] == "equal_weight_average"
+    assert breakdown.fields["aggregation"] == "weighted_calibrated_average"
+    assert breakdown.fields["weights"]["job_fit_score"] == score_service.MAP_SCORE_COMPONENT_WEIGHTS["job_fit_score"]
     assert breakdown.fields["component_count"] == len(breakdown.fields["components"])
     assert {component["key"] for component in breakdown.fields["components"]} >= {
         "job_fit_score",
