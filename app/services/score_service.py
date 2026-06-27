@@ -90,6 +90,8 @@ def score_quick_jobs(request: ScoreRequest, db: Optional[Session] = None) -> Qui
     results: list[QuickScoreResult] = []
 
     for posting in postings:
+        transit_time = get_transit_time(request.profile, posting)
+        transit_evidence = build_transit_time_evidence_item(transit_time)
         job_fit_score = calculate_job_fit_score(request.profile, posting)
         work_condition_score = calculate_work_condition_score(request.profile, posting)
         distance_score = calculate_home_work_distance_score(request.profile, posting)
@@ -104,6 +106,7 @@ def score_quick_jobs(request: ScoreRequest, db: Optional[Session] = None) -> Qui
             QuickScoreResult(
                 job=posting,
                 job_fit_score=score,
+                transit_time=to_transit_time_result(transit_time),
                 reasons=build_quick_recommendation_reasons(
                     request.profile,
                     posting,
@@ -123,6 +126,7 @@ def score_quick_jobs(request: ScoreRequest, db: Optional[Session] = None) -> Qui
                         fields=posting.recruitment_context,
                     )
                 ]
+                + ([transit_evidence] if transit_evidence is not None else [])
                 + build_job_context_evidence_items(posting),
             )
         )

@@ -193,6 +193,7 @@ class TransitTimeResult(BaseModel):
 class QuickScoreResult(BaseModel):
     job: JobPosting
     job_fit_score: int
+    transit_time: Optional[TransitTimeResult] = None
     reasons: List[str] = Field(default_factory=list)
     risk_factors: List[str] = Field(default_factory=list)
     evidence_items: List[ScoreEvidenceItem] = Field(default_factory=list)
