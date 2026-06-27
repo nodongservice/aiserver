@@ -24,6 +24,7 @@ STATE_DIR="${STATE_DIR:-$APP_ROOT/state}"
 ACTIVE_SLOT_FILE="${ACTIVE_SLOT_FILE:-$STATE_DIR/fastapi_active_slot}"
 ENV_FILE="${ENV_FILE:-$APP_ROOT/.env.prod}"
 UPSTREAM_SWITCH_SCRIPT="${UPSTREAM_SWITCH_SCRIPT:-$HOME/bridgework-infra/deploy/fastapi_blue_green_switch.sh}"
+DOCKER_NETWORK="${DOCKER_NETWORK:-bridgework-network}"
 
 BLUE_PORT="${BLUE_PORT:-19000}"
 GREEN_PORT="${GREEN_PORT:-19001}"
@@ -56,6 +57,11 @@ fi
 
 require_command docker
 require_command curl
+
+if ! docker network inspect "$DOCKER_NETWORK" >/dev/null 2>&1; then
+  log "도커 네트워크 생성: $DOCKER_NETWORK"
+  docker network create "$DOCKER_NETWORK" >/dev/null
+fi
 
 log_docker_disk_usage() {
   log "디스크 사용량:"
@@ -196,8 +202,11 @@ log "새 컨테이너 실행: $TARGET_CONTAINER"
 docker run -d \
   --name "$TARGET_CONTAINER" \
   --restart no \
+  --network "$DOCKER_NETWORK" \
+  --add-host host.docker.internal:host-gateway \
   --env-file "$ENV_FILE" \
   -e TZ="${TZ:-Asia/Seoul}" \
+  -e UVICORN_WORKERS="${UVICORN_WORKERS:-2}" \
   -p "${TARGET_PORT}:${CONTAINER_PORT}" \
   "$IMAGE_URI" >/dev/null
 log "새 컨테이너 실행 완료: $(( $(date +%s) - run_started_at ))s"
