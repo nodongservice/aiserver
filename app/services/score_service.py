@@ -262,7 +262,7 @@ def calculate_candidate_preference_score(profile: ScoreProfile, posting: JobPost
     distance_component = distance_score if distance_score is not None else (58 if posting.work_lat is not None and posting.work_lng is not None else 35)
 
     if mode == "quick":
-        score = round(job_fit_score * 0.68 + work_condition_score * 0.12 + distance_component * 0.20 + 5)
+        score = calibrate_quick_recommendation_score(round(job_fit_score * 0.68 + work_condition_score * 0.12 + distance_component * 0.20 + 5))
     else:
         work_environment_score = calculate_work_environment_score(profile, posting)
         score = round(job_fit_score * 0.46 + work_condition_score * 0.14 + work_environment_score * 0.12 + distance_component * 0.28 + 4)
@@ -283,8 +283,20 @@ def calculate_quick_recommendation_score(
     posting: JobPosting,
 ) -> int:
     distance_component = distance_score if distance_score is not None else (58 if posting.work_lat is not None and posting.work_lng is not None else 35)
-    score = round(job_fit_score * 0.68 + work_condition_score * 0.12 + distance_component * 0.20 + 5)
+    score = calibrate_quick_recommendation_score(round(job_fit_score * 0.68 + work_condition_score * 0.12 + distance_component * 0.20 + 5))
     return clamp_score(apply_distance_penalty(score, profile, posting))
+
+
+def calibrate_quick_recommendation_score(score: int) -> int:
+    if score >= 85:
+        return clamp_score(score + 4)
+    if score >= 72:
+        return clamp_score(score + 6)
+    if score >= 65:
+        return clamp_score(score + 4)
+    if score >= 55:
+        return clamp_score(score + 2)
+    return clamp_score(score)
 
 
 def apply_distance_penalty(score: int, profile: ScoreProfile, posting: JobPosting) -> int:
