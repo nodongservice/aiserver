@@ -78,10 +78,9 @@ class ExplanationGenerateResponse(BaseModel):
     # 설명 생성 로직 버전
     # Spring에서 설명 결과를 캐싱하거나 재생성할 때 기준으로 사용할 수 있습니다.
     # 예:
-    # - v1-rule-fallback
-    # - v2-llm-prompt-basic
+    # - v2-summary-dedup
     # - v3-llm-prompt-accessibility-focused
-    explanation_version: str = "v1-rule-fallback"
+    explanation_version: str = "v2-summary-dedup"
 
     # 공고 카드 또는 상세 화면에 보여줄 짧은 한 줄 설명
     short_summary: str

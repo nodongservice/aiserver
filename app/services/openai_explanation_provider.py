@@ -12,7 +12,7 @@ from app.services.explanation_provider import ExplanationProvider
 from app.services.explanation_sanitizer import sanitize_explanation_payload
 from app.services.next_step_program_service import build_next_step_summary, build_recommended_programs
 
-OPENAI_EXPLANATION_VERSION = "v3-openai-sanitized"
+OPENAI_EXPLANATION_VERSION = "v4-summary-dedup"
 
 
 def _display_grade_from_score(score: int) -> str:
@@ -182,6 +182,7 @@ class OpenAIExplanationProvider(ExplanationProvider):
                             "사용자가 바로 이해할 수 있도록 짧은 문장으로 작성하라. "
                             "사용자가 실제로 무엇을 확인하면 좋은지 행동 중심으로 안내하라. "
                             "README 범위 밖 정보는 확인된 사실처럼 말하지 마라.  "
+                            "프론트 화면에 이미 표시되는 회사명, 직무명, 점수, 등급은 추천 요약에 반복해서 쓰지 마라. "
                             "금지 표현: 지원하면 안 됩니다, 접근성이 없습니다, 이용할 수 없습니다, 불가능합니다."
                         ),
                     }
@@ -221,7 +222,7 @@ class OpenAIExplanationProvider(ExplanationProvider):
                                     "grade_terms": "GOOD, CAUTION, WARNING, ERROR, RISK 같은 내부 등급명은 쓰지 말고 A등급, B등급, C등급만 쓴다.",
                                     "must_not_add_new_facts": True,
                                     "must_include_check_points": True,
-                                    "short_summary": ("추천 요약에 해당하는 2~3문장. 회사명, 직무명, 점수를 자연스럽게 포함한다."),
+                                    "short_summary": ("추천 요약에 해당하는 2~3문장. 회사명, 직무명, 점수, 등급은 쓰지 말고 조건과 확인 필요 사항만 설명한다."),
                                     "detail_explanation": ("왜 추천되었는지에 해당하는 2~3개 근거를 한 문단으로 작성한다. 나열식 과잉 설명, risk penalty 같은 내부 계산 용어, API명 노출은 피한다."),
                                     "check_points": ("지원 전에 확인하면 좋은 실제 행동 2~3개. 집에서 근무지까지의 이동 시간, 정류장·횡단보도 동선, 출입구·엘리베이터·경사로 등 편의시설처럼 구체적으로 쓴다."),
                                     "next_step_summary": ("next_step_candidates가 있으면 '이런 준비가 도움이 될 수 있어요' 섹션의 요약 문장 1~2개를 작성한다. 후보가 없으면 빈 문자열을 반환한다."),

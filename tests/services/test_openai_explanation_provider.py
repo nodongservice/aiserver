@@ -82,3 +82,14 @@ def test_extract_output_text_from_responses_output_content():
     output_text = OpenAIExplanationProvider._extract_output_text(response_json)
 
     assert output_text == ('{"short_summary":"요약","detail_explanation":"상세","check_points":["확인"]}')
+
+
+def test_openai_prompt_prevents_repeating_visible_job_score_fields():
+    provider = OpenAIExplanationProvider()
+
+    body = provider._build_openai_request_body(build_request())
+    system_text = body["input"][0]["content"][0]["text"]
+    user_payload = body["input"][1]["content"][0]["text"]
+
+    assert "회사명, 직무명, 점수, 등급은 추천 요약에 반복해서 쓰지 마라" in system_text
+    assert "회사명, 직무명, 점수, 등급은 쓰지 말고" in user_payload
