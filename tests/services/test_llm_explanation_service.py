@@ -65,9 +65,12 @@ def test_build_short_summary_for_good_grade_with_real_risk():
 
     assert "비교적 안정적으로 추천되는 일자리예요" in summary
     assert "일부 이동 환경 정보는 지원 전 확인해 주세요" in summary
+    assert request.company_name not in summary
+    assert request.job_title not in summary
+    assert str(request.accessibility_score) not in summary
 
 
-def test_build_detail_explanation_includes_score_summary_and_filtered_risk_text():
+def test_build_detail_explanation_includes_factor_summary_and_filtered_risk_text():
     request = build_request(
         risk_factors=[
             "저상버스 이용 가능 여부는 지원 전 확인을 권장합니다.",
@@ -77,11 +80,15 @@ def test_build_detail_explanation_includes_score_summary_and_filtered_risk_text(
 
     explanation = build_detail_explanation(request)
 
-    assert "종합 추천 점수 88점" in explanation
+    assert "통근 접근성, 주변 이동 환경, 업무환경 조건을 함께 살펴봤어요" in explanation
     assert "세부 점수에서는" in explanation
     assert "대중교통 접근성" in explanation or "업무환경 적합성" in explanation
     assert "지원 전 추가 확인이 필요해요" in explanation
     assert "전국 버스정류장 위치정보" in explanation
+    assert request.company_name not in explanation
+    assert request.job_title not in explanation
+    assert "종합 추천 점수" not in explanation
+    assert str(request.accessibility_score) not in explanation
 
 
 def test_build_detail_explanation_uses_job_fit_wording_for_quick_single_score():
@@ -103,9 +110,10 @@ def test_build_detail_explanation_uses_job_fit_wording_for_quick_single_score():
 
     explanation = build_detail_explanation(request)
 
-    assert "직무 적합도 점수 82점" in explanation
+    assert "희망 직무와 보유 역량" in explanation
     assert "단일 점수는 희망 직무" in explanation
     assert "접근성 점수" not in explanation
+    assert "직무 적합도 점수 82점" not in explanation
     assert "업무환경 적합성 항목이 상대적으로 높게 반영" not in explanation
 
 
@@ -146,7 +154,7 @@ def test_build_check_points_adds_actionable_guidance_for_large_penalty_and_missi
 def test_generate_accessibility_explanation_keeps_rule_fallback_contract():
     response = generate_accessibility_explanation(build_request())
 
-    assert response.explanation_version == "v1-rule-fallback"
+    assert response.explanation_version == "v2-summary-dedup"
     assert response.used_llm is False
     assert response.short_summary
     assert response.detail_explanation

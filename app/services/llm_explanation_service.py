@@ -6,7 +6,7 @@ from app.schemas.explanation import (
 )
 from app.services.next_step_program_service import build_next_step_summary, build_recommended_programs
 
-EXPLANATION_VERSION = "v1-rule-fallback"
+EXPLANATION_VERSION = "v2-summary-dedup"
 DEFAULT_NO_RISK_MESSAGE = "현재 확인된 주요 위험 요인은 없습니다."
 DEFAULT_CHECK_POINT = "지원 전 실제 근무지 접근성과 통근 동선을 한 번 더 확인해 주세요."
 
@@ -61,31 +61,31 @@ def build_short_summary(request: ExplanationGenerateRequest) -> str:
     if request.score_mode == "quick":
         if request.accessibility_grade == "GOOD":
             if has_real_risk:
-                return f"{request.company_name}의 {request.job_title} 공고는 현재 프로필 기준으로 비교적 잘 맞는 일자리예요. 다만 일부 조건은 지원 전 한 번 더 확인해보시는 걸 권장드려요."
+                return "현재 프로필 기준으로 비교적 잘 맞는 일자리예요. 다만 일부 조건은 지원 전 한 번 더 확인해보시는 걸 권장드려요."
 
-            return f"{request.company_name}의 {request.job_title} 공고는 현재 프로필 기준으로 비교적 잘 맞는 일자리예요. 직무 적합도 점수 {request.accessibility_score}점으로 분석되었어요."
+            return "현재 프로필 기준으로 비교적 잘 맞는 일자리예요. 희망 직무와 보유 역량 조건이 긍정적으로 반영되었어요."
 
         if request.accessibility_grade == "CAUTION":
             if has_real_risk:
-                return f"{request.company_name}의 {request.job_title} 공고는 일부 조건이 맞지만 확인이 필요한 항목도 있어요. 지원 전 근무 조건과 이동 환경을 함께 살펴봐 주세요."
+                return "일부 조건은 잘 맞지만 확인이 필요한 항목도 있어요. 지원 전 근무 조건과 이동 환경을 함께 살펴봐 주세요."
 
-            return f"{request.company_name}의 {request.job_title} 공고는 현재 프로필과 일부 조건이 맞는 것으로 분석되었어요. 세부 근무 조건은 지원 전 확인해 주세요."
+            return "현재 프로필과 일부 조건이 맞는 것으로 분석되었어요. 세부 근무 조건은 지원 전 확인해 주세요."
 
-        return f"{request.company_name}의 {request.job_title} 공고는 현재 프로필과 맞지 않을 수 있는 조건이 있어요. 지원 전 업무 내용과 근무 조건을 꼼꼼히 확인해 주세요."
+        return "현재 프로필과 맞지 않을 수 있는 조건이 있어요. 지원 전 업무 내용과 근무 조건을 꼼꼼히 확인해 주세요."
 
     if request.accessibility_grade == "GOOD":
         if has_real_risk:
-            return f"{request.company_name}의 {request.job_title} 공고는 현재 조건 기준으로 비교적 안정적으로 추천되는 일자리예요. 종합 추천 점수 {request.accessibility_score}점으로 분석되었지만, 일부 이동 환경 정보는 지원 전 확인해 주세요."
+            return "현재 조건 기준으로 비교적 안정적으로 추천되는 일자리예요. 일부 이동 환경 정보는 지원 전 확인해 주세요."
 
-        return f"{request.company_name}의 {request.job_title} 공고는 현재 조건 기준으로 비교적 안정적으로 추천되는 일자리예요. 종합 추천 점수 {request.accessibility_score}점으로 분석되었어요."
+        return "현재 조건 기준으로 비교적 안정적으로 추천되는 일자리예요. 이동 환경과 업무 조건이 전반적으로 긍정적으로 반영되었어요."
 
     if request.accessibility_grade == "CAUTION":
         if has_real_risk:
-            return f"{request.company_name}의 {request.job_title} 공고는 일부 조건이 맞지만 확인이 필요한 항목도 있어요. 실제 출퇴근 동선과 주변 이동 환경을 지원 전 확인해 주세요."
+            return "일부 조건은 잘 맞지만 확인이 필요한 항목도 있어요. 실제 출퇴근 동선과 주변 이동 환경을 지원 전 확인해 주세요."
 
-        return f"{request.company_name}의 {request.job_title} 공고는 현재 조건 기준으로 검토해볼 수 있는 일자리예요. 다만 접근성 정보 일부는 추가 확인이 필요해요."
+        return "현재 조건 기준으로 검토해볼 수 있는 일자리예요. 다만 접근성 정보 일부는 추가 확인이 필요해요."
 
-    return f"{request.company_name}의 {request.job_title} 공고는 현재 조건과 맞지 않을 수 있는 항목이 있어요. 지원 전 이동 환경과 업무 조건을 충분히 확인해 주세요."
+    return "현재 조건과 맞지 않을 수 있는 항목이 있어요. 지원 전 이동 환경과 업무 조건을 충분히 확인해 주세요."
 
 
 def build_detail_explanation(request: ExplanationGenerateRequest) -> str:
@@ -113,9 +113,9 @@ def build_detail_explanation(request: ExplanationGenerateRequest) -> str:
 
 def build_overview_sentence(request: ExplanationGenerateRequest) -> str:
     if request.score_mode == "quick":
-        return f"{request.company_name}의 {request.job_title} 공고는 직무 적합도 점수 {request.accessibility_score}점으로 분석되었어요."
+        return "희망 직무와 보유 역량, 경력·학력 조건의 일치도를 중심으로 살펴봤어요."
 
-    return f"{request.company_name}의 {request.job_title} 공고는 종합 추천 점수 {request.accessibility_score}점으로 분석되었어요."
+    return "통근 접근성, 주변 이동 환경, 업무환경 조건을 함께 살펴봤어요."
 
 
 def build_check_points(request: ExplanationGenerateRequest) -> list[str]:

@@ -67,7 +67,7 @@ def test_get_explanation_provider_returns_openai_provider():
 def test_generate_explanation_with_provider_keeps_existing_contract():
     response = generate_explanation_with_provider(build_request())
 
-    assert response.explanation_version == "v1-rule-fallback"
+    assert response.explanation_version == "v2-summary-dedup"
     assert response.used_llm is False
     assert response.short_summary
     assert response.detail_explanation
@@ -89,5 +89,5 @@ def test_generate_explanation_with_provider_falls_back_when_openai_provider_fail
         provider_name=OPENAI_PROVIDER_NAME,
     )
 
-    assert response.explanation_version == "v1-rule-fallback"
+    assert response.explanation_version == "v2-summary-dedup"
     assert response.used_llm is False
