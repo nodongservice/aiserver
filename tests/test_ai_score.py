@@ -381,7 +381,8 @@ def test_ai_explain_recommendation_contract(client):
     result = data["result"]
     assert data["code"] == "SUCCESS"
     assert result["used_llm"] is False
-    assert "ABC복지센터" in result["short_summary"]
+    assert "ABC복지센터" not in result["short_summary"]
+    assert "사무보조" not in result["short_summary"]
     assert result["recommendation_reasons"]
     assert result["caution_points"]
     assert result["checklist"]
@@ -459,7 +460,7 @@ def test_recommendation_explanation_uses_configured_provider(monkeypatch):
     assert captured["request"].accessibility_score == 82
     assert captured["request"].score_detail.work_environment_score == 0
     assert response.used_llm is True
-    assert response.short_summary == "ABC복지센터: LLM 요약"
+    assert response.short_summary == "LLM 요약"
     assert response.recommendation_reasons == ["희망 직무와 모집 직종이 겹칩니다."]
     assert response.caution_points == ["현재 일부 접근성 데이터가 충분하지 않아, 실제 환경은 현장 상황에 따라 다를 수 있어요."]
     assert response.checklist == ["LLM 체크포인트"]

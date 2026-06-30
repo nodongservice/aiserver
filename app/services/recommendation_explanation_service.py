@@ -85,8 +85,6 @@ def to_recommendation_explain_response(
     provider_response: ExplanationGenerateResponse,
 ) -> RecommendationExplainResponse:
     short_summary = provider_response.short_summary
-    if request.job.company_name not in short_summary:
-        short_summary = f"{request.job.company_name}: {short_summary}"
     generate_request = build_explanation_generate_request(request)
     recommended_programs = select_recommended_programs(
         provider_response.recommended_programs,
