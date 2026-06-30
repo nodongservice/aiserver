@@ -1,3 +1,4 @@
+import re
 from typing import Any, Dict, List
 
 from app.schemas.explanation import ExplanationGenerateResponse, RecommendedProgram
@@ -14,6 +15,13 @@ DETERMINISTIC_UNSAFE_REPLACEMENTS = {
     "ERROR": "C등급",
     "RISK": "C등급",
 }
+LEADING_COMPANY_PREFIX_PATTERN = re.compile(
+    r"^\s*[^:：]{0,50}(?:"
+    r"\(주\)|㈜|주식회사|\(유\)|유한회사|"
+    r"사회복지법인|재단법인|사단법인|의료법인|학교법인|"
+    r"복지법인|협동조합|협회|재단|센터|병원|의원|회사"
+    r")[^:：]{0,40}[:：]\s*"
+)
 
 
 def sanitize_explanation_payload(
@@ -82,6 +90,7 @@ def sanitize_text(text: Any) -> str:
         return ""
 
     normalized = " ".join(text.strip().split())
+    normalized = LEADING_COMPANY_PREFIX_PATTERN.sub("", normalized, count=1).strip()
 
     for unsafe_text, safe_text in DETERMINISTIC_UNSAFE_REPLACEMENTS.items():
         normalized = normalized.replace(unsafe_text, safe_text)
