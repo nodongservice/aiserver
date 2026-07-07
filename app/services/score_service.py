@@ -49,7 +49,6 @@ from app.services.transit_time_service import (
 from app.utils.geo import calculate_haversine_distance_meters
 
 MAP_SCORING_MIN_CANDIDATE_LIMIT = 80
-MAX_RECOMMENDATION_CANDIDATE_LIMIT = 1000
 CANDIDATE_RANKING_CACHE_TTL_SECONDS = 5 * 60
 CANDIDATE_RANKING_CACHE_MAX_SIZE = 128
 ACCESSIBILITY_CACHE_TTL_SECONDS = 10 * 60
@@ -140,10 +139,7 @@ def score_map_jobs(request: ScoreRequest, db: Optional[Session] = None) -> MapSc
         postings = get_ranked_candidate_job_postings(db=db, request=request, mode="map")
         return MapScoreResponse(results=score_map_postings(request, postings, db, sort_results=False))
 
-    candidate_limit = min(
-        MAX_RECOMMENDATION_CANDIDATE_LIMIT,
-        max(request.offset + request.limit, MAP_SCORING_MIN_CANDIDATE_LIMIT),
-    )
+    candidate_limit = max(request.offset + request.limit, MAP_SCORING_MIN_CANDIDATE_LIMIT)
     ranked_request = request.model_copy(update={"limit": candidate_limit, "offset": 0})
     postings = get_ranked_candidate_job_postings(db=db, request=ranked_request, mode="map")
     results = score_map_postings(request, postings, db, sort_results=True)
@@ -224,14 +220,14 @@ def get_ranked_candidate_job_postings(db: Optional[Session], request: ScoreReque
     cache_key = build_candidate_ranking_cache_key(request.profile, mode=mode)
     cached_ranked_postings = get_cached_candidate_rankings(cache_key)
     if cached_ranked_postings is not None:
-        selected_postings = cached_ranked_postings[request.offset : min(request.offset + request.limit, MAX_RECOMMENDATION_CANDIDATE_LIMIT)]
+        selected_postings = cached_ranked_postings[request.offset : request.offset + request.limit]
         return enrich_job_postings_with_public_data(db, selected_postings)
 
     rows = find_all_recruitments_for_scoring(db)
     postings = [posting for row in rows if (posting := to_job_posting(row)) is not None]
     ranked_postings = rank_candidate_postings(request.profile, postings, mode=mode)
     set_cached_candidate_rankings(cache_key, ranked_postings)
-    selected_postings = ranked_postings[request.offset : min(request.offset + request.limit, MAX_RECOMMENDATION_CANDIDATE_LIMIT)]
+    selected_postings = ranked_postings[request.offset : request.offset + request.limit]
     return enrich_job_postings_with_public_data(db, selected_postings)
 
 
@@ -256,7 +252,7 @@ def rank_candidate_postings(profile: ScoreProfile, postings: list[JobPosting], *
         ),
         reverse=True,
     )
-    return ranked[:MAX_RECOMMENDATION_CANDIDATE_LIMIT]
+    return ranked
 
 
 def calculate_candidate_preference_score(profile: ScoreProfile, posting: JobPosting, *, mode: str) -> int:

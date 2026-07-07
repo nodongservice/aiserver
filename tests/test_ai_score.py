@@ -1424,7 +1424,7 @@ def test_salary_normalization_uses_salary_type_units():
     assert normalize_annual_salary("100,000", "일급") == 26_000_000
 
 
-def test_candidate_ranking_keeps_only_top_1000_profile_candidates():
+def test_candidate_ranking_keeps_all_profile_candidates():
     postings = [
         JobPosting(
             job_post_id=index,
@@ -1466,7 +1466,7 @@ def test_candidate_ranking_keeps_only_top_1000_profile_candidates():
     )
     ranked = score_service.rank_candidate_postings(profile, postings, mode="map")
 
-    assert len(ranked) == score_service.MAX_RECOMMENDATION_CANDIDATE_LIMIT
+    assert len(ranked) == len(postings)
     assert ranked[0].job_post_id == 5000
 
 
