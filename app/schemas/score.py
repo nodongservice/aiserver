@@ -128,7 +128,7 @@ class ScoreRequest(BaseModel):
     model_config = ConfigDict(populate_by_name=True)
 
     profile: ScoreProfile
-    limit: int = Field(default=100, ge=1, le=100)
+    limit: int = Field(default=100, ge=1)
     offset: int = Field(default=0, ge=0)
     stream_mode: bool = Field(default=False, alias="streamMode")
 
