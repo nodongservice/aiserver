@@ -9,10 +9,12 @@ from app.schemas.explanation import (
 from app.schemas.score import (
     RecommendationExplainRequest,
     RecommendationExplainResponse,
+    TransitTimeResult,
 )
 from app.services.explanation_provider_service import generate_explanation_with_provider
 from app.services.llm_explanation_service import DEFAULT_NO_RISK_MESSAGE
 from app.services.next_step_program_service import build_next_step_summary, build_recommended_programs
+from app.services.transit_time_service import get_transit_time_estimate
 
 
 def explain_recommendation(
@@ -90,6 +92,12 @@ def to_recommendation_explain_response(
         provider_response.recommended_programs,
         build_recommended_programs(generate_request),
     )
+    transit_time = get_transit_time_estimate(
+        origin_lat=request.profile.home_lat,
+        origin_lng=request.profile.home_lng,
+        destination_lat=request.job.work_lat,
+        destination_lng=request.job.work_lng,
+    )
 
     return RecommendationExplainResponse(
         short_summary=short_summary,
@@ -99,6 +107,7 @@ def to_recommendation_explain_response(
         next_step_summary=provider_response.next_step_summary or build_next_step_summary(generate_request, recommended_programs),
         recommended_programs=[program.model_dump() for program in recommended_programs],
         used_llm=provider_response.used_llm,
+        transit_time=TransitTimeResult(**transit_time.model_dump()) if transit_time is not None else None,
     )
 
 
