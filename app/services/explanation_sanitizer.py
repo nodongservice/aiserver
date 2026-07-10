@@ -104,7 +104,11 @@ def sanitize_next_step_summary(text: Any) -> str:
     if not normalized:
         return ""
 
-    return NEXT_STEP_HEADING_PATTERN.sub("", normalized, count=1).strip()
+    summary_without_heading = NEXT_STEP_HEADING_PATTERN.sub("", normalized, count=1).strip()
+    if summary_without_heading:
+        return summary_without_heading
+
+    return normalized
 
 
 def sanitize_recommended_programs(values: Any) -> List[RecommendedProgram]:

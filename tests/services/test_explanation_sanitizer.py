@@ -77,3 +77,18 @@ def test_sanitize_explanation_payload_removes_duplicated_next_step_heading():
     )
 
     assert response.next_step_summary == "지원 준비와 구직 역량을 정리하는 데 도움이 될 수 있어요."
+
+
+def test_sanitize_explanation_payload_keeps_heading_when_only_heading_remains():
+    response = sanitize_explanation_payload(
+        payload={
+            "short_summary": "요약",
+            "detail_explanation": "상세",
+            "check_points": ["추가 확인 필요"],
+            "next_step_summary": "사회복지법인 테스트센터: 이런 준비가 도움이 될 수 있어요.",
+        },
+        explanation_version="v3-openai-sanitized",
+        used_llm=True,
+    )
+
+    assert response.next_step_summary == "이런 준비가 도움이 될 수 있어요."
