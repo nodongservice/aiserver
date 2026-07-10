@@ -159,7 +159,7 @@ def score_map_postings(
     for posting in postings:
         standard_workplace = standard_workplaces.get(posting.job_post_id, StandardWorkplaceMatch(is_match=False))
         accessibility = get_accessibility(request.profile, posting, db)
-        transit_time = get_transit_time(request.profile, posting)
+        transit_time = get_transit_time(request.profile, posting) if request.include_transit_time else None
         score_detail = MapScoreDetail(
             job_fit_score=calculate_job_fit_score(request.profile, posting),
             work_condition_score=calculate_work_condition_score(request.profile, posting),

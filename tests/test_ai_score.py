@@ -575,6 +575,46 @@ def test_recommendation_explanation_uses_total_score_for_map_provider(monkeypatc
     assert captured["request"].accessibility_grade == "GOOD"
 
 
+def test_recommendation_explanation_includes_transit_time_for_selected_job(monkeypatch):
+    def fake_generate(request, provider_name=None):
+        return ExplanationGenerateResponse(
+            explanation_version="v1-test",
+            short_summary="지도 요약",
+            detail_explanation="지도 상세 설명",
+            check_points=["지도 체크포인트"],
+            used_llm=False,
+        )
+
+    monkeypatch.setattr(
+        recommendation_explanation_service,
+        "generate_explanation_with_provider",
+        fake_generate,
+    )
+
+    response = recommendation_explanation_service.explain_recommendation(
+        RecommendationExplainRequest(
+            profile=ScoreProfile(
+                user_id=1,
+                desired_jobs=["사무보조"],
+                home_lat=37.5665,
+                home_lng=126.9780,
+            ),
+            job=JobPosting(
+                job_post_id=1,
+                company_name="ABC복지센터",
+                job_title="사무보조",
+                work_lat=37.498095,
+                work_lng=127.027610,
+            ),
+            total_score=84,
+        )
+    )
+
+    assert response.transit_time is not None
+    assert response.transit_time.duration_minutes is not None
+    assert response.transit_time.transfer_count is not None
+
+
 def test_to_job_posting_from_pd_kepad_recruitment_row():
     row = SimpleNamespace(
         id=101,

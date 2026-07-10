@@ -131,6 +131,7 @@ class ScoreRequest(BaseModel):
     limit: int = Field(default=100, ge=1)
     offset: int = Field(default=0, ge=0)
     stream_mode: bool = Field(default=False, alias="streamMode")
+    include_transit_time: bool = Field(default=True, alias="includeTransitTime")
 
 
 class JobPosting(BaseModel):
@@ -258,3 +259,4 @@ class RecommendationExplainResponse(BaseModel):
     next_step_summary: Optional[str] = None
     recommended_programs: List[dict[str, Any]] = Field(default_factory=list)
     used_llm: bool = False
+    transit_time: Optional[TransitTimeResult] = None
