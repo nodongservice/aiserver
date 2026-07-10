@@ -170,10 +170,7 @@ def job_title_direct_match(job_title: str, text: str) -> bool:
     if normalized_job_title and normalized_job_title in text:
         return True
 
-    title_tokens = {
-        token for token in TOKEN_PATTERN.findall(normalized_job_title)
-        if token not in COMMON_TITLE_TOKENS
-    }
+    title_tokens = {token for token in TOKEN_PATTERN.findall(normalized_job_title) if token not in COMMON_TITLE_TOKENS}
     if not title_tokens:
         return False
 
