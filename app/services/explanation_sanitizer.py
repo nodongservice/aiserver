@@ -15,6 +15,7 @@ DETERMINISTIC_UNSAFE_REPLACEMENTS = {
     "ERROR": "C등급",
     "RISK": "C등급",
 }
+NEXT_STEP_HEADING_PATTERN = re.compile(r"^\s*이런 준비가 도움이 될 수 있어요(?:[:：]|[.?!])?\s*")
 LEADING_COMPANY_PREFIX_PATTERN = re.compile(
     r"^\s*[^:：]{0,50}(?:"
     r"\(주\)|㈜|주식회사|\(유\)|유한회사|"
@@ -40,7 +41,7 @@ def sanitize_explanation_payload(
     short_summary = sanitize_text(payload.get("short_summary", ""))
     detail_explanation = sanitize_text(payload.get("detail_explanation", ""))
     raw_check_points = payload.get("check_points", [])
-    next_step_summary = sanitize_text(payload.get("next_step_summary", ""))
+    next_step_summary = sanitize_next_step_summary(payload.get("next_step_summary", ""))
     recommended_programs = sanitize_recommended_programs(payload.get("recommended_programs", []))
 
     if not short_summary:
@@ -96,6 +97,14 @@ def sanitize_text(text: Any) -> str:
         normalized = normalized.replace(unsafe_text, safe_text)
 
     return normalized
+
+
+def sanitize_next_step_summary(text: Any) -> str:
+    normalized = sanitize_text(text)
+    if not normalized:
+        return ""
+
+    return NEXT_STEP_HEADING_PATTERN.sub("", normalized, count=1).strip()
 
 
 def sanitize_recommended_programs(values: Any) -> List[RecommendedProgram]:

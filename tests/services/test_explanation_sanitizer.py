@@ -62,3 +62,18 @@ def test_sanitize_explanation_payload_removes_leading_company_name_prefix():
     assert response.check_points[1].startswith("강점:")
     assert response.next_step_summary
     assert not response.next_step_summary.startswith("사회복지법인 테스트센터:")
+
+
+def test_sanitize_explanation_payload_removes_duplicated_next_step_heading():
+    response = sanitize_explanation_payload(
+        payload={
+            "short_summary": "요약",
+            "detail_explanation": "상세",
+            "check_points": ["추가 확인 필요"],
+            "next_step_summary": "이런 준비가 도움이 될 수 있어요: 지원 준비와 구직 역량을 정리하는 데 도움이 될 수 있어요.",
+        },
+        explanation_version="v3-openai-sanitized",
+        used_llm=True,
+    )
+
+    assert response.next_step_summary == "지원 준비와 구직 역량을 정리하는 데 도움이 될 수 있어요."
