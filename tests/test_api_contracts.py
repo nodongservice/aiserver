@@ -92,7 +92,9 @@ def test_recommendation_explanation_contract_response_keys_are_stable(client):
         "next_step_summary",
         "recommended_programs",
         "used_llm",
+        "transit_time",
     }
+    assert data["result"]["transit_time"] is None
 
 
 def test_score_quick_validation_error_contract_includes_request_id(client):
