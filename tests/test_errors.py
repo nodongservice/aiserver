@@ -2,6 +2,8 @@ import logging
 
 from sqlalchemy.exc import SQLAlchemyError, StatementError
 
+from app.core.logging import sanitize_log_text
+
 
 def test_validation_error_response_format(client):
     """
@@ -168,3 +170,28 @@ def test_database_error_logs_sqlalchemy_details(client, caplog):
     assert "SELECT * FROM pd_seoul_walking_network" in log_message
     assert "{'id': 10}" in log_message
     assert records[-1].exc_info is not None
+
+
+def test_runtime_error_logs_mask_personal_data(client, caplog):
+    @client.app.get("/test/errors/runtime-error-mask")
+    def raise_runtime_error_for_masking():
+        raise RuntimeError("user=jane@example.com phone=01012345678 token=Bearer abc.def.ghi")
+
+    caplog.set_level(logging.ERROR, logger="app.core.exceptions")
+
+    response = client.get(
+        "/test/errors/runtime-error-mask",
+        headers={"X-Request-Id": "test-request-id-mask-001"},
+    )
+
+    assert response.status_code == 500
+
+    records = [record for record in caplog.records if record.name == "app.core.exceptions" and record.levelno == logging.ERROR]
+    assert records
+
+    formatted = sanitize_log_text(records[-1].getMessage())
+    assert "j***@example.com" in formatted
+    assert "010-****-5678" in formatted
+    assert "Bearer [REDACTED]" in formatted
+    assert "jane@example.com" not in formatted
+    assert "01012345678" not in formatted
