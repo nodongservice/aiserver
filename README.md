@@ -150,29 +150,6 @@ flowchart LR
 - **PostGIS 활용**: 근무지 좌표 주변의 접근성 데이터를 반경 기반으로 조회합니다.
 - **운영 안정성**: OCR 프로세스 격리, OCR 대상 페이지 최소화, 접근성 조회 캐시, 헬스체크/메트릭을 제공합니다.
 
-## 주요 API
-
-| Method | Path | 설명 |
-| --- | --- | --- |
-| `GET` | `/health` | 서버 헬스체크 |
-| `GET` | `/db-health` | DB 연결 확인 |
-| `GET` | `/postgis-health` | PostGIS extension 확인 |
-| `GET` | `/metrics` | Prometheus 메트릭 |
-| `POST` | `/api/v1/profile-draft/from-portfolio` | PDF 포트폴리오 기반 프로필 초안 생성 |
-| `POST` | `/api/v1/score/quick` | 전체 후보 랭킹 기반 퀵 추천 점수 계산 |
-| `POST` | `/api/v1/score/map` | 지도 추천용 8개 지표 가중 종합 점수 계산 |
-| `POST` | `/api/v1/explain/recommendation` | 추천 사유/주의사항/체크리스트 생성 |
-
-### 추천 점수 API 규칙
-
-- `limit`: 1 이상. Spring Backend의 AI ON 검색은 현재 유효 공고 전체 개수를 전달합니다.
-- `offset`: 0 이상
-- 후보 공고는 `posting_status=ACTIVE` 또는 상태값 없음, 직무명/사업장명 존재, 마감일이 지나지 않은 공고 전체를 기준으로 조회합니다.
-- FastAPI는 전체 후보를 빠른 프로필 기반 점수로 먼저 랭킹하고 `limit`/`offset`을 적용합니다. 후보 랭킹은 같은 프로필/모드에서 짧게 재사용해 1개 단위 스트리밍 호출의 반복 조회 비용을 줄입니다.
-- 퀵 추천 점수는 직무 적합도만으로 산정하지 않고 직무 적합도, 근무조건, 거주지-근무지 거리 감점을 함께 반영합니다.
-- 지도 추천은 빠른 후보 랭킹 전체를 대상으로 접근성/내부 통근 추정/공공데이터 정밀 점수를 계산한 뒤 점수 기준 정렬 후 `limit`/`offset`을 적용합니다.
-- Spring Backend가 AI ON 전체 공고 요청을 1개 단위로 나눠 호출할 수 있으므로, FastAPI는 `limit=1` 요청도 일반 요청과 동일하게 안정적으로 처리해야 합니다.
-
 ## 기술 스택
 
 | 영역 | 사용 기술 |
@@ -184,63 +161,6 @@ flowchart LR
 | 운영 | Docker, GHCR, GitHub Actions, Blue/Green deployment |
 | 관측 | Prometheus metrics, Grafana, Loki, Alloy |
 | 품질 | pytest, ruff, pre-commit, uv |
-
-## 폴더 구조
-
-```text
-app/
-  api/                 FastAPI 라우터
-  core/                설정, 예외 처리, 로깅, 공통 응답
-  db/                  SQLAlchemy 세션과 DB 모델
-  repositories/        공고/공공데이터/PostGIS 조회
-  schemas/             요청/응답 Pydantic 모델
-  services/            OCR, LLM, 스코어링, 설명 생성 비즈니스 로직
-  services/scoring/    6개 점수 항목별 계산 모듈
-  utils/               지리 좌표 유틸리티
-tests/                 pytest 테스트
-deploy/                EC2 배포 스크립트
-```
-
-## 로컬 실행
-
-Python 3.9 이상과 PostgreSQL/PostGIS가 필요합니다. 운영과 같은 기본 설정에서는 시작 시 PostGIS와 OCR 런타임 의존성을 검증합니다.
-
-```bash
-uv sync --dev
-uv run uvicorn app.main:app --reload
-```
-
-```bash
-uv run pytest
-uv run ruff check .
-```
-
-주요 환경변수:
-
-| 변수 | 설명 | 기본값 |
-| --- | --- | --- |
-| `DATABASE_URL` | PostgreSQL/PostGIS 연결 URL | 필수 |
-| `OPENAI_API_KEY` | 프로필 초안과 OpenAI 설명 provider 사용 시 API 키 | 없음 |
-| `OPENAI_MODEL` | 추천 설명 모델 | `gpt-5.4-nano` |
-| `EXPLANATION_PROVIDER` | `openai` 또는 `rule_fallback` | API 키가 있으면 `openai`, 없으면 fallback |
-| `PROFILE_DRAFT_OPENAI_MODEL` | PDF 프로필 초안 생성 모델 | `OPENAI_MODEL` 값 |
-| `PROFILE_DRAFT_MAX_FILE_SIZE_BYTES` | 허용 PDF 최대 크기 | `10485760` |
-| `PROFILE_DRAFT_MAX_PAGES` | 분석할 PDF 최대 페이지 | `10` |
-| `REQUIRE_POSTGIS` | 시작 시 PostGIS 필수 검증 | `true` |
-| `REQUIRE_PROFILE_DRAFT_OCR_DEPENDENCIES` | 시작 시 OCR 런타임 필수 검증 | `true` |
-| `CORS_ALLOW_ORIGINS` | 허용 origin의 쉼표 구분 목록 | 빈 목록 |
-
-## 배포
-
-이 레포는 GitHub Actions에서 Docker 이미지를 빌드해 GHCR에 게시하고, EC2에서 비활성 Blue/Green 슬롯에 새 컨테이너를 띄운 뒤 Nginx 업스트림을 전환합니다.
-
-- 워크플로우: `.github/workflows/cicd-main-ec2.yml`
-- 컨테이너 이미지: `ghcr.io/<owner>/bridgework-aiserver:<commit-sha>`
-- Blue/Green 포트: `19000`, `19001`
-- 트래픽 전환: `../backend-infra/deploy/fastapi_blue_green_switch.sh`
-- 운영 모니터링: `../backend-infra/monitoring`
-
-배포 대상 EC2에는 Git 저장소를 clone하지 않습니다. GitHub hosted runner가 이미지를 빌드/게시하고, EC2는 GHCR 이미지와 배포 스크립트만 사용합니다.
 
 ## 데이터 사용
 
@@ -266,10 +186,3 @@ uv run ruff check .
 | 김수인 | 디자인 |
 | 최성현 | 백엔드 및 인프라 |
 | 박민정 | 프론트 및 AI 개발 |
-
-## 사업 아이템 차별점
-
-- 단순 채용 공고 추천이 아니라, 장애인 구직자의 **실제 출근 가능성**과 **근무 지속 가능성**을 함께 계산합니다.
-- 이력서 PDF를 프로필로 자동 변환해 사용자의 초기 입력 부담을 줄입니다.
-- AI 추천을 켜고 끌 수 있어, 최신 공고 조회와 AI 분석 흐름을 명확히 분리합니다.
-- 점수 산정은 설명 가능한 룰 기반 로직으로 처리하고, LLM은 구조화와 자연어 설명에 제한적으로 사용합니다. 
