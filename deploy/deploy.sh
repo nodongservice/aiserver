@@ -39,8 +39,12 @@ HEALTH_REQUIRE_DB="${HEALTH_REQUIRE_DB:-true}"
 HEALTH_REQUIRE_POSTGIS="${HEALTH_REQUIRE_POSTGIS:-true}"
 
 IMAGE_URI="${IMAGE_URI:-}"
-IMAGE_RETENTION_COUNT="${IMAGE_RETENTION_COUNT:-5}"
+IMAGE_RETENTION_COUNT="${IMAGE_RETENTION_COUNT:-2}"
 PRE_PULL_IMAGE_RETENTION_COUNT="${PRE_PULL_IMAGE_RETENTION_COUNT:-2}"
+MIN_FREE_DISK_MB="${MIN_FREE_DISK_MB:-4096}"
+DOCKER_LOG_DRIVER="${DOCKER_LOG_DRIVER:-local}"
+DOCKER_LOG_MAX_SIZE="${DOCKER_LOG_MAX_SIZE:-20m}"
+DOCKER_LOG_MAX_FILE="${DOCKER_LOG_MAX_FILE:-3}"
 PULL_IMAGE="${PULL_IMAGE:-false}"
 CLEANUP_ONLY="${CLEANUP_ONLY:-false}"
 ASYNC_IMAGE_CLEANUP="${ASYNC_IMAGE_CLEANUP:-true}"
@@ -83,7 +87,7 @@ cleanup_old_app_images() {
   fi
 
   if ! [[ "$keep_count" =~ ^[0-9]+$ ]] || (( keep_count < 1 )); then
-    keep_count=5
+    keep_count=2
   fi
 
   running_image_ids="$(docker ps --format '{{.Image}}' | xargs -r docker image inspect --format '{{.Id}}' 2>/dev/null | sort -u || true)"
@@ -110,6 +114,29 @@ cleanup_old_app_images() {
   log "이미지 정리 완료: repository=$repository deleted=$deleted keep=$keep_count"
 }
 
+ensure_minimum_free_disk() {
+  local required_mb="$1"
+  local available_mb
+
+  if ! [[ "$required_mb" =~ ^[0-9]+$ ]] || (( required_mb < 1024 )); then
+    log "최소 여유 공간 설정이 올바르지 않습니다: ${required_mb}MB"
+    exit 1
+  fi
+
+  available_mb="$(df -Pm / | awk 'NR == 2 {print $4}')"
+  if ! [[ "$available_mb" =~ ^[0-9]+$ ]]; then
+    log "루트 디스크 여유 공간을 확인하지 못했습니다."
+    exit 1
+  fi
+
+  log "배포 전 루트 디스크 여유 공간: ${available_mb}MB (필요: ${required_mb}MB)"
+  if (( available_mb < required_mb )); then
+    log "디스크 여유 공간이 부족해 배포를 중단합니다."
+    log_docker_disk_usage
+    exit 1
+  fi
+}
+
 cleanup_before_pull() {
   log "pull 전 Docker 공간 정리 시작"
   cleanup_old_app_images "$IMAGE_URI" "$PRE_PULL_IMAGE_RETENTION_COUNT"
@@ -120,6 +147,7 @@ cleanup_before_pull() {
   fi
 
   log_docker_disk_usage
+  ensure_minimum_free_disk "$MIN_FREE_DISK_MB"
 }
 
 if [[ "$CLEANUP_ONLY" == "true" ]]; then
@@ -181,13 +209,15 @@ fi
 log "현재 슬롯: $CURRENT_SLOT"
 log "대상 슬롯: $TARGET_SLOT (container=$TARGET_CONTAINER, hostPort=$TARGET_PORT)"
 
+if [[ "$PRE_PULL_CLEANUP" == "true" ]]; then
+  cleanup_before_pull
+else
+  ensure_minimum_free_disk "$MIN_FREE_DISK_MB"
+fi
+
 docker rm -f "$TARGET_CONTAINER" >/dev/null 2>&1 || true
 
 if [[ "$PULL_IMAGE" == "true" ]]; then
-  if [[ "$PRE_PULL_CLEANUP" == "true" ]]; then
-    cleanup_before_pull
-  fi
-
   pull_started_at="$(date +%s)"
   log "이미지 pull: $IMAGE_URI"
   if ! docker pull "$IMAGE_URI"; then
@@ -205,6 +235,9 @@ docker run -d \
   --restart no \
   --network "$DOCKER_NETWORK" \
   --network-alias "$FASTAPI_NETWORK_ALIAS" \
+  --log-driver "$DOCKER_LOG_DRIVER" \
+  --log-opt "max-size=$DOCKER_LOG_MAX_SIZE" \
+  --log-opt "max-file=$DOCKER_LOG_MAX_FILE" \
   --add-host host.docker.internal:host-gateway \
   --env-file "$ENV_FILE" \
   -e TZ="${TZ:-Asia/Seoul}" \
